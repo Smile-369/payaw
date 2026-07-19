@@ -291,11 +291,22 @@ function saveLabelSettings(settings: LabelDisplaySettings): void {
   localStorage.setItem(LABEL_STORAGE_KEY, JSON.stringify(settings));
 }
 
+function normalizeTerrainShapeValue(value: unknown): TerrainShape | undefined {
+  if (!isEnumValue(Object.values(TerrainShape), value)) return undefined;
+  switch (value) {
+    case TerrainShape.LegacyFullIsland: return TerrainShape.SingleLargeIsland;
+    case TerrainShape.LegacyInland: return TerrainShape.InlandCoast;
+    case TerrainShape.LegacyRiverDelta: return TerrainShape.Delta;
+    case TerrainShape.LegacyAtoll: return TerrainShape.SingleMediumIsland;
+    default: return value;
+  }
+}
+
 function defaultStoredProfile(): StoredProfile {
   return {
     terrainSize: TerrainSize.Small,
     townScale: TownScale.SemiUrban,
-    terrainShape: TerrainShape.FullIsland,
+    terrainShape: TerrainShape.SingleLargeIsland,
     climatePreset: ClimatePreset.TropicalMonsoon,
     islandCount: 5,
     islandSpacingKilometers: 4,
@@ -311,7 +322,7 @@ function loadProfile(): StoredProfile {
     return {
       terrainSize: isEnumValue(Object.values(TerrainSize), value.terrainSize) ? value.terrainSize : defaults.terrainSize,
       townScale: isEnumValue(Object.values(TownScale), value.townScale) ? value.townScale : defaults.townScale,
-      terrainShape: isEnumValue(Object.values(TerrainShape), value.terrainShape) ? value.terrainShape : defaults.terrainShape,
+      terrainShape: normalizeTerrainShapeValue(value.terrainShape) ?? defaults.terrainShape,
       climatePreset: isEnumValue(Object.values(ClimatePreset), value.climatePreset) ? value.climatePreset : defaults.climatePreset,
       islandCount: Math.round(finiteSetting(value.islandCount, defaults.islandCount, 2, 12)),
       islandSpacingKilometers: finiteSetting(value.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),
@@ -1922,7 +1933,7 @@ function projectProfileFrom(value: unknown): StoredProfile {
   return {
     terrainSize: isEnumValue(Object.values(TerrainSize), item.terrainSize) ? item.terrainSize : defaults.terrainSize,
     townScale: isEnumValue(Object.values(TownScale), item.townScale) ? item.townScale : defaults.townScale,
-    terrainShape: isEnumValue(Object.values(TerrainShape), item.terrainShape) ? item.terrainShape : defaults.terrainShape,
+    terrainShape: normalizeTerrainShapeValue(item.terrainShape) ?? defaults.terrainShape,
     climatePreset: isEnumValue(Object.values(ClimatePreset), item.climatePreset) ? item.climatePreset : defaults.climatePreset,
     islandCount: Math.round(finiteSetting(item.islandCount ?? item.targetIslandCount, defaults.islandCount, 2, 12)),
     islandSpacingKilometers: finiteSetting(item.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),

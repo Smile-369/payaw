@@ -80,9 +80,11 @@ function shapeHydrology(shape: TerrainShape): Partial<GenerationConfig['hydrolog
     case TerrainShape.Archipelago: return { riverSourceCount: 6, minimumRiverLength: 14, deltaDistributaryCount: 2 };
     case TerrainShape.TwinIslands: return { riverSourceCount: 8, minimumRiverLength: 18 };
     case TerrainShape.Peninsula: return { riverSourceCount: 10 };
-    case TerrainShape.Inland: return { riverSourceCount: 14, sourceMinCoastDistance: 18 };
-    case TerrainShape.RiverDelta: return { riverSourceCount: 12, deltaDistributaryCount: 5, deltaMinimumDischarge: 10 };
-    case TerrainShape.Atoll: return { riverSourceCount: 0, minimumRiverLength: 999 };
+    case TerrainShape.InlandCoast:
+    case TerrainShape.LegacyInland: return { riverSourceCount: 14, sourceMinCoastDistance: 18 };
+    case TerrainShape.Delta:
+    case TerrainShape.LegacyRiverDelta: return { riverSourceCount: 12, deltaDistributaryCount: 5, deltaMinimumDischarge: 10 };
+    case TerrainShape.LegacyAtoll: return { riverSourceCount: 0, minimumRiverLength: 999 };
     default: return {};
   }
 }
@@ -111,10 +113,10 @@ export function resolveGenerationConfig(
       islandSpacingKilometers: options.islandSpacingKilometers,
     },
     climate: { ...base.climate, ...climateProfile(options.climatePreset) },
-    anchors: options.terrainShape === TerrainShape.Archipelago || options.terrainShape === TerrainShape.RiverDelta
-      ? { ...base.anchors, airportMaximumRelief: base.anchors.airportMaximumRelief * 3.2, maximumAirportSlope: base.anchors.maximumAirportSlope * 2.1, maximumFloodRisk: options.terrainShape === TerrainShape.RiverDelta ? 0.92 : base.anchors.maximumFloodRisk, minimumSpacing: Math.max(6, base.anchors.minimumSpacing - 3) }
+    anchors: options.terrainShape === TerrainShape.Archipelago || (options.terrainShape === TerrainShape.Delta || options.terrainShape === TerrainShape.LegacyRiverDelta)
+      ? { ...base.anchors, airportMaximumRelief: base.anchors.airportMaximumRelief * 3.2, maximumAirportSlope: base.anchors.maximumAirportSlope * 2.1, maximumFloodRisk: (options.terrainShape === TerrainShape.Delta || options.terrainShape === TerrainShape.LegacyRiverDelta) ? 0.92 : base.anchors.maximumFloodRisk, minimumSpacing: Math.max(6, base.anchors.minimumSpacing - 3) }
       : base.anchors,
-    story: options.terrainShape === TerrainShape.Inland
+    story: (options.terrainShape === TerrainShape.InlandCoast || options.terrainShape === TerrainShape.LegacyInland)
       ? { ...base.story, baleteMinimumSpacing: Math.max(12, base.story.baleteMinimumSpacing * 0.65), baleteMinimumForestDensity: Math.max(0.22, base.story.baleteMinimumForestDensity * 0.72) }
       : base.story,
     hydrology: {

@@ -1,3 +1,7 @@
+
+## Milestone 13 world layouts
+
+The generation panel now includes Single Small Island, Single Medium Island, Single Large Island, Archipelago, Twin Islands, Peninsula, Inland Coast, and Delta. Single Large Island is the default Metro Bacolod-scale layout. Archipelago keeps its 2–12 island count and distance controls, while satellite settlements remain movable through non-destructive overrides. See `docs/MILESTONE_13.md`.
 # PAYAW Procedural World Engine — Milestone 12
 
 Milestone 12 expands PAYAW into a Metro Bacolod-scale regional generator with authored island count and spacing, movable satellite settlements, portable project JSON, bridges, ports, and water routes.

@@ -1,3 +1,13 @@
+# 0.13.0
+
+- Added eight explicit World Layout presets.
+- Added separate small, medium, and large single-island terrain masks.
+- Made Single Large Island the default layout.
+- Added Inland Coast and simplified Delta naming.
+- Preserved Archipelago island-count and spacing controls.
+- Added migration for legacy layout values in saved profiles and JSON imports.
+- Added Milestone 13 layout regression tests.
+
 # Changelog
 
 ## Milestone 12 — Metro-Scale Regional Controls and JSON Import

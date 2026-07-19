@@ -130,6 +130,12 @@ function shapeMask(
   islandPlan: readonly PlannedIsland[],
 ): number {
   switch (profile) {
+    case 'single-small-island':
+      return Math.pow(ellipse(u, v, 0.52, 0.49, 0.29, 0.26), 0.76) + detail * 0.04;
+    case 'single-medium-island':
+      return Math.pow(ellipse(u, v, 0.52, 0.49, 0.39, 0.35), 0.74) + detail * 0.045;
+    case 'single-large-island':
+      return Math.pow(ellipse(u, v, 0.52, 0.49, 0.49, 0.45), 0.72) + detail * 0.05;
     case 'archipelago':
     case 'twin-islands':
       return plannedMask(u, v, islandPlan) + detail * 0.028;
@@ -139,6 +145,18 @@ function shapeMask(
       const cape = ellipse(u, v, 0.87, 0.56, 0.18, 0.24);
       return Math.max(mainland, neck * 0.86, cape * 0.90) + detail * 0.05;
     }
+    case 'inland-coast': {
+      // A mainland region entering from the east, leaving one broad western coast.
+      const coastLine = clamp01((u - 0.15 + detail * 0.08) * 2.15);
+      const coastalBays = ellipse(u, v, 0.58, 0.50, 0.68, 0.62);
+      return clamp01(Math.min(coastLine, coastalBays * 1.15) + detail * 0.035);
+    }
+    case 'delta': {
+      const mainland = clamp01((0.78 - v) * 1.65 + detail * 0.06);
+      const fan = ellipse(u, v, 0.52, 0.72, 0.48, 0.34);
+      return Math.max(mainland, fan * 0.74);
+    }
+    // Legacy project compatibility.
     case 'inland': {
       const continent = ellipse(u, v, 0.50, 0.50, 0.61, 0.58);
       return clamp01(continent * 1.08 + detail * 0.06);

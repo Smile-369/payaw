@@ -19,13 +19,19 @@ export enum TownScale {
 }
 
 export enum TerrainShape {
-  FullIsland = 'full-island',
+  SingleSmallIsland = 'single-small-island',
+  SingleMediumIsland = 'single-medium-island',
+  SingleLargeIsland = 'single-large-island',
   Archipelago = 'archipelago',
   TwinIslands = 'twin-islands',
   Peninsula = 'peninsula',
-  Inland = 'inland',
-  RiverDelta = 'river-delta',
-  Atoll = 'atoll',
+  InlandCoast = 'inland-coast',
+  Delta = 'delta',
+  /** Legacy values retained so older project JSON can still be imported. */
+  LegacyFullIsland = 'full-island',
+  LegacyInland = 'inland',
+  LegacyRiverDelta = 'river-delta',
+  LegacyAtoll = 'atoll',
 }
 
 export enum ClimatePreset {
@@ -142,7 +148,7 @@ export const DEFAULT_GENERATION_OPTIONS: ResolvedGenerationOptions = {
   builtInAnchorOverrides: [],
   terrainSize: TerrainSize.Small,
   townScale: TownScale.SemiUrban,
-  terrainShape: TerrainShape.FullIsland,
+  terrainShape: TerrainShape.SingleLargeIsland,
   climatePreset: ClimatePreset.TropicalMonsoon,
   islandCount: 5,
   islandSpacingKilometers: 4,
