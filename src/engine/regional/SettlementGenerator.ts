@@ -1,3 +1,5 @@
+import type { SettlementPositionOverride } from '../generation/GenerationOptions';
+import { InvalidPositionOverrideError } from '../generation/InvalidPositionOverrideError';
 import type { Random } from '../rng/Random';
 import { TerrainType, WaterType } from '../world/Tile';
 import type { World } from '../world/World';
@@ -67,11 +69,50 @@ function settlementName(island: Island, ordinal: number, random: Random, primary
   return `Barangay ${random.fork(`name-${ordinal}`).pick(BARANGAY_ROOTS)}`;
 }
 
-export function generateSettlements(world: World, random: Random): void {
+function manualCenterIndex(
+  world: World,
+  island: Island,
+  key: string,
+  name: string,
+  override: SettlementPositionOverride | undefined,
+  placed: readonly Settlement[],
+): number | undefined {
+  if (override === undefined) return undefined;
+  const x = Math.round(override.x);
+  const y = Math.round(override.y);
+  const tile = world.getTile(x, y);
+  if (tile === undefined) throw new InvalidPositionOverrideError('settlement', key, name, 'is outside the current map.');
+  if (tile.islandId !== island.id || tile.landmassId !== island.landmassId) {
+    throw new InvalidPositionOverrideError('settlement', key, name, 'must remain on its assigned island.');
+  }
+  if (tile.water !== WaterType.Land || tile.river) {
+    throw new InvalidPositionOverrideError('settlement', key, name, 'must be on dry land.');
+  }
+  if (tile.terrain === TerrainType.Mountain || tile.slope > 0.38) {
+    throw new InvalidPositionOverrideError('settlement', key, name, 'is too steep for a settlement center.');
+  }
+  if (tile.floodRisk > 0.92) {
+    throw new InvalidPositionOverrideError('settlement', key, name, 'is too flood-prone for a settlement center.');
+  }
+  const nearest = placed.length === 0
+    ? Number.POSITIVE_INFINITY
+    : Math.min(...placed.map((settlement) => Math.hypot(tile.x - settlement.x, tile.y - settlement.y)));
+  if (nearest < 6) {
+    throw new InvalidPositionOverrideError('settlement', key, name, 'is too close to another settlement center.');
+  }
+  return tile.y * world.width + tile.x;
+}
+
+export function generateSettlements(
+  world: World,
+  random: Random,
+  positionOverrides: readonly SettlementPositionOverride[] = [],
+): void {
   world.settlements = [];
   for (const island of world.islands) island.settlementIds = [];
   for (const tile of world.tiles) tile.settlementId = null;
 
+  const overrideByKey = new Map(positionOverrides.map((override) => [override.key, override]));
   const primaryIsland = world.islands.find((island) => island.role === IslandRole.PrimarySettlement) ?? world.islands[0];
   for (const island of world.islands) {
     if (!island.allowRoads || island.settlementCountTarget <= 0 || island.allocatedPopulation <= 0) continue;
@@ -81,7 +122,15 @@ export function generateSettlements(world: World, random: Random): void {
     const islandSettlements: Settlement[] = [];
 
     for (let ordinal = 0; ordinal < count; ordinal += 1) {
-      const centerIndex = selectCenter(world, island, islandSettlements, random.fork(`${island.key}:${ordinal}`), ordinal);
+      const isPrimary = island === primaryIsland && ordinal === 0;
+      const key = `settlement:${island.key}:${ordinal}`;
+      const name = settlementName(island, ordinal, random.fork(`${island.key}:settlement-name`), isPrimary);
+      // The main Poblacion remains governed by the Town Plaza anchor. All other
+      // settlement centers can be moved non-destructively through overrides.
+      const manual = isPrimary
+        ? undefined
+        : manualCenterIndex(world, island, key, name, overrideByKey.get(key), islandSettlements);
+      const centerIndex = manual ?? selectCenter(world, island, islandSettlements, random.fork(`${island.key}:${ordinal}`), ordinal);
       if (centerIndex === undefined) continue;
       const tile = world.tiles[centerIndex];
       if (tile === undefined) continue;
@@ -89,16 +138,16 @@ export function generateSettlements(world: World, random: Random): void {
       const type = settlementType(island, ordinal);
       const settlement: Settlement = {
         id: world.settlements.length,
-        key: `settlement:${island.key}:${ordinal}`,
+        key,
         islandId: island.id,
-        name: settlementName(island, ordinal, random.fork(`${island.key}:settlement-name`), island === primaryIsland && ordinal === 0),
+        name,
         type,
         x: tile.x,
         y: tile.y,
         tileIndex: centerIndex,
         influenceRadius: influenceRadius(type, population),
         populationTarget: population,
-        isPrimary: island === primaryIsland && ordinal === 0,
+        isPrimary,
         roadIds: [],
       };
       world.settlements.push(settlement);

@@ -23,6 +23,11 @@ export interface WorldMetadata {
   readonly townScale: TownScale;
   readonly terrainShape: TerrainShape;
   readonly climatePreset: ClimatePreset;
+  readonly targetIslandCount: number;
+  readonly islandSpacingKilometers: number;
+  readonly tileSizeMeters: number;
+  readonly worldWidthKilometers: number;
+  readonly worldHeightKilometers: number;
 }
 
 export interface WorldDiagnostics {
@@ -77,7 +82,7 @@ export class World {
   public constructor(
     seed: string,
     config: GenerationConfig,
-    profile: { readonly terrainSize: TerrainSize; readonly townScale: TownScale; readonly terrainShape: TerrainShape; readonly climatePreset: ClimatePreset },
+    profile: { readonly terrainSize: TerrainSize; readonly townScale: TownScale; readonly terrainShape: TerrainShape; readonly climatePreset: ClimatePreset; readonly islandCount: number; readonly islandSpacingKilometers: number },
   ) {
     this.seed = seed;
     this.width = config.world.width;
@@ -105,12 +110,17 @@ export class World {
     }
 
     this.metadata = {
-      schemaVersion: 11,
+      schemaVersion: 12,
       generationVersion: config.version,
       terrainSize: profile.terrainSize,
       townScale: profile.townScale,
       terrainShape: profile.terrainShape,
       climatePreset: profile.climatePreset,
+      targetIslandCount: profile.terrainShape === 'twin-islands' ? 2 : profile.terrainShape === 'archipelago' ? profile.islandCount : 1,
+      islandSpacingKilometers: profile.islandSpacingKilometers,
+      tileSizeMeters: config.world.tileSizeMeters,
+      worldWidthKilometers: this.width * config.world.tileSizeMeters / 1000,
+      worldHeightKilometers: this.height * config.world.tileSizeMeters / 1000,
     };
     this.diagnostics = {
       generatedAt: new Date(0).toISOString(),

@@ -1,7 +1,7 @@
 {
   "name": "payaw-procgen",
   "private": true,
-  "version": "0.11.1",
+  "version": "0.12.0",
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "engines": {
@@ -19,7 +19,8 @@
     "test:ms9": "node scripts/run-ms9-tests.mjs",
     "test:ms10": "node scripts/run-ms10-tests.mjs",
     "test:ms11": "node scripts/run-ms11-tests.mjs",
-    "test:ms111": "node scripts/run-ms111-tests.mjs"
+    "test:ms111": "node scripts/run-ms111-tests.mjs",
+    "test:ms12": "node scripts/run-ms12-tests.mjs"
   },
   "devDependencies": {
     "typescript": "5.8.3",

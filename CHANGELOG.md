@@ -1,5 +1,20 @@
 # Changelog
 
+## Milestone 12 — Metro-Scale Regional Controls and JSON Import
+
+- Added 125-meter tile scale and exported physical world dimensions.
+- Added authored archipelago island count from 2 to 12.
+- Added authored island spacing in kilometers.
+- Added regional island planning that prioritizes count and relaxes impossible spacing safely.
+- Added preferred satellite-community allocation by town scale.
+- Added draggable non-primary settlement centers with validation and stale-position recovery.
+- Added full PAYAW project/world JSON import.
+- Added automatic detection of override-only JSON.
+- Added drag-and-drop JSON import.
+- Added schema validation, 64 MB input limit, normalization, and embedded image-asset restoration.
+- Updated customization signatures to include island count and spacing.
+- Updated schema version to 12 and engine version to `payaw-m12-metro-region-v1`.
+
 ## Milestone 11.1 — Saved Position Recovery
 
 - Added typed invalid-position errors for anchors and story locations.

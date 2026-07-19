@@ -55,6 +55,13 @@ export interface StoryPositionOverride {
   readonly y: number;
 }
 
+/** Manual position for a generated regional settlement. */
+export interface SettlementPositionOverride {
+  readonly key: string;
+  readonly x: number;
+  readonly y: number;
+}
+
 /** A manual zoning instruction. null means explicitly clear zoning on the tile. */
 export interface ZoneOverride {
   readonly tileIndex: number;
@@ -83,10 +90,15 @@ export interface GenerationOptions {
   readonly townScale?: TownScale;
   readonly terrainShape?: TerrainShape;
   readonly climatePreset?: ClimatePreset;
+  /** Requested major-island count for archipelago generation. */
+  readonly islandCount?: number;
+  /** Requested minimum open-water gap between generated islands, in kilometers. */
+  readonly islandSpacingKilometers?: number;
   readonly roadNameOverrides?: readonly EntityNameOverride[];
   readonly blockNameOverrides?: readonly EntityNameOverride[];
   readonly anchorPositionOverrides?: readonly AnchorPositionOverride[];
   readonly storyPositionOverrides?: readonly StoryPositionOverride[];
+  readonly settlementPositionOverrides?: readonly SettlementPositionOverride[];
   readonly storyRuleOverrides?: readonly StoryRuleOverride[];
   readonly zoneOverrides?: readonly ZoneOverride[];
   readonly customStoryPoints?: readonly CustomStoryPointDefinition[];
@@ -106,10 +118,13 @@ export interface ResolvedGenerationOptions {
   readonly townScale: TownScale;
   readonly terrainShape: TerrainShape;
   readonly climatePreset: ClimatePreset;
+  readonly islandCount: number;
+  readonly islandSpacingKilometers: number;
   readonly roadNameOverrides: readonly EntityNameOverride[];
   readonly blockNameOverrides: readonly EntityNameOverride[];
   readonly anchorPositionOverrides: readonly AnchorPositionOverride[];
   readonly storyPositionOverrides: readonly StoryPositionOverride[];
+  readonly settlementPositionOverrides: readonly SettlementPositionOverride[];
   readonly storyRuleOverrides: readonly StoryRuleOverride[];
   readonly zoneOverrides: readonly ZoneOverride[];
   readonly customStoryPoints: readonly CustomStoryPointDefinition[];
@@ -129,10 +144,13 @@ export const DEFAULT_GENERATION_OPTIONS: ResolvedGenerationOptions = {
   townScale: TownScale.SemiUrban,
   terrainShape: TerrainShape.FullIsland,
   climatePreset: ClimatePreset.TropicalMonsoon,
+  islandCount: 5,
+  islandSpacingKilometers: 4,
   roadNameOverrides: [],
   blockNameOverrides: [],
   anchorPositionOverrides: [],
   storyPositionOverrides: [],
+  settlementPositionOverrides: [],
   storyRuleOverrides: [],
   zoneOverrides: [],
   customStoryPoints: [],
@@ -153,10 +171,13 @@ export function resolveGenerationOptions(options: GenerationOptions = {}): Resol
     townScale: options.townScale ?? DEFAULT_GENERATION_OPTIONS.townScale,
     terrainShape: options.terrainShape ?? DEFAULT_GENERATION_OPTIONS.terrainShape,
     climatePreset: options.climatePreset ?? DEFAULT_GENERATION_OPTIONS.climatePreset,
+    islandCount: Math.max(1, Math.min(12, Math.round(options.islandCount ?? DEFAULT_GENERATION_OPTIONS.islandCount))),
+    islandSpacingKilometers: Math.max(0.5, Math.min(12, options.islandSpacingKilometers ?? DEFAULT_GENERATION_OPTIONS.islandSpacingKilometers)),
     roadNameOverrides: options.roadNameOverrides ?? DEFAULT_GENERATION_OPTIONS.roadNameOverrides,
     blockNameOverrides: options.blockNameOverrides ?? DEFAULT_GENERATION_OPTIONS.blockNameOverrides,
     anchorPositionOverrides: options.anchorPositionOverrides ?? DEFAULT_GENERATION_OPTIONS.anchorPositionOverrides,
     storyPositionOverrides: options.storyPositionOverrides ?? DEFAULT_GENERATION_OPTIONS.storyPositionOverrides,
+    settlementPositionOverrides: options.settlementPositionOverrides ?? DEFAULT_GENERATION_OPTIONS.settlementPositionOverrides,
     storyRuleOverrides: options.storyRuleOverrides ?? DEFAULT_GENERATION_OPTIONS.storyRuleOverrides,
     zoneOverrides: options.zoneOverrides ?? DEFAULT_GENERATION_OPTIONS.zoneOverrides,
     customStoryPoints: options.customStoryPoints ?? DEFAULT_GENERATION_OPTIONS.customStoryPoints,

@@ -4,7 +4,7 @@ import type { GenerationContext, GenerationStage } from '../GenerationStage';
 export class SettlementStage implements GenerationStage {
   public readonly id = 'settlements';
 
-  public run({ world, random }: GenerationContext): void {
-    generateSettlements(world, random);
+  public run({ world, random, options }: GenerationContext): void {
+    generateSettlements(world, random, options.settlementPositionOverrides);
   }
 }

@@ -21,7 +21,7 @@ const options = { terrainShape: TerrainShape.Archipelago, townScale: TownScale.S
 const world = pipeline.generate(seed, options);
 const repeat = pipeline.generate(seed, options);
 
-assert(world.metadata.schemaVersion === 11, 'Milestone 11 schema version was not exported.');
+assert(world.metadata.schemaVersion >= 11, 'Milestone 11-compatible schema was not exported.');
 assert(world.ports.length >= 2, 'Archipelago generation did not create enough ports.');
 assert(world.waterRoutes.length >= 1, 'Archipelago generation did not create any water routes.');
 assert(snapshot(world) === snapshot(repeat), 'Maritime generation is not deterministic.');

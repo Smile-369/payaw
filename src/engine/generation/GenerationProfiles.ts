@@ -103,8 +103,13 @@ export function resolveGenerationConfig(
   return {
     ...base,
     version: base.version,
-    world: { ...dimensions },
-    terrain: { ...base.terrain, shapeProfile: options.terrainShape },
+    world: { ...dimensions, tileSizeMeters: base.world.tileSizeMeters },
+    terrain: {
+      ...base.terrain,
+      shapeProfile: options.terrainShape,
+      targetIslandCount: options.terrainShape === TerrainShape.TwinIslands ? 2 : options.islandCount,
+      islandSpacingKilometers: options.islandSpacingKilometers,
+    },
     climate: { ...base.climate, ...climateProfile(options.climatePreset) },
     anchors: options.terrainShape === TerrainShape.Archipelago || options.terrainShape === TerrainShape.RiverDelta
       ? { ...base.anchors, airportMaximumRelief: base.anchors.airportMaximumRelief * 3.2, maximumAirportSlope: base.anchors.maximumAirportSlope * 2.1, maximumFloodRisk: options.terrainShape === TerrainShape.RiverDelta ? 0.92 : base.anchors.maximumFloodRisk, minimumSpacing: Math.max(6, base.anchors.minimumSpacing - 3) }
@@ -135,6 +140,7 @@ export function resolveGenerationConfig(
     },
     maritime: {
       ...base.maritime,
+      tileSizeKilometers: base.world.tileSizeMeters / 1000,
       maximumRoutes: options.terrainShape === TerrainShape.Archipelago
         ? 10
         : options.terrainShape === TerrainShape.TwinIslands ? 4 : base.maritime.maximumRoutes,

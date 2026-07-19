@@ -24,6 +24,7 @@ import {
   type AnchorPositionOverride,
   type EntityNameOverride,
   type GenerationOptions,
+  type SettlementPositionOverride,
   type StoryPositionOverride,
   type StoryRuleOverride,
   type ZoneOverride,
@@ -76,6 +77,8 @@ interface StoredProfile {
   readonly townScale: TownScale;
   readonly terrainShape: TerrainShape;
   readonly climatePreset: ClimatePreset;
+  readonly islandCount: number;
+  readonly islandSpacingKilometers: number;
 }
 
 interface StoredNameState {
@@ -123,7 +126,28 @@ function downloadWorld(
   labels: LabelDisplaySettings,
   customStoryPoints: readonly CustomStoryPointDefinition[],
 ): void {
+  const profile: StoredProfile = {
+    terrainSize: world.metadata.terrainSize,
+    townScale: world.metadata.townScale,
+    terrainShape: world.metadata.terrainShape,
+    climatePreset: world.metadata.climatePreset,
+    islandCount: world.metadata.targetIslandCount,
+    islandSpacingKilometers: world.metadata.islandSpacingKilometers,
+  };
+  const authoring = {
+    customAnchors,
+    builtInAnchorOverrides: builtInOverrides,
+    roadNames: roadNameOverrides,
+    blockNames: blockNameOverrides,
+    labelDisplay: labels,
+    customStoryPoints,
+    customization,
+    imageAssets: assets,
+  };
   const json = JSON.stringify({
+    format: 'payaw-project',
+    projectVersion: 1,
+    project: { seed: world.seed, profile, authoring },
     ...world.toJSON(),
     customization: {
       ...customization,
@@ -175,28 +199,34 @@ function parseRuleSettings(value: unknown): AnchorRuleSettings | undefined {
   };
 }
 
+function normalizeAnchorState(value: unknown): StoredAnchorState {
+  const parsed = typeof value === 'object' && value !== null
+    ? value as { customAnchors?: unknown; builtInOverrides?: unknown; builtInAnchorOverrides?: unknown }
+    : {};
+  const customAnchors = Array.isArray(parsed.customAnchors)
+    ? parsed.customAnchors.flatMap((item) => {
+      const settings = parseRuleSettings(item);
+      const id = typeof (item as { id?: unknown })?.id === 'string' ? (item as { id: string }).id : undefined;
+      return settings === undefined || id === undefined ? [] : [{ id, ...settings }];
+    }).slice(0, MAX_CUSTOM_ANCHORS)
+    : [];
+  const builtInSource = parsed.builtInOverrides ?? parsed.builtInAnchorOverrides;
+  const builtInOverrides = Array.isArray(builtInSource)
+    ? builtInSource.flatMap((item) => {
+      const settings = parseRuleSettings(item);
+      const type = (item as { type?: unknown })?.type;
+      return settings === undefined || !isEnumValue(BUILT_IN_ANCHOR_TYPES, type)
+        ? []
+        : [{ type, ...settings }];
+    })
+    : [];
+  return { customAnchors, builtInOverrides };
+}
+
 function loadAnchorState(): StoredAnchorState {
   try {
     const raw = localStorage.getItem(ANCHOR_STORAGE_KEY);
-    if (raw === null) return { customAnchors: [], builtInOverrides: [] };
-    const parsed = JSON.parse(raw) as { customAnchors?: unknown; builtInOverrides?: unknown };
-    const customAnchors = Array.isArray(parsed.customAnchors)
-      ? parsed.customAnchors.flatMap((value) => {
-        const settings = parseRuleSettings(value);
-        const id = typeof (value as { id?: unknown })?.id === 'string' ? (value as { id: string }).id : undefined;
-        return settings === undefined || id === undefined ? [] : [{ id, ...settings }];
-      }).slice(0, MAX_CUSTOM_ANCHORS)
-      : [];
-    const builtInOverrides = Array.isArray(parsed.builtInOverrides)
-      ? parsed.builtInOverrides.flatMap((value) => {
-        const settings = parseRuleSettings(value);
-        const type = (value as { type?: unknown })?.type;
-        return settings === undefined || !isEnumValue(BUILT_IN_ANCHOR_TYPES, type)
-          ? []
-          : [{ type, ...settings }];
-      })
-      : [];
-    return { customAnchors, builtInOverrides };
+    return raw === null ? { customAnchors: [], builtInOverrides: [] } : normalizeAnchorState(JSON.parse(raw));
   } catch {
     return { customAnchors: [], builtInOverrides: [] };
   }
@@ -261,19 +291,33 @@ function saveLabelSettings(settings: LabelDisplaySettings): void {
   localStorage.setItem(LABEL_STORAGE_KEY, JSON.stringify(settings));
 }
 
+function defaultStoredProfile(): StoredProfile {
+  return {
+    terrainSize: TerrainSize.Small,
+    townScale: TownScale.SemiUrban,
+    terrainShape: TerrainShape.FullIsland,
+    climatePreset: ClimatePreset.TropicalMonsoon,
+    islandCount: 5,
+    islandSpacingKilometers: 4,
+  };
+}
+
 function loadProfile(): StoredProfile {
+  const defaults = defaultStoredProfile();
   try {
     const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (raw === null) return { terrainSize: TerrainSize.Small, townScale: TownScale.SemiUrban, terrainShape: TerrainShape.FullIsland, climatePreset: ClimatePreset.TropicalMonsoon };
+    if (raw === null) return defaults;
     const value = JSON.parse(raw) as Partial<StoredProfile>;
     return {
-      terrainSize: isEnumValue(Object.values(TerrainSize), value.terrainSize) ? value.terrainSize : TerrainSize.Small,
-      townScale: isEnumValue(Object.values(TownScale), value.townScale) ? value.townScale : TownScale.SemiUrban,
-      terrainShape: isEnumValue(Object.values(TerrainShape), value.terrainShape) ? value.terrainShape : TerrainShape.FullIsland,
-      climatePreset: isEnumValue(Object.values(ClimatePreset), value.climatePreset) ? value.climatePreset : ClimatePreset.TropicalMonsoon,
+      terrainSize: isEnumValue(Object.values(TerrainSize), value.terrainSize) ? value.terrainSize : defaults.terrainSize,
+      townScale: isEnumValue(Object.values(TownScale), value.townScale) ? value.townScale : defaults.townScale,
+      terrainShape: isEnumValue(Object.values(TerrainShape), value.terrainShape) ? value.terrainShape : defaults.terrainShape,
+      climatePreset: isEnumValue(Object.values(ClimatePreset), value.climatePreset) ? value.climatePreset : defaults.climatePreset,
+      islandCount: Math.round(finiteSetting(value.islandCount, defaults.islandCount, 2, 12)),
+      islandSpacingKilometers: finiteSetting(value.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),
     };
   } catch {
-    return { terrainSize: TerrainSize.Small, townScale: TownScale.SemiUrban, terrainShape: TerrainShape.FullIsland, climatePreset: ClimatePreset.TropicalMonsoon };
+    return defaults;
   }
 }
 
@@ -379,8 +423,14 @@ function loadAllNameStates(): NameStateByWorld {
   }
 }
 
-function validNameOverrides(values: readonly EntityNameOverride[] | undefined): EntityNameOverride[] {
-  return (values ?? []).filter((value) => Number.isInteger(value.id) && value.id >= 0 && value.name.trim().length > 0);
+function validNameOverrides(values: unknown): EntityNameOverride[] {
+  if (!Array.isArray(values)) return [];
+  return values.flatMap((value) => {
+    if (typeof value !== 'object' || value === null) return [];
+    const item = value as { id?: unknown; name?: unknown };
+    if (!Number.isInteger(item.id) || (item.id as number) < 0 || typeof item.name !== 'string' || item.name.trim().length === 0) return [];
+    return [{ id: item.id as number, name: item.name.trim() }];
+  });
 }
 
 function loadNameState(signature: string): StoredNameState {
@@ -397,7 +447,7 @@ function saveNameState(signature: string, state: StoredNameState): void {
 }
 
 function emptyMapCustomization(): StoredMapCustomization {
-  return { anchorPositions: [], storyPositions: [], storyRules: [], zoneOverrides: [], placedImages: [], islandOverrides: [], bridgeOverrides: [], customBridges: [], portOverrides: [], customPorts: [], waterRouteOverrides: [], customWaterRoutes: [] };
+  return { anchorPositions: [], settlementPositions: [], storyPositions: [], storyRules: [], zoneOverrides: [], placedImages: [], islandOverrides: [], bridgeOverrides: [], customBridges: [], portOverrides: [], customPorts: [], waterRouteOverrides: [], customWaterRoutes: [] };
 }
 
 function loadAllMapCustomizations(): MapCustomizationByWorld {
@@ -416,6 +466,9 @@ function loadMapCustomization(signature: string): StoredMapCustomization {
   if (stored === undefined) return emptyMapCustomization();
   const anchorPositions = Array.isArray(stored.anchorPositions)
     ? stored.anchorPositions.filter((item) => typeof item.key === 'string' && Number.isFinite(item.x) && Number.isFinite(item.y))
+    : [];
+  const settlementPositions = Array.isArray(stored.settlementPositions)
+    ? stored.settlementPositions.filter((item) => typeof item.key === 'string' && Number.isFinite(item.x) && Number.isFinite(item.y))
     : [];
   const storyPositions = Array.isArray(stored.storyPositions)
     ? stored.storyPositions.filter((item) => Number.isInteger(item.id) && item.id >= 0 && (item.key === undefined || typeof item.key === 'string') && Number.isFinite(item.x) && Number.isFinite(item.y))
@@ -548,7 +601,7 @@ function loadMapCustomization(signature: string): StoredMapCustomization {
       && typeof item.enabled === 'boolean'
       && typeof item.locked === 'boolean'
     )) : [];
-  return { anchorPositions, storyPositions, storyRules, zoneOverrides, placedImages, islandOverrides, bridgeOverrides, customBridges, portOverrides, customPorts, waterRouteOverrides, customWaterRoutes };
+  return { anchorPositions, settlementPositions, storyPositions, storyRules, zoneOverrides, placedImages, islandOverrides, bridgeOverrides, customBridges, portOverrides, customPorts, waterRouteOverrides, customWaterRoutes };
 }
 
 function saveMapCustomization(signature: string, state: StoredMapCustomization): void {
@@ -580,7 +633,9 @@ function updateStats(container: HTMLElement, world: World): void {
   const rows: readonly [string, string][] = [
     ['Seed', world.seed],
     ['Profile', `${world.metadata.terrainSize} · ${world.metadata.townScale}`],
-    ['Dimensions', `${world.width} × ${world.height}`],
+    ['Dimensions', `${world.width} × ${world.height} tiles · ${world.metadata.worldWidthKilometers.toFixed(0)} × ${world.metadata.worldHeightKilometers.toFixed(0)} km`],
+    ['Tile scale', `${world.metadata.tileSizeMeters} m per tile`],
+    ['Island profile', `${world.metadata.targetIslandCount} target · ${world.metadata.islandSpacingKilometers.toFixed(1)} km gap`],
     ['Land', `${((landTiles / world.tiles.length) * 100).toFixed(1)}%`],
     ['Landmasses', world.landmasses.length.toLocaleString()],
     ['Islands', world.islands.length.toLocaleString()],
@@ -625,6 +680,9 @@ const terrainSizeSelect = requireElement<HTMLSelectElement>('#terrain-size');
 const townScaleSelect = requireElement<HTMLSelectElement>('#town-scale');
 const terrainShapeSelect = requireElement<HTMLSelectElement>('#terrain-shape');
 const climatePresetSelect = requireElement<HTMLSelectElement>('#climate-preset');
+const islandCountInput = requireElement<HTMLInputElement>('#island-count-input');
+const islandSpacingInput = requireElement<HTMLInputElement>('#island-spacing-input');
+const regionalScaleReadout = requireElement<HTMLElement>('#regional-scale-readout');
 const profileHint = requireElement<HTMLElement>('#profile-hint');
 const generateButton = requireElement<HTMLButtonElement>('#generate-button');
 const randomSeedButton = requireElement<HTMLButtonElement>('#random-seed-button');
@@ -634,6 +692,8 @@ const imageExportScale = requireElement<HTMLSelectElement>('#image-export-scale'
 const imageExportPadding = requireElement<HTMLSelectElement>('#image-export-padding');
 const exportCustomizationButton = requireElement<HTMLButtonElement>('#export-customization-button');
 const customizationImportFile = requireElement<HTMLInputElement>('#customization-import-file');
+const projectImportFile = requireElement<HTMLInputElement>('#project-import-file');
+const projectJsonDropzone = requireElement<HTMLElement>('#project-json-dropzone');
 const fitMapButton = requireElement<HTMLButtonElement>('#fit-map-button');
 const viewPreset = requireElement<HTMLSelectElement>('#view-preset');
 const statusMessage = requireElement<HTMLElement>('#generation-status');
@@ -866,6 +926,8 @@ terrainSizeSelect.value = profile.terrainSize;
 townScaleSelect.value = profile.townScale;
 terrainShapeSelect.value = profile.terrainShape;
 climatePresetSelect.value = profile.climatePreset;
+islandCountInput.value = String(profile.islandCount);
+islandSpacingInput.value = String(profile.islandSpacingKilometers);
 const storedAnchors = loadAnchorState();
 let customAnchors = [...storedAnchors.customAnchors];
 let builtInOverrides = [...storedAnchors.builtInOverrides];
@@ -874,6 +936,7 @@ let roadNameOverrides: EntityNameOverride[] = [];
 let blockNameOverrides: EntityNameOverride[] = [];
 let labelSettings: LabelDisplaySettings = loadLabelSettings();
 let anchorPositionOverrides: AnchorPositionOverride[] = [];
+let settlementPositionOverrides: SettlementPositionOverride[] = [];
 let storyPositionOverrides: StoryPositionOverride[] = [];
 let storyRuleOverrides: StoryRuleOverride[] = [];
 let zoneOverrides: ZoneOverride[] = [];
@@ -899,7 +962,7 @@ let zoneStrokeIndices = new Set<number>();
 let zoneBrushPreview: number[] = [];
 let lastPointerX = 0;
 let lastPointerY = 0;
-let dragPreview: { kind: 'anchor' | 'story'; key: string; x: number; y: number } | null = null;
+let dragPreview: { kind: 'anchor' | 'settlement' | 'story'; key: string; x: number; y: number } | null = null;
 let draggedImageId: string | null = null;
 let draggedImageOffsetX = 0;
 let draggedImageOffsetY = 0;
@@ -950,15 +1013,18 @@ function selectedTownScale(): TownScale {
 
 function selectedTerrainShape(): TerrainShape { return terrainShapeSelect.value as TerrainShape; }
 function selectedClimatePreset(): ClimatePreset { return climatePresetSelect.value as ClimatePreset; }
+function selectedIslandCount(): number { return Math.max(2, Math.min(12, Math.round(Number(islandCountInput.value) || 5))); }
+function selectedIslandSpacing(): number { return Math.max(0.5, Math.min(12, Number(islandSpacingInput.value) || 4)); }
 
 function worldSignature(): string {
-  return `${seedInput.value.trim()}|${selectedTerrainSize()}|${selectedTownScale()}|${selectedTerrainShape()}|${selectedClimatePreset()}`;
+  return `${seedInput.value.trim()}|${selectedTerrainSize()}|${selectedTownScale()}|${selectedTerrainShape()}|${selectedClimatePreset()}|${selectedIslandCount()}|${selectedIslandSpacing().toFixed(2)}`;
 }
 
 function generationOptions(
   candidateCustom: readonly CustomAnchorDefinition[] = customAnchors,
   candidateBuiltIns: readonly BuiltInAnchorOverride[] = builtInOverrides,
   candidateAnchorPositions: readonly AnchorPositionOverride[] = anchorPositionOverrides,
+  candidateSettlementPositions: readonly SettlementPositionOverride[] = settlementPositionOverrides,
   candidateStoryPositions: readonly StoryPositionOverride[] = storyPositionOverrides,
 ): GenerationOptions {
   return {
@@ -968,9 +1034,12 @@ function generationOptions(
     townScale: selectedTownScale(),
     terrainShape: selectedTerrainShape(),
     climatePreset: selectedClimatePreset(),
+    islandCount: selectedIslandCount(),
+    islandSpacingKilometers: selectedIslandSpacing(),
     roadNameOverrides,
     blockNameOverrides,
     anchorPositionOverrides: candidateAnchorPositions,
+    settlementPositionOverrides: candidateSettlementPositions,
     storyPositionOverrides: candidateStoryPositions,
     storyRuleOverrides,
     zoneOverrides,
@@ -988,6 +1057,7 @@ function generationOptions(
 function currentMapCustomization(): StoredMapCustomization {
   return {
     anchorPositions: anchorPositionOverrides,
+    settlementPositions: settlementPositionOverrides,
     storyPositions: storyPositionOverrides,
     storyRules: storyRuleOverrides,
     zoneOverrides,
@@ -1050,6 +1120,7 @@ function restoreEditorSnapshot(snapshot: EditorSnapshot, label: string): void {
   blockNameOverrides = [...snapshot.blockNames];
   labelSettings = structuredClone(snapshot.labels);
   anchorPositionOverrides = [...snapshot.mapCustomization.anchorPositions];
+  settlementPositionOverrides = [...snapshot.mapCustomization.settlementPositions];
   storyPositionOverrides = [...snapshot.mapCustomization.storyPositions];
   storyRuleOverrides = [...snapshot.mapCustomization.storyRules];
   zoneOverrides = [...snapshot.mapCustomization.zoneOverrides];
@@ -1213,11 +1284,24 @@ function fitCamera(): void {
 function updateProfileHint(): void {
   const terrain = selectedTerrainSize();
   const town = selectedTownScale();
+  const shape = selectedTerrainShape();
   const terrainText = terrain === TerrainSize.Small ? 'compact 256×192 terrain' : terrain === TerrainSize.Medium ? 'expanded 320×240 terrain' : 'regional 384×288 terrain';
   const townText = town === TownScale.Rural ? 'sparse roads and low building occupancy' : town === TownScale.SemiUrban ? 'balanced roads, blocks, and buildings' : 'dense roads, tighter blocks, and high occupancy';
-  const shapeText = terrainShapeSelect.selectedOptions[0]?.textContent ?? selectedTerrainShape();
+  const shapeText = terrainShapeSelect.selectedOptions[0]?.textContent ?? shape;
   const climateText = climatePresetSelect.selectedOptions[0]?.textContent ?? selectedClimatePreset();
-  profileHint.textContent = `${shapeText}, ${climateText.toLowerCase()}, ${terrainText}, with ${townText}.`;
+  const dimensions: readonly [number, number] = terrain === TerrainSize.Small ? [256, 192] : terrain === TerrainSize.Medium ? [320, 240] : [384, 288];
+  const widthKilometers = (dimensions[0] * 0.125).toFixed(0);
+  const heightKilometers = (dimensions[1] * 0.125).toFixed(0);
+  const archipelago = shape === TerrainShape.Archipelago;
+  const twin = shape === TerrainShape.TwinIslands;
+  islandCountInput.disabled = !archipelago;
+  islandSpacingInput.disabled = !(archipelago || twin);
+  if (twin) islandCountInput.value = '2';
+  const islandText = archipelago
+    ? ` ${selectedIslandCount()} major islands with approximately ${selectedIslandSpacing().toFixed(1)} km minimum gaps.`
+    : twin ? ` Two major islands with approximately ${selectedIslandSpacing().toFixed(1)} km minimum separation.` : '';
+  profileHint.textContent = `${shapeText}, ${climateText.toLowerCase()}, ${terrainText}, with ${townText}.${islandText}`;
+  regionalScaleReadout.textContent = `Metro-scale region: ${widthKilometers} × ${heightKilometers} km · 125 m per tile`;
 }
 
 function updateMapHeader(): void {
@@ -1766,6 +1850,7 @@ async function importCustomizationFile(file: File): Promise<void> {
   delete all[temporaryKey];
   localStorage.setItem(MAP_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(all));
   anchorPositionOverrides = [...normalized.anchorPositions];
+  settlementPositionOverrides = [...normalized.settlementPositions];
   storyPositionOverrides = [...normalized.storyPositions];
   storyRuleOverrides = [...normalized.storyRules];
   zoneOverrides = [...normalized.zoneOverrides];
@@ -1793,6 +1878,150 @@ async function importCustomizationFile(file: File): Promise<void> {
   generate(customAnchors, builtInOverrides, false);
   recordHistory(snapshot, 'import overrides');
   setStatus('Imported PAYAW overrides.', 'success');
+}
+
+function normalizeMapCustomizationValue(value: unknown): StoredMapCustomization {
+  if (typeof value !== 'object' || value === null) return emptyMapCustomization();
+  const temporaryKey = `__project_import__${createRuleId()}`;
+  const allBefore = { ...loadAllMapCustomizations() } as Record<string, StoredMapCustomization>;
+  try {
+    localStorage.setItem(MAP_CUSTOMIZATION_STORAGE_KEY, JSON.stringify({ ...allBefore, [temporaryKey]: value }));
+    return loadMapCustomization(temporaryKey);
+  } finally {
+    localStorage.setItem(MAP_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(allBefore));
+  }
+}
+
+function normalizeImportedAsset(value: unknown): ImportedImageAsset | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const item = value as Record<string, unknown>;
+  if (
+    typeof item.id !== 'string'
+    || typeof item.name !== 'string'
+    || typeof item.mimeType !== 'string'
+    || !item.mimeType.startsWith('image/')
+    || typeof item.dataUrl !== 'string'
+    || !item.dataUrl.startsWith('data:image/')
+    || !isEnumValue(Object.values(AssetTargetCategory), item.targetCategory)
+    || !(item.targetType === null || typeof item.targetType === 'string')
+  ) return undefined;
+  return {
+    id: item.id,
+    name: item.name.trim() || 'Imported image',
+    mimeType: item.mimeType,
+    dataUrl: item.dataUrl,
+    targetCategory: item.targetCategory,
+    targetType: item.targetType,
+    createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+  };
+}
+
+function projectProfileFrom(value: unknown): StoredProfile {
+  const defaults = defaultStoredProfile();
+  const item = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+  return {
+    terrainSize: isEnumValue(Object.values(TerrainSize), item.terrainSize) ? item.terrainSize : defaults.terrainSize,
+    townScale: isEnumValue(Object.values(TownScale), item.townScale) ? item.townScale : defaults.townScale,
+    terrainShape: isEnumValue(Object.values(TerrainShape), item.terrainShape) ? item.terrainShape : defaults.terrainShape,
+    climatePreset: isEnumValue(Object.values(ClimatePreset), item.climatePreset) ? item.climatePreset : defaults.climatePreset,
+    islandCount: Math.round(finiteSetting(item.islandCount ?? item.targetIslandCount, defaults.islandCount, 2, 12)),
+    islandSpacingKilometers: finiteSetting(item.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),
+  };
+}
+
+async function importPayawJsonFile(file: File): Promise<void> {
+  if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json' && file.type !== '') {
+    throw new Error('Select a JSON file exported by PAYAW.');
+  }
+  if (file.size > 64 * 1024 * 1024) throw new Error('PAYAW JSON is larger than the 64 MB import limit.');
+  const parsed: unknown = JSON.parse(await file.text());
+  if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
+  const root = parsed as Record<string, unknown>;
+  if (root.format === 'payaw-world-overrides') {
+    await importCustomizationFile(file);
+    return;
+  }
+  if (root.format === 'payaw-project' || typeof root.project === 'object' || typeof root.seed === 'string') {
+    await importProjectFile(file);
+    return;
+  }
+  throw new Error('Unsupported JSON. Import a PAYAW project/world export or PAYAW overrides file.');
+}
+
+async function importProjectFile(file: File): Promise<void> {
+  if (file.size > 64 * 1024 * 1024) throw new Error('Project JSON is larger than the 64 MB import limit.');
+  const parsed: unknown = JSON.parse(await file.text());
+  if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
+  const root = parsed as Record<string, unknown>;
+  const metadata = typeof root.metadata === 'object' && root.metadata !== null ? root.metadata as Record<string, unknown> : {};
+  const schemaVersion = typeof metadata.schemaVersion === 'number' ? metadata.schemaVersion : 8;
+  if (schemaVersion > 12) throw new Error(`This project uses schema ${schemaVersion}, but this editor supports up to schema 12.`);
+
+  const project = typeof root.project === 'object' && root.project !== null ? root.project as Record<string, unknown> : {};
+  const authoring = typeof project.authoring === 'object' && project.authoring !== null
+    ? project.authoring as Record<string, unknown>
+    : {};
+  const seed = typeof project.seed === 'string' ? project.seed : typeof root.seed === 'string' ? root.seed : '';
+  if (seed.trim().length === 0) throw new Error('The project JSON does not contain a valid world seed.');
+  const profile = projectProfileFrom(project.profile ?? metadata);
+  const customizationSource = authoring.customization ?? root.customization;
+  const customization = normalizeMapCustomizationValue(customizationSource);
+  const anchorState = normalizeAnchorState({
+    customAnchors: authoring.customAnchors,
+    builtInAnchorOverrides: authoring.builtInAnchorOverrides,
+  });
+  const importedRoadNames = validNameOverrides(authoring.roadNames);
+  const importedBlockNames = validNameOverrides(authoring.blockNames);
+  const labelSource = authoring.labelDisplay
+    ?? (typeof root.customization === 'object' && root.customization !== null
+      ? (root.customization as Record<string, unknown>).labelDisplay
+      : undefined);
+  const storySource = authoring.customStoryPoints
+    ?? (typeof root.customization === 'object' && root.customization !== null
+      ? (root.customization as Record<string, unknown>).customStoryPoints
+      : undefined);
+  const importedStories = Array.isArray(storySource)
+    ? storySource.flatMap((value) => normalizeCustomStoryDefinition(value) ?? []).slice(0, MAX_CUSTOM_STORY_POINTS)
+    : [];
+  const assetSource = authoring.imageAssets
+    ?? (typeof root.customization === 'object' && root.customization !== null
+      ? (root.customization as Record<string, unknown>).imageAssets
+      : undefined);
+  const assets = Array.isArray(assetSource)
+    ? assetSource.flatMap((value) => normalizeImportedAsset(value) ?? []).slice(0, 256)
+    : [];
+
+  seedInput.value = seed.trim();
+  terrainSizeSelect.value = profile.terrainSize;
+  townScaleSelect.value = profile.townScale;
+  terrainShapeSelect.value = profile.terrainShape;
+  climatePresetSelect.value = profile.climatePreset;
+  islandCountInput.value = String(profile.islandCount);
+  islandSpacingInput.value = String(profile.islandSpacingKilometers);
+  updateProfileHint();
+
+  customAnchors = [...anchorState.customAnchors];
+  builtInOverrides = [...anchorState.builtInOverrides];
+  customStoryDefinitions = importedStories;
+  labelSettings = normalizeLabelSettings(labelSource);
+  applyLabelSettingsToControls(labelSettings);
+  roadNameOverrides = importedRoadNames;
+  blockNameOverrides = importedBlockNames;
+
+  const signature = worldSignature();
+  saveProfile(profile);
+  saveAnchorState(customAnchors, builtInOverrides);
+  saveCustomStoryDefinitions(customStoryDefinitions);
+  saveLabelSettings(labelSettings);
+  saveNameState(signature, { roads: roadNameOverrides, blocks: blockNameOverrides });
+  saveMapCustomization(signature, customization);
+  for (const asset of assets) await assetRepository.put(asset);
+  await refreshAssetLibrary();
+
+  if (!generate(customAnchors, builtInOverrides, true, true)) {
+    throw new Error(statusMessage.textContent ?? 'The imported PAYAW project could not be generated.');
+  }
+  setStatus(`Imported PAYAW project JSON${assets.length > 0 ? ` with ${assets.length} embedded asset${assets.length === 1 ? '' : 's'}` : ''}.`, 'success');
 }
 
 function appendAssetCategoryOptions(select: HTMLSelectElement, selected: AssetTargetCategory): void {
@@ -2255,6 +2484,40 @@ function renderIslandList(): void {
     const preserve = addFlag('Preserve nature', island.preserveNature);
     const locked = addFlag('Lock island plan', island.locked);
 
+    const settlementEditor = document.createElement('div');
+    settlementEditor.className = 'settlement-editor-list';
+    for (const settlementId of island.settlementIds) {
+      const settlement = world.settlements[settlementId];
+      if (settlement === undefined) continue;
+      const row = document.createElement('div');
+      row.className = 'settlement-editor-row';
+      const copy = document.createElement('div');
+      const settlementName = document.createElement('strong');
+      settlementName.textContent = settlement.name;
+      const settlementDetails = document.createElement('small');
+      settlementDetails.textContent = settlement.isPrimary
+        ? 'Primary Poblacion · follows Town Plaza'
+        : `${settlement.type.replaceAll('-', ' ')} · drag in Object editing mode`;
+      copy.append(settlementName, settlementDetails);
+      const buttons = document.createElement('div');
+      buttons.className = 'compact-actions';
+      const focusSettlement = document.createElement('button');
+      focusSettlement.type = 'button';
+      focusSettlement.textContent = 'Focus';
+      focusSettlement.addEventListener('click', () => focusMapPoint(settlement.x, settlement.y));
+      buttons.append(focusSettlement);
+      if (!settlement.isPrimary) {
+        const resetSettlement = document.createElement('button');
+        resetSettlement.type = 'button';
+        resetSettlement.textContent = 'Reset move';
+        resetSettlement.disabled = !settlementPositionOverrides.some((position) => position.key === settlement.key);
+        resetSettlement.addEventListener('click', () => resetSettlementPosition(settlement.key));
+        buttons.append(resetSettlement);
+      }
+      row.append(copy, buttons);
+      settlementEditor.append(row);
+    }
+
     const actions = document.createElement('div');
     actions.className = 'button-row';
     const save = document.createElement('button');
@@ -2298,7 +2561,7 @@ function renderIslandList(): void {
       if (regenerateFrom('islands', `Reset ${island.name}.`)) recordHistory(snapshot, `reset island ${island.name}`);
     });
     actions.append(save, reset);
-    card.append(heading, grid, flags, actions);
+    card.append(heading, grid, flags, settlementEditor, actions);
     islandList.append(card);
   }
 }
@@ -2999,7 +3262,7 @@ function generate(
 
   try {
     let nextWorld: World | undefined;
-    const maximumAttempts = mapCustomization.anchorPositions.length + mapCustomization.storyPositions.length + 1;
+    const maximumAttempts = mapCustomization.anchorPositions.length + mapCustomization.settlementPositions.length + mapCustomization.storyPositions.length + 1;
 
     for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
       try {
@@ -3008,6 +3271,7 @@ function generate(
             candidateCustom,
             candidateBuiltIns,
             mapCustomization.anchorPositions,
+            mapCustomization.settlementPositions,
             mapCustomization.storyPositions,
           ),
           roadNameOverrides: names.roads,
@@ -3027,6 +3291,7 @@ function generate(
         if (!(error instanceof InvalidPositionOverrideError)) throw error;
         const recovered = recoverPositionOverrides(
           mapCustomization.anchorPositions,
+          mapCustomization.settlementPositions,
           mapCustomization.storyPositions,
           error,
         );
@@ -3034,6 +3299,7 @@ function generate(
         mapCustomization = {
           ...mapCustomization,
           anchorPositions: recovered.anchorPositions,
+          settlementPositions: recovered.settlementPositions,
           storyPositions: recovered.storyPositions,
         };
         recoveredOverrides.push(`${error.kind} “${error.displayName}”`);
@@ -3049,6 +3315,7 @@ function generate(
     roadNameOverrides = [...names.roads];
     blockNameOverrides = [...names.blocks];
     anchorPositionOverrides = [...mapCustomization.anchorPositions];
+    settlementPositionOverrides = [...mapCustomization.settlementPositions];
     storyPositionOverrides = [...mapCustomization.storyPositions];
     storyRuleOverrides = [...mapCustomization.storyRules];
     zoneOverrides = [...mapCustomization.zoneOverrides];
@@ -3067,7 +3334,7 @@ function generate(
     if (recoveredOverrides.length > 0) saveMapCustomization(signature, mapCustomization);
 
     refreshWorldUi(fitAfter);
-    saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset() });
+    saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(), islandSpacingKilometers: selectedIslandSpacing() });
     if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
     const duration = Object.values(world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
     const recoveryMessage = recoveredOverrides.length === 0
@@ -3115,6 +3382,10 @@ function replaceAnchorPosition(values: readonly AnchorPositionOverride[], key: s
   return [...values.filter((value) => value.key !== key), { key, x, y }].sort((left, right) => left.key.localeCompare(right.key));
 }
 
+function replaceSettlementPosition(values: readonly SettlementPositionOverride[], key: string, x: number, y: number): SettlementPositionOverride[] {
+  return [...values.filter((value) => value.key !== key), { key, x, y }].sort((left, right) => left.key.localeCompare(right.key));
+}
+
 function replaceStoryPosition(values: readonly StoryPositionOverride[], key: string, id: number, x: number, y: number): StoryPositionOverride[] {
   return [
     ...values.filter((value) => value.key !== key && !(value.key === undefined && value.id === id)),
@@ -3136,22 +3407,39 @@ function resetAnchorPosition(key: string): void {
   regenerateFrom('anchor-placement', 'Restored anchor position.');
 }
 
+function resetSettlementPosition(key: string): void {
+  const snapshot = captureEditorSnapshot();
+  const previous = settlementPositionOverrides;
+  settlementPositionOverrides = settlementPositionOverrides.filter((position) => position.key !== key);
+  persistMapCustomization();
+  if (regenerateFrom('settlements', 'Reset satellite settlement position.')) {
+    recordHistory(snapshot, 'reset satellite settlement position');
+    return;
+  }
+  settlementPositionOverrides = previous;
+  persistMapCustomization();
+  regenerateFrom('settlements', 'Restored satellite settlement position.');
+}
+
 function resetAllObjectPositions(): void {
-  if (anchorPositionOverrides.length === 0 && storyPositionOverrides.length === 0) return;
+  if (anchorPositionOverrides.length === 0 && settlementPositionOverrides.length === 0 && storyPositionOverrides.length === 0) return;
   const snapshot = captureEditorSnapshot();
   const previousAnchors = anchorPositionOverrides;
+  const previousSettlements = settlementPositionOverrides;
   const previousStories = storyPositionOverrides;
   anchorPositionOverrides = [];
+  settlementPositionOverrides = [];
   storyPositionOverrides = [];
   persistMapCustomization();
-  if (regenerateFrom('anchor-placement', 'Reset moved anchors and story sites.')) {
+  if (regenerateFrom('settlements', 'Reset moved anchors, satellite settlements, and story sites.')) {
     recordHistory(snapshot, 'reset moved objects');
     return;
   }
   anchorPositionOverrides = previousAnchors;
+  settlementPositionOverrides = previousSettlements;
   storyPositionOverrides = previousStories;
   persistMapCustomization();
-  regenerateFrom('anchor-placement', 'Restored moved objects.');
+  regenerateFrom('settlements', 'Restored moved objects.');
 }
 
 function resetBuiltInAnchor(type: BuiltInAnchorType): void {
@@ -3239,7 +3527,7 @@ function pointInsidePlacement(x: number, y: number, placement: PlacedImage): boo
   return Math.abs(localX) <= placement.width * 0.5 && Math.abs(localY) <= placement.height * 0.5;
 }
 
-function hitMovableObject(x: number, y: number): { kind: 'anchor' | 'story' | 'image'; key: string } | null {
+function hitMovableObject(x: number, y: number): { kind: 'anchor' | 'settlement' | 'story' | 'image'; key: string } | null {
   const markerRadius = Math.max(1.4, 10 / Math.max(1, camera.zoom));
   for (const item of world.storyObjects) {
     if (Math.hypot(x - (item.x + 0.5), y - (item.y + 0.5)) <= markerRadius) {
@@ -3249,6 +3537,12 @@ function hitMovableObject(x: number, y: number): { kind: 'anchor' | 'story' | 'i
   for (const anchor of world.anchors) {
     if (Math.hypot(x - (anchor.x + 0.5), y - (anchor.y + 0.5)) <= markerRadius) {
       return { kind: 'anchor', key: anchor.key };
+    }
+  }
+  for (const settlement of world.settlements) {
+    if (settlement.isPrimary) continue;
+    if (Math.hypot(x - (settlement.x + 0.5), y - (settlement.y + 0.5)) <= markerRadius) {
+      return { kind: 'settlement', key: settlement.key };
     }
   }
   const reversed = [...placedImages].sort((left, right) => right.zIndex - left.zIndex);
@@ -3291,6 +3585,49 @@ function commitAnchorMove(key: string, x: number, y: number): void {
   anchorPositionOverrides = previous;
   persistMapCustomization();
   regenerateFrom('anchor-placement', 'Restored previous anchor position.');
+  setStatus(`${error} The previous position was restored.`, 'error');
+}
+
+function nearestSettlementTile(settlementKey: string, x: number, y: number, maximumRadius = 18): { x: number; y: number } | undefined {
+  const settlement = world.settlements.find((item) => item.key === settlementKey);
+  if (settlement === undefined || settlement.isPrimary) return undefined;
+  const centerX = Math.round(x);
+  const centerY = Math.round(y);
+  let best: { x: number; y: number; distance: number } | undefined;
+  for (let offsetY = -maximumRadius; offsetY <= maximumRadius; offsetY += 1) {
+    for (let offsetX = -maximumRadius; offsetX <= maximumRadius; offsetX += 1) {
+      const tile = world.getTile(centerX + offsetX, centerY + offsetY);
+      if (tile === undefined || tile.islandId !== settlement.islandId || tile.water !== WaterType.Land || tile.river) continue;
+      if (tile.terrain === 'mountain' || tile.slope > 0.38 || tile.floodRisk > 0.92) continue;
+      const tooClose = world.settlements.some((other) => other.key !== settlementKey && Math.hypot(tile.x - other.x, tile.y - other.y) < 6);
+      if (tooClose) continue;
+      const distance = Math.hypot(tile.x - x, tile.y - y);
+      if (best === undefined || distance < best.distance) best = { x: tile.x, y: tile.y, distance };
+    }
+  }
+  return best;
+}
+
+function commitSettlementMove(key: string, x: number, y: number): void {
+  const settlement = world.settlements.find((item) => item.key === key);
+  if (settlement === undefined || settlement.isPrimary) return;
+  const tile = nearestSettlementTile(key, x, y);
+  if (tile === undefined) {
+    setStatus('Satellite settlements must remain on suitable dry land on their assigned island.', 'error');
+    return;
+  }
+  const snapshot = captureEditorSnapshot();
+  const previous = settlementPositionOverrides;
+  settlementPositionOverrides = replaceSettlementPosition(settlementPositionOverrides, key, tile.x, tile.y);
+  persistMapCustomization();
+  if (regenerateFrom('settlements', `Moved ${settlement.name} and rebuilt regional access.`)) {
+    recordHistory(snapshot, `move settlement ${settlement.name}`);
+    return;
+  }
+  const error = statusMessage.textContent ?? 'The settlement could not be moved there.';
+  settlementPositionOverrides = previous;
+  persistMapCustomization();
+  regenerateFrom('settlements', 'Restored previous settlement position.');
   setStatus(`${error} The previous position was restored.`, 'error');
 }
 
@@ -3403,6 +3740,10 @@ randomSeedButton.addEventListener('click', () => {
 });
 terrainSizeSelect.addEventListener('change', updateProfileHint);
 townScaleSelect.addEventListener('change', updateProfileHint);
+terrainShapeSelect.addEventListener('change', updateProfileHint);
+climatePresetSelect.addEventListener('change', updateProfileHint);
+islandCountInput.addEventListener('input', updateProfileHint);
+islandSpacingInput.addEventListener('input', updateProfileHint);
 exportButton.addEventListener('click', () => downloadWorld(world, currentMapCustomization(), importedAssets, labelSettings, customStoryDefinitions));
 exportImageButton.addEventListener('click', () => { void exportVisibleMapImage(); });
 undoButton.addEventListener('click', undo);
@@ -3413,6 +3754,37 @@ customizationImportFile.addEventListener('change', () => {
   if (file === undefined) return;
   void importCustomizationFile(file).catch((error: unknown) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
   customizationImportFile.value = '';
+});
+projectImportFile.addEventListener('change', () => {
+  const file = projectImportFile.files?.[0];
+  if (file === undefined) return;
+  setStatus('Validating PAYAW JSON…', 'working');
+  void importPayawJsonFile(file).catch((error: unknown) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
+  projectImportFile.value = '';
+});
+projectJsonDropzone.addEventListener('dragenter', (event) => {
+  event.preventDefault();
+  projectJsonDropzone.dataset.dragging = 'true';
+});
+projectJsonDropzone.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  if (event.dataTransfer !== null) event.dataTransfer.dropEffect = 'copy';
+  projectJsonDropzone.dataset.dragging = 'true';
+});
+projectJsonDropzone.addEventListener('dragleave', (event) => {
+  if (event.relatedTarget instanceof Node && projectJsonDropzone.contains(event.relatedTarget)) return;
+  delete projectJsonDropzone.dataset.dragging;
+});
+projectJsonDropzone.addEventListener('drop', (event) => {
+  event.preventDefault();
+  delete projectJsonDropzone.dataset.dragging;
+  const file = [...(event.dataTransfer?.files ?? [])].find((candidate) => candidate.name.toLowerCase().endsWith('.json') || candidate.type === 'application/json');
+  if (file === undefined) {
+    setStatus('Drop a PAYAW JSON file.', 'error');
+    return;
+  }
+  setStatus('Validating dropped PAYAW JSON…', 'working');
+  void importPayawJsonFile(file).catch((error: unknown) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
 });
 fitMapButton.addEventListener('click', fitCamera);
 viewPreset.addEventListener('change', () => {
@@ -4041,6 +4413,8 @@ function endPointerInteraction(event: PointerEvent, cancelled = false): void {
   if (cancelled) return;
   if (preview?.kind === 'anchor') {
     commitAnchorMove(preview.key, preview.x, preview.y);
+  } else if (preview?.kind === 'settlement') {
+    commitSettlementMove(preview.key, preview.x, preview.y);
   } else if (preview?.kind === 'story') {
     const story = world.storyObjects.find((item) => item.key === preview.key);
     if (story !== undefined) commitStoryMove(story.key, story.id, preview.x, preview.y);

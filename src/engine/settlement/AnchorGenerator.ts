@@ -3,7 +3,7 @@ import type { AnchorPositionOverride } from '../generation/GenerationOptions';
 import { InvalidPositionOverrideError } from '../generation/InvalidPositionOverrideError';
 import type { Random } from '../rng/Random';
 import type { World } from '../world/World';
-import { AnchorType, type Anchor, type BuiltInAnchorOverride, type CustomAnchorDefinition } from './Anchor';
+import { AnchorSource, AnchorType, type Anchor, type BuiltInAnchorOverride, type CustomAnchorDefinition } from './Anchor';
 import { createAnchorRules, type AnchorRule } from './AnchorRules';
 
 interface ScoredCandidate {
@@ -47,6 +47,39 @@ function selectCandidate(
       .map((tile, index) => ({ tile, index }))
       .filter(({ tile, index }) => tile.water === 'land' && !tile.river && (allowedLand === null || allowedLand.has(index)) && isSeparated(world, index, placed, Math.max(8, rule.minimumDistance * 0.5)))
       .map(({ tile, index }) => ({ index, score: (1 - tile.slope) * 0.62 + (1 - tile.floodRisk) * 0.28 + tile.accessibility * 0.10 }))
+      .sort((left, right) => right.score - left.score || left.index - right.index)[0];
+    if (fallback !== undefined) return fallback;
+  }
+
+  // Required built-in landmarks must remain usable on deliberately small or
+  // widely spaced islands. Their strict authored rules are attempted first;
+  // this relaxed pass preserves the landmark while still preferring terrain
+  // appropriate to its role. Custom anchors remain strict and report errors.
+  if (rule.source === AnchorSource.BuiltIn) {
+    const plaza = placed.find((anchor) => anchor.type === AnchorType.TownPlaza);
+    const fallback = world.tiles
+      .map((tile, index) => ({ tile, index }))
+      .filter(({ tile, index }) => (
+        tile.water === 'land'
+        && !tile.river
+        && (allowedLand === null || allowedLand.has(index))
+        && isSeparated(world, index, placed, Math.max(4, rule.minimumDistance * 0.35))
+      ))
+      .map(({ tile, index }) => {
+        const flat = Math.max(0, 1 - tile.slope / 0.45);
+        const dry = 1 - tile.floodRisk;
+        const coast = Math.exp(-Math.max(0, tile.coastDistance - 1) / 8);
+        const farmland = tile.terrain === 'plain' || tile.terrain === 'floodplain' ? 1 : 0.25;
+        const plazaDistance = plaza === undefined ? 0 : Math.hypot(tile.x - plaza.x, tile.y - plaza.y);
+        let roleScore = 0.5;
+        if (rule.type === AnchorType.RiceFields) roleScore = farmland * 0.55 + tile.moisture * 0.25 + Math.min(1, plazaDistance / 28) * 0.20;
+        else if (rule.type === AnchorType.Hacienda) roleScore = farmland * 0.4 + Math.min(1, plazaDistance / 40) * 0.45 + dry * 0.15;
+        else if (rule.type === AnchorType.Port) roleScore = coast;
+        else if (rule.type === AnchorType.Hospital || rule.type === AnchorType.School || rule.type === AnchorType.Market || rule.type === AnchorType.Church) {
+          roleScore = plaza === undefined ? 0.5 : Math.exp(-plazaDistance / 24);
+        }
+        return { index, score: flat * 0.36 + dry * 0.24 + roleScore * 0.40 };
+      })
       .sort((left, right) => right.score - left.score || left.index - right.index)[0];
     if (fallback !== undefined) return fallback;
   }

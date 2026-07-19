@@ -16,26 +16,123 @@ function islandMask(u: number, v: number): number {
   return Math.pow(ellipse(u, v, 0.52, 0.48, 0.50, 0.46), 0.72);
 }
 
-function shapeMask(profile: string, u: number, v: number, detail: number): number {
-  switch (profile) {
-    case 'archipelago': {
-      // Intentionally separated macro masks. The previous broad overlapping
-      // ellipses often eroded into one connected landmass, which defeated the
-      // regional-island pipeline even though the silhouette looked varied.
-      const islands = [
-        ellipse(u, v, 0.31, 0.40, 0.22, 0.25),
-        ellipse(u, v, 0.68, 0.29, 0.18, 0.16),
-        ellipse(u, v, 0.58, 0.70, 0.20, 0.17),
-        ellipse(u, v, 0.84, 0.62, 0.11, 0.14),
-        ellipse(u, v, 0.16, 0.72, 0.12, 0.13),
-      ];
-      return Math.max(...islands) * 1.08 + detail * 0.045;
+interface PlannedIsland {
+  readonly cx: number;
+  readonly cy: number;
+  readonly rx: number;
+  readonly ry: number;
+  readonly strength: number;
+}
+
+function plannedMask(u: number, v: number, plan: readonly PlannedIsland[]): number {
+  let value = 0;
+  for (const island of plan) {
+    value = Math.max(value, Math.pow(ellipse(u, v, island.cx, island.cy, island.rx, island.ry), 0.72) * island.strength);
+  }
+  return value;
+}
+
+function tryPlanIslands(
+  width: number,
+  height: number,
+  count: number,
+  gapTiles: number,
+  random: Random,
+  twinProfile: boolean,
+): PlannedIsland[] | undefined {
+  const minimumDimension = Math.min(width, height);
+  const countScale = Math.sqrt(5 / Math.max(2, count));
+  const baseRadius = twinProfile
+    ? Math.min(minimumDimension * 0.24, minimumDimension * 0.19 * countScale)
+    : Math.max(13, Math.min(minimumDimension * 0.17, minimumDimension * 0.125 * countScale));
+  const radii = Array.from({ length: count }, (_, index) => {
+    const stream = random.fork(`radius-${index}`);
+    const multiplier = index === 0
+      ? (twinProfile ? 1.03 : 1.2)
+      : stream.float(twinProfile ? 0.92 : 0.68, twinProfile ? 1.03 : 0.96);
+    const rx = baseRadius * multiplier * stream.float(0.92, 1.12);
+    const ry = baseRadius * multiplier * stream.float(0.82, 1.08);
+    return { rx, ry };
+  });
+
+  const placed: Array<{ x: number; y: number; rx: number; ry: number }> = [];
+  const primary = radii[0];
+  if (primary === undefined) return [];
+  placed.push({
+    x: width * (0.46 + random.fork('primary').float(-0.035, 0.035)),
+    y: height * (0.48 + random.fork('primary-y').float(-0.035, 0.035)),
+    ...primary,
+  });
+
+  for (let index = 1; index < count; index += 1) {
+    const radius = radii[index];
+    if (radius === undefined) return undefined;
+    let best: { x: number; y: number; score: number; edgeGap: number } | undefined;
+    const stream = random.fork(`center-${index}`);
+    const attempts = Math.max(900, count * 160);
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const x = stream.float(radius.rx + 5, width - radius.rx - 5);
+      const y = stream.float(radius.ry + 5, height - radius.ry - 5);
+      let minimumEdgeGap = Number.POSITIVE_INFINITY;
+      for (const other of placed) {
+        const centerDistance = Math.hypot(x - other.x, y - other.y);
+        const thisRadius = (radius.rx + radius.ry) * 0.5;
+        const otherRadius = (other.rx + other.ry) * 0.5;
+        minimumEdgeGap = Math.min(minimumEdgeGap, centerDistance - thisRadius - otherRadius);
+      }
+      const distanceFromRegionalCenter = Math.hypot(x - width * 0.5, y - height * 0.5);
+      const reachesGap = minimumEdgeGap >= gapTiles;
+      const score = reachesGap
+        ? 10000 - Math.abs(minimumEdgeGap - gapTiles) * 4 - distanceFromRegionalCenter * 0.06
+        : minimumEdgeGap;
+      if (best === undefined || score > best.score) best = { x, y, score, edgeGap: minimumEdgeGap };
     }
+    if (best === undefined || best.edgeGap < Math.max(1.5, gapTiles * 0.72)) return undefined;
+    placed.push({ x: best.x, y: best.y, ...radius });
+  }
+
+  return placed.map((item, index): PlannedIsland => ({
+    cx: item.x / width,
+    cy: item.y / height,
+    rx: item.rx / width,
+    ry: item.ry / height,
+    strength: index === 0 ? 1.16 : random.fork(`strength-${index}`).float(1.08, 1.15),
+  }));
+}
+
+/**
+ * Creates a deterministic archipelago plan. Requested spacing is treated as a
+ * minimum coastline gap. If the requested count/gap cannot fit in the chosen
+ * map extent, the gap is progressively reduced rather than silently dropping
+ * islands, so island count remains the stronger authoring constraint.
+ */
+function createIslandPlan(width: number, height: number, config: GenerationConfig, random: Random): readonly PlannedIsland[] {
+  const twinProfile = config.terrain.shapeProfile === 'twin-islands';
+  const count = twinProfile ? 2 : Math.max(1, Math.min(12, Math.round(config.terrain.targetIslandCount)));
+  const tileSizeKilometers = config.world.tileSizeMeters / 1000;
+  const requestedGapTiles = config.terrain.islandSpacingKilometers / tileSizeKilometers;
+  let gapTiles = requestedGapTiles;
+  for (let pass = 0; pass < 10; pass += 1) {
+    const plan = tryPlanIslands(width, height, count, gapTiles, random.fork(`layout-${pass}`), twinProfile);
+    if (plan !== undefined) return plan;
+    gapTiles *= 0.84;
+  }
+  const fallback = tryPlanIslands(width, height, count, 1.5, random.fork('layout-fallback'), twinProfile);
+  if (fallback !== undefined) return fallback;
+  throw new Error(`Could not fit ${count} generated islands inside ${width}×${height}. Reduce island count or spacing.`);
+}
+
+function shapeMask(
+  profile: string,
+  u: number,
+  v: number,
+  detail: number,
+  islandPlan: readonly PlannedIsland[],
+): number {
+  switch (profile) {
+    case 'archipelago':
     case 'twin-islands':
-      return Math.max(
-        ellipse(u, v, 0.28, 0.50, 0.235, 0.37),
-        ellipse(u, v, 0.72, 0.48, 0.215, 0.33),
-      ) * 1.02 + detail * 0.04;
+      return plannedMask(u, v, islandPlan) + detail * 0.028;
     case 'peninsula': {
       const mainland = ellipse(u, v, 0.30, 0.48, 0.43, 0.50);
       const neck = ellipse(u, v, 0.67, 0.52, 0.34, 0.16);
@@ -81,6 +178,9 @@ export function generateElevationField(
   const elevation = new Float32Array(width * height);
   const noiseConfig = config.terrain.elevationNoise;
   const profile = config.terrain.shapeProfile;
+  const islandPlan = profile === 'archipelago' || profile === 'twin-islands'
+    ? createIslandPlan(width, height, config, random.fork('island-plan'))
+    : [];
 
   for (let y = 0; y < height; y += 1) {
     const v = profile === 'full-island' ? y / height : y / Math.max(1, height - 1);
@@ -92,7 +192,7 @@ export function generateElevationField(
         continue;
       }
       const detail = macroNoise.fbm2D(x, y, 3, 0.5, 2, noiseConfig.scale * 1.6) - 0.5;
-      const mask = shapeMask(profile, u, v, detail);
+      const mask = shapeMask(profile, u, v, detail, islandPlan);
       const continentalLift = profile === 'inland' ? 0.18 : 0;
       elevation[y * width + x] = clamp01(base * 0.58 + mask * 0.58 + continentalLift - 0.20);
     }

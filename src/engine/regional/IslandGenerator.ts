@@ -25,7 +25,7 @@ function viability(world: World, landmassId: number): number {
   ));
 }
 
-function roleFor(world: World, landmassId: number, rank: number): IslandRole {
+function roleFor(world: World, landmassId: number, rank: number, townScale: TownScale): IslandRole {
   const landmass = world.landmasses[landmassId];
   if (landmass === undefined) return IslandRole.Uninhabited;
   if (rank === 0) return IslandRole.PrimarySettlement;
@@ -33,6 +33,24 @@ function roleFor(world: World, landmassId: number, rank: number): IslandRole {
   const coastRatio = landmass.coastlineLength / Math.max(1, landmass.area);
   if (landmass.area < 120) return landmass.averageForestDensity > 0.58 ? IslandRole.StoryIsland : IslandRole.Uninhabited;
   if (landmass.area < 240) return landmass.averageForestDensity > 0.48 ? IslandRole.ProtectedNature : IslandRole.Uninhabited;
+
+  // Regional archipelagos need actual secondary communities rather than a
+  // collection of protected islands surrounding one overloaded primary town.
+  // The highest-ranked viable islands are therefore reserved as satellite
+  // communities before the more conservative ecological classification runs.
+  const regionalShape = world.metadata.terrainShape === 'archipelago' || world.metadata.terrainShape === 'twin-islands';
+  const developedSecondaryTarget = townScale === 'urban' ? 3 : townScale === 'semi-urban' ? 2 : 1;
+  const viableRegionalSettlement = regionalShape
+    && rank <= developedSecondaryTarget
+    && landmass.area >= 360
+    && landmass.buildableArea >= 24
+    && buildableRatio >= 0.04;
+  if (viableRegionalSettlement) {
+    if (buildableRatio >= 0.28 && landmass.freshwaterScore >= 0.08) return IslandRole.SatelliteTown;
+    if (coastRatio >= 0.12) return IslandRole.PortHub;
+    return IslandRole.RuralVillage;
+  }
+
   if (landmass.averageForestDensity > 0.7 && buildableRatio < 0.34) return IslandRole.ProtectedNature;
   if (landmass.area > 1200 && buildableRatio > 0.44 && landmass.freshwaterScore > 0.18) return IslandRole.SatelliteTown;
   if (coastRatio > 0.18 && buildableRatio > 0.32 && landmass.area > 260) return IslandRole.PortHub;
@@ -117,13 +135,14 @@ export function generateIslands(
   townScale: TownScale,
   random: Random,
   overrides: readonly IslandOverride[] = [],
+  maximumIslandCount?: number,
 ): void {
   const minimumArea = Math.max(20, Math.floor(world.tiles.length * 0.00042));
   const candidates = world.landmasses
     .filter((landmass) => landmass.area >= minimumArea)
     .map((landmass) => ({ landmass, score: viability(world, landmass.id) }))
     .sort((left, right) => right.landmass.area - left.landmass.area || right.score - left.score || left.landmass.id - right.landmass.id)
-    .slice(0, 18);
+    .slice(0, maximumIslandCount === undefined ? 18 : Math.max(1, Math.min(18, Math.round(maximumIslandCount))));
 
   if (candidates.length === 0) {
     const fallback = [...world.landmasses].sort((left, right) => right.area - left.area || left.id - right.id)[0];
@@ -133,7 +152,7 @@ export function generateIslands(
   const usedNames = new Set<string>();
   world.islands = candidates.map(({ landmass, score }, rank): Island => {
     const stream = random.fork(landmass.key);
-    const role = roleFor(world, landmass.id, rank);
+    const role = roleFor(world, landmass.id, rank, townScale);
     const developmentLevel = developmentFor(role, score);
     const generatedName = rank === 0
       ? 'Payaw Island'

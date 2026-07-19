@@ -463,28 +463,33 @@ export class CanvasRenderer {
     this.context.textAlign = 'center';
     this.context.textBaseline = 'bottom';
     for (const settlement of world.settlements) {
-      if (!pointInBounds(settlement.x, settlement.y, visibleBounds, 12)) continue;
+      const preview = this.customization.dragPreview?.kind === 'settlement' && this.customization.dragPreview.key === settlement.key
+        ? this.customization.dragPreview
+        : null;
+      const settlementX = preview?.x ?? settlement.x;
+      const settlementY = preview?.y ?? settlement.y;
+      if (!pointInBounds(settlementX, settlementY, visibleBounds, 12)) continue;
       this.context.beginPath();
       this.context.fillStyle = settlement.isPrimary ? 'rgba(255, 199, 92, 0.98)' : 'rgba(109, 206, 184, 0.96)';
-      this.context.strokeStyle = 'rgba(248, 250, 239, 0.94)';
-      this.context.lineWidth = Math.max(0.25, 0.9 / Math.max(1, zoom));
-      this.context.arc(settlement.x + 0.5, settlement.y + 0.5, radius, 0, Math.PI * 2);
+      this.context.strokeStyle = preview === null ? 'rgba(248, 250, 239, 0.94)' : 'rgba(255, 222, 128, 1)';
+      this.context.lineWidth = Math.max(0.25, (preview === null ? 0.9 : 1.6) / Math.max(1, zoom));
+      this.context.arc(settlementX + 0.5, settlementY + 0.5, radius, 0, Math.PI * 2);
       this.context.fill();
       this.context.stroke();
       if (zoom < 2) continue;
       const width = this.context.measureText(settlement.name).width + fontSize;
       const bounds: LabelBounds = {
-        left: settlement.x + 0.5 - width * 0.5,
-        right: settlement.x + 0.5 + width * 0.5,
-        top: settlement.y - radius - fontSize * 1.6,
-        bottom: settlement.y - radius,
+        left: settlementX + 0.5 - width * 0.5,
+        right: settlementX + 0.5 + width * 0.5,
+        top: settlementY - radius - fontSize * 1.6,
+        bottom: settlementY - radius,
       };
       if (occupied.some((item) => boundsOverlap(item, bounds))) continue;
       this.context.lineWidth = Math.max(0.16, 1.5 / Math.max(1, zoom));
       this.context.strokeStyle = 'rgba(10, 13, 11, 0.82)';
       this.context.fillStyle = 'rgba(236, 255, 248, 0.96)';
-      this.context.strokeText(settlement.name, settlement.x + 0.5, settlement.y - radius - 0.4);
-      this.context.fillText(settlement.name, settlement.x + 0.5, settlement.y - radius - 0.4);
+      this.context.strokeText(settlement.name, settlementX + 0.5, settlementY - radius - 0.4);
+      this.context.fillText(settlement.name, settlementX + 0.5, settlementY - radius - 0.4);
       occupied.push(bounds);
     }
   }

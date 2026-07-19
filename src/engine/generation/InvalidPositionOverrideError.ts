@@ -1,4 +1,4 @@
-export type PositionOverrideKind = 'anchor' | 'story';
+export type PositionOverrideKind = 'anchor' | 'settlement' | 'story';
 
 /**
  * Signals that a persisted manual position no longer fits the current generated

@@ -9,10 +9,14 @@ export interface NoiseConfig {
 export interface WorldConfig {
   readonly width: number;
   readonly height: number;
+  /** Physical scale used by travel and distance reporting. */
+  readonly tileSizeMeters: number;
 }
 
 export interface TerrainConfig {
   readonly shapeProfile: string;
+  readonly targetIslandCount: number;
+  readonly islandSpacingKilometers: number;
   readonly seaLevel: number;
   readonly deepWaterDepth: number;
   readonly beachWidth: number;
@@ -331,13 +335,16 @@ export interface GenerationConfig {
 }
 
 export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
-  version: 'payaw-m11.1-override-recovery-v1',
+  version: 'payaw-m12-metro-region-v1',
   world: {
     width: 256,
     height: 192,
+    tileSizeMeters: 125,
   },
   terrain: {
     shapeProfile: 'full-island',
+    targetIslandCount: 5,
+    islandSpacingKilometers: 4,
     seaLevel: 0.38,
     deepWaterDepth: 0.085,
     beachWidth: 0.025,
@@ -519,7 +526,7 @@ export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
     shallowWaterPenalty: 14,
     openWaterPenalty: 0.18,
     maximumPathVisits: 180000,
-    tileSizeKilometers: 0.08,
+    tileSizeKilometers: 0.125,
     smallBoatSpeedKph: 18,
     ferrySpeedKph: 26,
     cargoSpeedKph: 20,

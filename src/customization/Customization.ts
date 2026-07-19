@@ -5,6 +5,7 @@ import type { PortOverride, CustomPortDefinition } from '../engine/infrastructur
 import type { WaterRouteOverride, CustomWaterRouteDefinition } from '../engine/infrastructure/WaterRoute';
 import type {
   AnchorPositionOverride,
+  SettlementPositionOverride,
   StoryPositionOverride,
   StoryRuleOverride,
   ZoneOverride,
@@ -46,6 +47,7 @@ export interface PlacedImage {
 
 export interface StoredMapCustomization {
   readonly anchorPositions: readonly AnchorPositionOverride[];
+  readonly settlementPositions: readonly SettlementPositionOverride[];
   readonly storyPositions: readonly StoryPositionOverride[];
   readonly storyRules: readonly StoryRuleOverride[];
   readonly zoneOverrides: readonly ZoneOverride[];
@@ -65,7 +67,7 @@ export interface RuntimeImageAsset {
 }
 
 export interface DragPreview {
-  readonly kind: 'anchor' | 'story';
+  readonly kind: 'anchor' | 'settlement' | 'story';
   readonly key: string;
   readonly x: number;
   readonly y: number;

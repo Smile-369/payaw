@@ -1,154 +1,88 @@
-# PAYAW Procedural World Engine — Milestone 11.1
+# PAYAW Procedural World Engine — Milestone 12
 
-**Milestone 11.1: Saved Position Recovery** fixes stale manual anchor and story locations that can become invalid after terrain or profile changes. It includes all Milestone 11 maritime features.
+Milestone 12 expands PAYAW into a Metro Bacolod-scale regional generator with authored island count and spacing, movable satellite settlements, portable project JSON, bridges, ports, and water routes.
 
-## Milestone 11.1 fix
+## Regional scale
 
-- Full generation no longer fails because an old Town Plaza or story-point override lands on water.
-- Only the invalid saved position is removed.
-- The affected object returns to a deterministic procedural location.
-- Valid moved objects and all other customization remain untouched.
-- The repaired state is saved automatically.
-- Direct dragging remains strict and still rejects invalid placements.
+PAYAW now uses a fixed scale of **125 meters per tile**.
 
-See `docs/MILESTONE_11_1.md` and `docs/VALIDATION_11_1.md`.
+| Terrain extent | Tiles | Approximate regional size |
+|---|---:|---:|
+| Small | 256×192 | 32×24 km |
+| Medium | 320×240 | 40×30 km |
+| Large | 384×288 | 48×36 km |
 
----
+This is intended as a regional planning scale comparable to a Metro Bacolod-sized play area rather than a single compact town map.
 
-## What Milestone 11 adds
+## Island controls
 
-### Procedural ports
+When using **Archipelago**, the World Foundation panel exposes:
 
-Each inhabited island that permits ports is evaluated for a coastal terminal. Candidate sites are scored using:
+- Major island count: 2–12
+- Approximate minimum island spacing: 0.5–12 km
 
-- Adjacent navigable water depth
-- Shelter from open-water exposure
-- Flat and buildable approach terrain
-- Road-network proximity
-- Flood risk
-- Island role and population demand
+Twin Islands is fixed to two islands but still allows spacing control. The generator treats island count as the stronger constraint and progressively relaxes spacing only when the requested layout cannot physically fit inside the selected terrain extent.
 
-Generated port types include:
+## Regional settlement behavior
 
-- Fishing dock
-- Barangay jetty
-- Ferry terminal
-- Commercial port
-- Industrial port
-- Marina
+Archipelagos reserve viable high-ranked secondary islands for satellite communities before ecological classification. This prevents every non-primary island from becoming protected wilderness.
 
-Every port records its island, settlement, land and water positions, capacity, depth, shelter, road access, access-road ID, connected route IDs, and generated/custom state.
+Regional town scale influences how many secondary islands are developed:
 
-### Water navigation
+- Rural: one preferred secondary community
+- Semi-urban: two preferred secondary communities
+- Urban: three preferred secondary communities
 
-Water routes use a dedicated ocean traversal field. Each vessel has a minimum draft and different speed:
+Satellite settlements can be moved directly in **Object editing** mode. Position overrides must remain on the settlement's assigned island, on dry land, below slope and flood limits, and far enough from another settlement center. The primary Poblacion remains aligned to the Town Plaza anchor.
 
-- Small boat
-- Ferry
-- Cargo vessel
+## JSON import and export
 
-A* rejects land tiles and impassably shallow water. Its cost also accounts for shallow-water risk and exposure far from shore. This produces routes that follow navigable water rather than drawing straight lines through islands.
+The Project Output section now includes a dedicated **Import Project JSON** control and drag-and-drop area.
 
-### Regional route selection
+Supported files:
 
-Route demand considers:
+- `payaw-project` full project exports
+- Serialized PAYAW world JSON containing a seed and metadata
+- `payaw-world-overrides` customization exports
 
-- Population connected
-- Port capacity and type
-- Island roles
-- Route distance
-- Existing bridge competition
-- Whether a pair is already connected
+A full project import restores:
 
-The generator first builds a maritime regional backbone between disconnected island groups and can then add a limited number of valuable extra connections.
+- Seed
+- Terrain size and town scale
+- World shape and climate
+- Island count and spacing
+- Custom and edited anchors
+- Custom story points and encounter tables
+- Moved anchors, settlements, and story sites
+- Zone overrides
+- Road and block names
+- Label controls
+- Island, bridge, port, and water-route overrides
+- Placed images
+- Embedded imported image assets
 
-Route types include:
+Import is validation-first. PAYAW rejects future schema versions, malformed files, unsupported formats, and project JSON above 64 MB. The world is regenerated from its deterministic seed and profile, then validated authoring data is reapplied. Imported tile arrays are not trusted as mutable engine state.
 
-- Fishing route
-- Passenger ferry
-- Cargo route
-- Coastal route
-- Open-water route
-- Smuggling route
-- Story route
+## Existing systems included
 
-### Travel times and danger
+Milestone 12 retains:
 
-Each route calculates:
+- World Editor and separate DM Mode
+- Undo and redo
+- Asset targeting and freeform map images
+- Zone editor
+- Editable road and block names
+- Label controls
+- Custom story points and weighted encounters
+- Island editor
+- Procedural and custom bridges
+- Procedural and custom ports
+- Ferry and water-route editing
+- Full-map PNG export
+- World and override JSON export
+- Automatic stale-position recovery
 
-```text
-boarding time
-+ water distance × tile scale ÷ vessel speed
-= estimated journey time
-```
-
-Routes also receive a 0–1 danger rating from distance, open-water exposure, and shallow-water risk.
-
-### Maritime encounters
-
-Every generated or custom route includes a deterministic weighted encounter table. Examples include sudden fog, engine failure, a missing passenger, floating shrines, and ghost vessels.
-
-DM Mode now provides:
-
-- Route itinerary and estimated travel time
-- Vessel and danger level
-- Map focus
-- Weighted maritime encounter rolls
-- Maritime entries in the recent-roll log
-
-### Port and route editor
-
-The World Editor now allows you to:
-
-- Add custom ports to selected islands
-- Rename and reclassify ports
-- Change capacity
-- Move ports to another valid coastal point
-- Lock, suppress, delete, or reset ports
-- Add routes between any two ports
-- Change route type and vessel class
-- Override travel time and danger
-- Enable or disable service
-- Lock, suppress, delete, or reset routes
-
-All changes are non-destructive overrides and support undo/redo.
-
-### Partial regeneration
-
-```text
-Port edit
-→ ports and access roads
-→ water routes
-→ accessibility
-→ blocks and zoning
-→ buildings, vegetation, and story
-
-Water-route edit
-→ water routes
-→ accessibility and downstream analysis
-```
-
-Roads now track bridge and port ownership independently. This prevents stale approach roads from surviving partial regeneration.
-
-### Rendering and exports
-
-Independent layers were added for:
-
-- Ports
-- Port labels
-- Water routes
-- Water-route labels
-
-Imported artwork can target:
-
-```text
-infrastructure:port
-infrastructure:water-route
-```
-
-Ports and routes are included in World JSON, override files, and full-map PNG exports.
-
-## Run locally
+## Run
 
 ```bash
 corepack enable
@@ -163,20 +97,9 @@ pnpm check
 pnpm test:ms9
 pnpm test:ms10
 pnpm test:ms11
+pnpm test:ms111
+pnpm test:ms12
 pnpm build
 ```
 
-## Current focused result
-
-The Milestone 11 archipelago fixture generated:
-
-| System | Result |
-|---|---:|
-| Islands | 5 |
-| Bridges | 3 |
-| Ports | 4 |
-| Water routes | 6 |
-| Passenger routes | 6 |
-| Combined travel time | 149 minutes |
-
-See [`docs/MILESTONE_11.md`](docs/MILESTONE_11.md) and [`docs/VALIDATION_11.md`](docs/VALIDATION_11.md) for architecture and validation details.
+See `docs/MILESTONE_12.md` and `docs/VALIDATION_12.md` for implementation and validation details.

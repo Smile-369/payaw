@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <meta content="#0b0f0d" name="theme-color"/>
-<title>PAYAW World Studio · Milestone 9</title>
+<title>PAYAW World Studio · Milestone 12</title>
 </head>
 <body>
 <div id="app">
@@ -17,8 +17,8 @@
 <h1>World Studio</h1>
 </div>
 </div>
-<span class="version-pill">M9</span>
-<p class="subtitle">Build regional islands, settlements, and bridge networks in the Editor. Run encounters in DM Mode.</p>
+<span class="version-pill">M12</span>
+<p class="subtitle">Build a Metro Bacolod-scale region with authored islands, settlements, bridges, ports, and routes. Run encounters in DM Mode.</p>
 </header>
 <nav aria-label="Workspace" class="workspace-switcher">
 <button aria-selected="true" class="workspace-tab" data-workspace="editor" id="workspace-editor-button" type="button">
@@ -83,7 +83,18 @@
 <option value="boreal">Boreal</option>
 </select>
 </label>
+<label class="form-field">
+<span>Major islands</span>
+<input id="island-count-input" type="number" min="2" max="12" step="1" value="5"/>
+<small>Used by Archipelago; Twin Islands is fixed to two.</small>
+</label>
+<label class="form-field">
+<span>Island spacing</span>
+<div class="input-with-unit"><input id="island-spacing-input" type="number" min="0.5" max="12" step="0.5" value="4"/><span>km</span></div>
+<small>Approximate minimum water gap between major islands.</small>
+</label>
 </div>
+<p class="regional-scale-readout" id="regional-scale-readout">Metro-scale region: 32 × 24 km · 125 m per tile</p>
 <p class="helper-text" id="profile-hint">Small terrain with a balanced semi-urban settlement.</p>
 <button class="primary" id="generate-button" type="button">Generate world</button>
 <div aria-live="polite" class="status-message" id="generation-status" role="status">Ready.</div>
@@ -580,13 +591,22 @@
 </summary>
 <div class="disclosure-body">
 <dl class="stats" id="world-stats"></dl>
+<div class="project-json-panel" id="project-json-dropzone">
+<div>
+<strong>Project JSON</strong>
+<p class="helper-text">Export the complete reproducible project, or import a PAYAW project/world JSON. Dropping a JSON file here also works.</p>
+</div>
+<div class="button-row">
 <button id="export-button" type="button">Export World JSON</button>
+<label class="file-button primary-file">Import Project JSON<input accept=".json,application/json" hidden="" id="project-import-file" type="file"/></label>
+</div>
+</div>
 <div class="export-image-grid">
 <label class="form-field"><span>PNG scale</span><select id="image-export-scale"><option value="2">2 px / tile</option><option selected="" value="4">4 px / tile</option><option value="8">8 px / tile</option><option value="12">12 px / tile</option></select></label>
 <label class="form-field"><span>Padding</span><select id="image-export-padding"><option value="0">None</option><option selected="" value="24">24 px</option><option value="64">64 px</option></select></label>
 <button class="secondary full-width" id="export-image-button" type="button">Export full map as PNG</button>
 </div>
-<div class="button-row"><button id="export-customization-button" type="button">Export overrides</button><label class="file-button">Import overrides<input accept="application/json" hidden="" id="customization-import-file" type="file"/></label></div>
+<div class="button-row"><button id="export-customization-button" type="button">Export overrides</button><label class="file-button">Import overrides<input accept=".json,application/json" hidden="" id="customization-import-file" type="file"/></label></div>
 </div>
 </details></div><div class="workspace-panel workspace-panel-dm" data-workspace-panel="dm" hidden="" id="dm-workspace">
 <section class="dm-hero card">
