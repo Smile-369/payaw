@@ -1,0 +1,26 @@
+{
+  "generationVersion": "payaw-m9-regional-world-v1",
+  "schemaVersion": 9,
+  "shape": "archipelago",
+  "landmasses": 5,
+  "islands": 5,
+  "settlements": 4,
+  "totalPopulation": 22000,
+  "roads": 56,
+  "blocks": 32,
+  "roles": [
+    "primary-settlement",
+    "agricultural",
+    "agricultural",
+    "protected-nature",
+    "agricultural"
+  ],
+  "override": {
+    "key": "island:landmass-6gf-186",
+    "name": "Isla Binagyo",
+    "role": "rural-village",
+    "settlements": 2,
+    "allowPorts": true,
+    "allowBridges": false
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "generationVersion": "payaw-m6.1-asset-spatial-customization-v1",
+  "tileCount": 49152,
+  "seedsValidated": 2,
+  "summaries": [
+    {
+      "seed": "payaw-smoke-test",
+      "landTiles": 34858,
+      "oceanTiles": 13292,
+      "rivers": 9,
+      "shortestRiver": 25,
+      "longestRiver": 152,
+      "anchors": 9,
+      "roads": 49,
+      "localRoads": 20,
+      "blocks": 38,
+      "zones": 226,
+      "buildings": 36,
+      "vegetation": 2963,
+      "deltaTiles": 360,
+      "anchorBuildings": 7,
+      "bridges": 10
+    },
+    {
+      "seed": "payaw-smoke-test-different",
+      "landTiles": 36218,
+      "oceanTiles": 12191,
+      "rivers": 9,
+      "shortestRiver": 26,
+      "longestRiver": 219,
+      "anchors": 9,
+      "roads": 49,
+      "localRoads": 20,
+      "blocks": 29,
+      "zones": 196,
+      "buildings": 68,
+      "vegetation": 3721,
+      "deltaTiles": 183,
+      "anchorBuildings": 7,
+      "bridges": 13
+    }
+  ]
+}

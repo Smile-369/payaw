@@ -1,0 +1,26 @@
+{
+  "name": "payaw-procgen",
+  "private": true,
+  "version": "0.10.0",
+  "type": "module",
+  "packageManager": "pnpm@11.11.0",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit",
+    "preview": "vite preview",
+    "test:engine": "node scripts/run-engine-tests.mjs",
+    "test:ms8": "node scripts/run-ms8-tests.mjs",
+    "test:ms81": "node scripts/run-ms81-tests.mjs",
+    "test:ms82": "node scripts/run-ms82-tests.mjs",
+    "test:ms9": "node scripts/run-ms9-tests.mjs",
+    "test:ms10": "node scripts/run-ms10-tests.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3",
+    "vite": "8.1.5"
+  }
+}

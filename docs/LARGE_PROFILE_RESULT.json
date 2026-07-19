@@ -1,0 +1,13 @@
+{
+  "elapsedMs": 6251,
+  "width": 384,
+  "height": 288,
+  "tiles": 110592,
+  "rivers": 14,
+  "roads": 49,
+  "blocks": 23,
+  "buildings": 61,
+  "storyObjects": 6,
+  "terrainSize": "large",
+  "townScale": "semi-urban"
+}

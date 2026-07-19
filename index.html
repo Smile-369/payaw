@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="#0b0f0d" name="theme-color"/>
+<title>PAYAW World Studio · Milestone 9</title>
+</head>
+<body>
+<div id="app">
+<aside class="panel" id="control-panel"><header class="app-header">
+<div class="brand-lockup">
+<div aria-hidden="true" class="brand-mark">P</div>
+<div>
+<p class="eyebrow">PAYAW</p>
+<h1>World Studio</h1>
+</div>
+</div>
+<span class="version-pill">M9</span>
+<p class="subtitle">Build regional islands, settlements, and bridge networks in the Editor. Run encounters in DM Mode.</p>
+</header>
+<nav aria-label="Workspace" class="workspace-switcher">
+<button aria-selected="true" class="workspace-tab" data-workspace="editor" id="workspace-editor-button" type="button">
+<span aria-hidden="true" class="workspace-icon">✦</span>
+<span><strong>World Editor</strong><small>Generate and customize</small></span>
+</button>
+<button aria-selected="false" class="workspace-tab" data-workspace="dm" id="workspace-dm-button" type="button">
+<span aria-hidden="true" class="workspace-icon">◈</span>
+<span><strong>DM Mode</strong><small>Run the session</small></span>
+</button>
+</nav>
+<div class="workspace-context">
+<div><p class="section-kicker" id="workspace-kicker">World Editor</p><h2 id="workspace-title">Build the world</h2></div>
+<p id="workspace-description">Generation, layout, zoning, assets, labels, and story authoring.</p>
+</div>
+<div class="workspace-panel workspace-panel-editor" data-workspace-panel="editor" id="editor-workspace"><div class="workspace-section-heading"><span>01</span><div><strong>World foundation</strong><small>Seed, geography, climate, and map display</small></div></div><section class="card generator-card">
+<div class="section-heading">
+<p class="section-kicker">Generation profile</p>
+<h2>Build a version of PAYAW</h2>
+</div>
+<div class="seed-row">
+<input aria-label="World seed" id="seed-input" spellcheck="false" type="text" value="payaw-001"/>
+<button aria-label="Create a random seed" class="icon-button" id="random-seed-button" title="Create a random seed" type="button">↻</button>
+</div>
+<div class="profile-grid">
+<label class="form-field">
+<span>Terrain extent</span>
+<select id="terrain-size">
+<option value="small">Small · 256×192</option>
+<option value="medium">Medium · 320×240</option>
+<option value="large">Large · 384×288</option>
+</select>
+</label>
+<label class="form-field">
+<span>Town scale</span>
+<select id="town-scale">
+<option value="rural">Rural</option>
+<option selected="" value="semi-urban">Semi-urban</option>
+<option value="urban">Urban</option>
+</select>
+</label>
+<label class="form-field">
+<span>World shape</span>
+<select id="terrain-shape">
+<option selected="" value="full-island">Full island</option>
+<option value="archipelago">Archipelago</option>
+<option value="twin-islands">Twin islands</option>
+<option value="peninsula">Peninsula</option>
+<option value="inland">Inland continent</option>
+<option value="river-delta">River delta</option>
+<option value="atoll">Atoll</option>
+</select>
+</label>
+<label class="form-field">
+<span>Climate</span>
+<select id="climate-preset">
+<option value="tropical-rainforest">Tropical rainforest</option>
+<option selected="" value="tropical-monsoon">Tropical monsoon</option>
+<option value="tropical-savanna">Tropical savanna</option>
+<option value="temperate">Temperate</option>
+<option value="mediterranean">Mediterranean</option>
+<option value="boreal">Boreal</option>
+</select>
+</label>
+</div>
+<p class="helper-text" id="profile-hint">Small terrain with a balanced semi-urban settlement.</p>
+<button class="primary" id="generate-button" type="button">Generate world</button>
+<div aria-live="polite" class="status-message" id="generation-status" role="status">Ready.</div>
+</section><details class="card disclosure">
+<summary>
+<span><small>Display</small>Map view</span>
+<span class="summary-caret">⌄</span>
+</summary>
+<div class="disclosure-body">
+<label class="field-label" for="view-preset">View preset</label>
+<select id="view-preset">
+<option value="town">Town overview</option>
+<option value="story">Horror layer</option>
+<option value="terrain">Physical terrain</option>
+<option value="hydrology">Hydrology</option>
+<option value="planning">Urban planning</option>
+<option value="custom">Custom layers</option>
+</select>
+<div class="layer-section">
+<h3>Base</h3>
+<div class="layer-grid">
+<label class="check-row"><input checked="" id="terrain-layer" type="checkbox"/><span>Terrain</span></label>
+<label class="check-row"><input id="elevation-layer" type="checkbox"/><span>Elevation</span></label>
+<label class="check-row"><input id="moisture-layer" type="checkbox"/><span>Moisture</span></label>
+<label class="check-row"><input id="temperature-layer" type="checkbox"/><span>Temperature</span></label>
+</div>
+</div>
+<div class="layer-section">
+<h3>Analysis</h3>
+<div class="layer-grid">
+<label class="check-row"><input id="accessibility-layer" type="checkbox"/><span>Access</span></label>
+<label class="check-row"><input id="land-value-layer" type="checkbox"/><span>Land value</span></label>
+<label class="check-row"><input checked="" id="zone-layer" type="checkbox"/><span>Zones</span></label>
+<label class="check-row"><input checked="" id="block-layer" type="checkbox"/><span>Blocks</span></label>
+<label class="check-row"><input checked="" id="block-label-layer" type="checkbox"/><span>Block labels</span></label>
+</div>
+</div>
+<div class="layer-section">
+<h3>World objects</h3>
+<div class="layer-grid">
+<label class="check-row"><input checked="" id="floodplain-layer" type="checkbox"/><span>Flood risk</span></label>
+<label class="check-row"><input checked="" id="river-layer" type="checkbox"/><span>Rivers</span></label>
+<label class="check-row"><input checked="" id="island-layer" type="checkbox"/><span>Island boundaries</span></label>
+<label class="check-row"><input checked="" id="island-label-layer" type="checkbox"/><span>Island labels</span></label>
+<label class="check-row"><input checked="" id="settlement-layer" type="checkbox"/><span>Settlements</span></label>
+<label class="check-row"><input checked="" id="road-layer" type="checkbox"/><span>Roads</span></label>
+<label class="check-row"><input checked="" id="bridge-layer" type="checkbox"/><span>Bridges</span></label>
+<label class="check-row"><input checked="" id="bridge-label-layer" type="checkbox"/><span>Bridge labels</span></label>
+<label class="check-row"><input checked="" id="road-label-layer" type="checkbox"/><span>Street labels</span></label>
+<label class="check-row"><input checked="" id="building-layer" type="checkbox"/><span>Buildings</span></label>
+<label class="check-row"><input checked="" id="custom-image-layer" type="checkbox"/><span>Custom images</span></label>
+<label class="check-row"><input checked="" id="vegetation-layer" type="checkbox"/><span>Vegetation</span></label>
+<label class="check-row"><input checked="" id="anchor-layer" type="checkbox"/><span>Anchors</span></label>
+<label class="check-row"><input checked="" id="story-layer" type="checkbox"/><span>Story sites</span></label>
+<label class="check-row"><input id="grid-layer" type="checkbox"/><span>Tile grid</span></label>
+</div>
+</div>
+</div>
+</details><div class="workspace-section-heading"><span>02</span><div><strong>World structure</strong><small>Anchors, roads, blocks, and zoning</small></div></div><details class="card disclosure island-editor">
+<summary>
+<span><small>Regional system</small>Islands &amp; settlements</span>
+<span class="count-badge" id="island-count">0</span>
+</summary>
+<div class="disclosure-body">
+<p class="helper-text">Every viable landmass is classified as an island with its own role, population budget, and settlement count. Edits are non-destructive and regenerate only the regional pipeline and downstream town systems.</p>
+<div class="regional-summary" id="regional-summary"></div>
+<div class="island-list" id="island-list"></div>
+<div class="button-row"><button id="island-reset-all" type="button">Reset all island overrides</button></div>
+</div>
+</details><details class="card disclosure bridge-editor">
+<summary>
+<span><small>Regional transport</small>Bridges</span>
+<span class="count-badge" id="bridge-count">0</span>
+</summary>
+<div class="disclosure-body">
+<p class="helper-text">PAYAW scores coast-to-coast crossings using span, water depth, approach terrain, population demand, and island policy. Generated bridges remain editable and resettable.</p>
+<div class="regional-summary" id="bridge-summary"></div>
+<form class="bridge-create-form" id="bridge-form">
+<label class="form-field full-width"><span>Custom bridge name</span><input id="bridge-name" maxlength="56" placeholder="e.g. Dandansoy Bridge" required type="text"/></label>
+<label class="form-field"><span>From island</span><select id="bridge-from-island"></select></label>
+<label class="form-field"><span>To island</span><select id="bridge-to-island"></select></label>
+<label class="form-field"><span>Bridge type</span><select id="bridge-type"><option value="footbridge">Footbridge</option><option value="causeway">Causeway</option><option selected value="local-bridge">Local bridge</option><option value="highway-bridge">Highway bridge</option><option value="long-span-bridge">Long-span bridge</option></select></label>
+<label class="form-field"><span>Road class</span><select id="bridge-road-class"><option value="secondary">Secondary</option><option value="main">Main</option><option value="local">Local</option></select></label>
+<label class="form-field"><span>Deck width</span><input id="bridge-width" min="0.4" max="3.5" step="0.05" type="number" value="1.15"/></label>
+<label class="form-field"><span>Clearance</span><input id="bridge-clearance" min="0" max="40" step="0.5" type="number" value="4"/></label>
+<div class="button-row full-width"><button class="primary" id="bridge-add" type="submit">Add custom bridge</button><button id="bridge-reset-all" type="button">Reset bridge authoring</button></div>
+</form>
+<div class="bridge-list" id="bridge-list"></div>
+</div>
+</details><details class="card disclosure anchor-editor">
+<summary>
+<span><small>Customize</small>Anchor rules</span>
+<span class="count-badge" id="anchor-count">9</span>
+</summary>
+<div class="disclosure-body">
+<p class="helper-text">Edit any built-in anchor or add new ones. Edited rules control procedural placement and can establish zoning around the resulting anchor.</p>
+<form class="anchor-form" id="anchor-form">
+<div class="form-mode full-width">
+<strong id="anchor-form-title">Add custom anchor</strong>
+<button class="text-button" hidden="" id="anchor-cancel-button" type="button">Cancel edit</button>
+</div>
+<input id="anchor-edit-key" type="hidden"/>
+<label class="form-field full-width">
+<span>Anchor name</span>
+<input id="anchor-name" maxlength="40" placeholder="e.g. Old Cemetery" required="" type="text"/>
+</label>
+<label class="form-field">
+<span>Region</span>
+<select id="anchor-region">
+<option value="anywhere">Anywhere suitable</option>
+<option value="town-center">Town center</option>
+<option value="north">Northern area</option>
+<option value="south">Southern area</option>
+<option value="east">Eastern area</option>
+<option value="west">Western area</option>
+</select>
+</label>
+<label class="form-field">
+<span>Terrain rule</span>
+<select id="anchor-terrain">
+<option value="safe-land">Safe buildable land</option>
+<option value="flat-land">Flat land</option>
+<option value="coast">Near the coast</option>
+<option value="river">Near a river</option>
+<option value="forest-edge">Forest edge</option>
+<option value="farmland">Farmland</option>
+<option value="high-ground">High ground</option>
+<option value="dry-land">Low flood risk</option>
+</select>
+</label>
+<label class="form-field">
+<span>Near anchor</span>
+<select id="anchor-target">
+<option value="">No target</option>
+<option value="town-plaza">Town Plaza</option>
+<option value="church">Church</option>
+<option value="market">Market</option>
+<option value="school">School</option>
+<option value="hospital">Hospital</option>
+<option value="port">Port</option>
+<option value="airport">Airport</option>
+<option value="rice-fields">Rice Fields</option>
+<option value="hacienda">Hacienda</option>
+</select>
+</label>
+<label class="form-field">
+<span>Distance</span>
+<select disabled="" id="anchor-proximity">
+<option value="none">Not used</option>
+<option value="adjacent">Adjacent</option>
+<option value="near">Near</option>
+<option value="outskirts">Outskirts</option>
+<option value="far">Far away</option>
+</select>
+</label>
+<label class="form-field">
+<span>Zoning influence</span>
+<select id="anchor-zone">
+<option value="">No forced zone</option>
+<option value="government">Government</option>
+<option value="institutional">Institutional</option>
+<option value="commercial">Commercial</option>
+<option value="residential">Residential</option>
+<option value="industrial">Industrial</option>
+<option value="agricultural">Agricultural</option>
+<option value="forest">Forest</option>
+<option value="mixed">Mixed use</option>
+</select>
+</label>
+<label class="form-field">
+<span>Influence size</span>
+<select id="anchor-radius">
+<option value="3">Small · 3 tiles</option>
+<option selected="" value="5">Standard · 5 tiles</option>
+<option value="8">Large · 8 tiles</option>
+<option value="12">Landmark · 12 tiles</option>
+<option value="16">Regional · 16 tiles</option>
+</select>
+</label>
+<label class="form-field">
+<span>Minimum spacing</span>
+<select id="anchor-spacing">
+<option value="6">Close · 6 tiles</option>
+<option selected="" value="12">Normal · 12 tiles</option>
+<option value="18">Wide · 18 tiles</option>
+<option value="28">Isolated · 28 tiles</option>
+</select>
+</label>
+<button class="secondary full-width" id="anchor-submit-button" type="submit">Add anchor and regenerate</button>
+</form>
+<div aria-live="polite" class="anchor-list" id="anchor-list"></div>
+</div>
+</details><details class="card disclosure">
+<summary>
+<span><small>Customize</small>Road &amp; block names</span>
+<span class="summary-caret">⌄</span>
+</summary>
+<div class="disclosure-body naming-editor">
+<form class="name-form" id="road-name-form">
+<label class="form-field full-width"><span>Road</span><select id="road-name-target"></select></label>
+<label class="form-field full-width"><span>Custom name</span><input id="road-name-input" maxlength="64" type="text"/></label>
+<div class="button-row full-width">
+<button class="secondary" type="submit">Save road name</button>
+<button id="road-name-reset" type="button">Reset</button>
+</div>
+</form>
+<form class="name-form" id="block-name-form">
+<label class="form-field full-width"><span>Block</span><select id="block-name-target"></select></label>
+<label class="form-field full-width"><span>Custom name</span><input id="block-name-input" maxlength="64" type="text"/></label>
+<div class="button-row full-width">
+<button class="secondary" type="submit">Save block name</button>
+<button id="block-name-reset" type="button">Reset</button>
+</div>
+</form>
+</div>
+</details><details class="card disclosure zone-editor">
+<summary>
+<span><small>Author</small>Zone editor</span>
+<span class="count-badge" id="zone-override-count">0</span>
+</summary>
+<div class="disclosure-body">
+<p class="helper-text">Paint a non-destructive zoning layer. Buildings regenerate from the final edited zones, while the procedural zoning remains available underneath.</p>
+<div class="edit-mode-row">
+<div><strong>Zone editing</strong><span>Paint directly on the map instead of panning.</span></div>
+<button id="zone-edit-mode-button" type="button">Off</button>
+</div>
+<div class="zone-editor-grid">
+<label class="form-field">
+<span>Tool</span>
+<select id="zone-tool">
+<option value="paint">Paint</option>
+<option value="erase">Erase override</option>
+<option value="fill">Fill connected zone</option>
+<option value="rectangle">Rectangle</option>
+<option value="eyedropper">Eyedropper</option>
+<option value="smooth">Smooth</option>
+<option value="lock">Lock overrides</option>
+<option value="unlock">Unlock overrides</option>
+</select>
+</label>
+<label class="form-field">
+<span>Zone</span>
+<select id="zone-paint-type">
+<option value="residential">Residential</option>
+<option value="commercial">Commercial</option>
+<option value="industrial">Industrial</option>
+<option value="agricultural">Agricultural</option>
+<option value="institutional">Institutional</option>
+<option value="government">Government</option>
+<option value="forest">Forest</option>
+<option value="mixed">Mixed use</option>
+<option value="">No zone</option>
+</select>
+</label>
+<label class="form-field">
+<span>Brush size <output id="zone-brush-output">3 tiles</output></span>
+<input id="zone-brush-size" max="16" min="1" step="1" type="range" value="3"/>
+</label>
+<label class="form-field">
+<span>Zone display</span>
+<select id="zone-display-mode">
+<option value="final">Final edited zones</option>
+<option value="generated">Generated base</option>
+<option value="overrides">Overrides only</option>
+</select>
+</label>
+</div>
+<label class="check-row zone-lock-row"><input id="zone-lock-new" type="checkbox"/><span>Lock newly painted overrides</span></label>
+<div class="button-row">
+<button id="zone-reset-all" type="button">Reset all zone overrides</button>
+</div>
+<p class="helper-text" id="zone-editor-status">Turn on Zone editing, then drag on the map.</p>
+</div>
+</details><div class="workspace-section-heading"><span>03</span><div><strong>Visual authoring</strong><small>Assets, object placement, and labels</small></div></div><details class="card disclosure">
+<summary>
+<span><small>Display</small>Label controls</span>
+<span class="summary-caret">⌄</span>
+</summary>
+<div class="disclosure-body label-editor">
+<p class="helper-text">Street and block labels are independent from their geometry. These preferences persist across worlds and are included in exported customization data.</p>
+<section class="label-control-section">
+<div class="label-control-heading">
+<h3>Street labels</h3>
+<span class="control-value" id="road-label-summary">7 px · 80%</span>
+</div>
+<div class="label-control-grid">
+<label class="form-field full-width">
+<span>Font size <output id="road-label-font-output">7 px</output></span>
+<input id="road-label-font-size" max="16" min="4" step="1" type="range" value="7"/>
+</label>
+<label class="form-field">
+<span>Opacity <output id="road-label-opacity-output">90%</output></span>
+<input id="road-label-opacity" max="100" min="10" step="5" type="range" value="90"/>
+</label>
+<label class="form-field">
+<span>Density <output id="road-label-density-output">80%</output></span>
+<input id="road-label-density" max="100" min="5" step="5" type="range" value="80"/>
+</label>
+<label class="form-field">
+<span>Main min zoom</span>
+<select id="road-label-main-zoom">
+<option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option selected="" value="2.4">2.4×</option><option value="3">3×</option><option value="4">4×</option>
+</select>
+</label>
+<label class="form-field">
+<span>Secondary min zoom</span>
+<select id="road-label-secondary-zoom">
+<option value="2">2×</option><option value="3">3×</option><option value="4">4×</option><option selected="" value="4.2">4.2×</option><option value="5">5×</option><option value="6">6×</option>
+</select>
+</label>
+<label class="form-field full-width">
+<span>Local min zoom</span>
+<select id="road-label-local-zoom">
+<option value="4">4×</option><option value="5">5×</option><option value="6">6×</option><option selected="" value="6.5">6.5×</option><option value="7">7×</option><option value="8">8×</option>
+</select>
+</label>
+</div>
+<div class="label-type-grid">
+<label class="check-row"><input checked="" id="road-label-main" type="checkbox"/><span>Main</span></label>
+<label class="check-row"><input checked="" id="road-label-secondary" type="checkbox"/><span>Secondary</span></label>
+<label class="check-row"><input id="road-label-local" type="checkbox"/><span>Local</span></label>
+<label class="check-row"><input checked="" id="road-label-rotate" type="checkbox"/><span>Follow road</span></label>
+<label class="check-row"><input checked="" id="road-label-outline" type="checkbox"/><span>Text outline</span></label>
+</div>
+</section>
+<section class="label-control-section">
+<div class="label-control-heading">
+<h3>Block labels</h3>
+<span class="control-value" id="block-label-summary">8 px · 70%</span>
+</div>
+<div class="label-control-grid">
+<label class="form-field full-width">
+<span>Font size <output id="block-label-font-output">8 px</output></span>
+<input id="block-label-font-size" max="16" min="4" step="1" type="range" value="8"/>
+</label>
+<label class="form-field">
+<span>Opacity <output id="block-label-opacity-output">85%</output></span>
+<input id="block-label-opacity" max="100" min="10" step="5" type="range" value="85"/>
+</label>
+<label class="form-field">
+<span>Density <output id="block-label-density-output">70%</output></span>
+<input id="block-label-density" max="100" min="5" step="5" type="range" value="70"/>
+</label>
+<label class="form-field full-width">
+<span>Minimum zoom</span>
+<select id="block-label-min-zoom">
+<option value="2">2×</option><option value="3">3×</option><option value="4">4×</option><option selected="" value="4.5">4.5×</option><option value="5">5×</option><option value="6">6×</option><option value="7">7×</option>
+</select>
+</label>
+</div>
+<div class="label-type-grid">
+<label class="check-row"><input checked="" id="block-label-outline" type="checkbox"/><span>Text outline</span></label>
+<label class="check-row"><input checked="" id="label-avoid-collisions" type="checkbox"/><span>Avoid overlaps</span></label>
+</div>
+</section>
+<button id="label-controls-reset" type="button">Reset label controls</button>
+</div>
+</details><details class="card disclosure">
+<summary>
+<span><small>Customize</small>Assets &amp; map objects</span>
+<span class="count-badge" id="asset-count">0</span>
+</summary>
+<div class="disclosure-body asset-editor">
+<p class="helper-text">Import image assets for generated building types, or drag image files and saved assets directly onto the map. Turn on object editing to move images, anchors, and story sites.</p>
+<div class="edit-mode-row">
+<div>
+<strong>Object editing</strong>
+<span>Drag map images, anchors, and story sites.</span>
+</div>
+<button id="edit-mode-button" type="button">Off</button>
+</div>
+<form class="asset-form" id="asset-form">
+<label class="form-field full-width">
+<span>Image files</span>
+<input accept="image/png,image/jpeg,image/webp,image/gif" id="asset-files" multiple="" required="" type="file"/>
+</label>
+<label class="form-field">
+<span>Asset category</span>
+<select id="asset-target-category">
+<option value="map">Map decoration only</option>
+<option value="building">Generated building</option>
+<option value="story">Story point</option>
+<option value="anchor">Anchor</option>
+<option value="vegetation">Vegetation</option>
+<option value="infrastructure">Infrastructure / prop</option>
+</select>
+</label>
+<label class="form-field">
+<span>Target type</span>
+<select disabled="" id="asset-target-type">
+<option value="">No procedural target</option>
+</select>
+</label>
+<button class="secondary full-width" type="submit">Import selected assets</button>
+</form>
+<div class="drop-help" id="canvas-drop-help">Drop PNG, JPG, WebP, or GIF files onto the map to place them at the cursor.</div>
+<div class="button-row">
+<button id="reset-object-positions" type="button">Reset moved anchors &amp; story sites</button>
+</div>
+<div class="asset-subsection">
+<div class="subsection-heading"><strong>Asset library</strong><span>Drag a saved asset onto the map</span></div>
+<div class="asset-list" id="asset-list"></div>
+</div>
+<div class="asset-subsection">
+<div class="subsection-heading"><strong>Placed images</strong><span>Saved per seed and profile</span></div>
+<div class="placed-image-list" id="placed-image-list"></div>
+</div>
+</div>
+</details><div class="workspace-section-heading"><span>04</span><div><strong>Story authoring</strong><small>Create the places that DM Mode will run</small></div></div><details class="card disclosure">
+<summary>
+<span><small>Author</small>Story point editor</span>
+<span class="count-badge" id="custom-story-count">0</span>
+</summary>
+<div class="disclosure-body">
+<p class="helper-text">Create and edit procedural story locations, lore, zone rules, artwork targets, and encounter tables. Encounter rolling lives in DM Mode.</p>
+<form class="story-rule-form authoring-form" id="custom-story-form">
+<div class="form-mode full-width"><strong id="custom-story-form-title">Add story point</strong><button class="text-button" hidden="" id="custom-story-cancel" type="button">Cancel edit</button></div>
+<input id="custom-story-edit-id" type="hidden"/>
+<label class="form-field full-width"><span>Name</span><input id="custom-story-name" maxlength="64" placeholder="e.g. Flooded Chapel" required="" type="text"/></label>
+<label class="form-field"><span>Archetype</span><select id="custom-story-type"><option value="balete-tree">Balete tree</option><option value="old-school">Old school</option><option value="abandoned-cinema">Abandoned cinema</option><option value="old-cemetery">Old cemetery</option><option selected="" value="haunted-house">Haunted house</option><option value="shrine">Shrine</option><option value="ruins">Ruins</option><option value="forest-haunt">Forest haunt</option><option value="waterside-haunt">Waterside haunt</option><option value="custom">Custom story site</option></select></label>
+<label class="form-field"><span>Region</span><select id="custom-story-region"><option value="anywhere">Anywhere</option><option value="town-center">Town center</option><option value="north">North</option><option value="south">South</option><option value="east">East</option><option value="west">West</option></select></label>
+<label class="form-field"><span>Terrain</span><select id="custom-story-terrain"><option value="safe-land">Safe land</option><option value="dry-land">Dry land</option><option value="flat-land">Flat land</option><option value="coast">Coast</option><option value="river">Near river</option><option value="forest-edge">Forest edge</option><option value="farmland">Farmland</option><option value="high-ground">High ground</option></select></label>
+<label class="form-field"><span>Preferred zone</span><select id="custom-story-zone"><option value="">No preference</option><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="industrial">Industrial</option><option value="agricultural">Agricultural</option><option value="institutional">Institutional</option><option value="government">Government</option><option value="forest">Forest</option><option value="mixed">Mixed use</option></select></label>
+<label class="form-field full-width"><span>Allowed zones <small>empty allows all</small></span><select id="custom-story-allowed-zones" multiple="" size="4"><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="industrial">Industrial</option><option value="agricultural">Agricultural</option><option value="institutional">Institutional</option><option value="government">Government</option><option value="forest">Forest</option><option value="mixed">Mixed use</option></select></label>
+<label class="form-field full-width"><span>Disallowed zones</span><select id="custom-story-disallowed-zones" multiple="" size="4"><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="industrial">Industrial</option><option value="agricultural">Agricultural</option><option value="institutional">Institutional</option><option value="government">Government</option><option value="forest">Forest</option><option value="mixed">Mixed use</option></select></label>
+<label class="form-field"><span>Influence radius</span><input id="custom-story-radius" max="40" min="2" type="number" value="10"/></label>
+<label class="form-field"><span>Minimum spacing</span><input id="custom-story-spacing" max="80" min="4" type="number" value="12"/></label>
+<label class="form-field full-width"><span>Wish <small>optional</small></span><textarea id="custom-story-wish" placeholder="Leave blank for deterministic generation" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Manifestation <small>optional</small></span><textarea id="custom-story-manifestation" placeholder="Leave blank for deterministic generation" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Encounter table <small>one per line: weight | danger | title | description</small></span><textarea id="custom-story-encounters" placeholder="3 | omen | A familiar voice | Someone calls from an empty room.
+1 | severe | The road closes | Every exit returns to the site." rows="5"></textarea></label>
+<button class="secondary full-width" type="submit">Save story point and regenerate</button>
+</form>
+<div class="story-list compact-list" id="custom-story-list"></div>
+<hr class="section-divider"/>
+<p class="helper-text">Edit any generated or custom story point. These overrides remain separate from the procedural definition.</p>
+<form class="story-rule-form" id="story-rule-form">
+<label class="form-field full-width"><span>Story point</span><select id="story-rule-target"></select></label>
+<label class="form-field full-width"><span>Display name</span><input id="story-rule-name" maxlength="64" type="text"/></label>
+<label class="form-field"><span>Preferred zone</span><select id="story-preferred-zone"><option value="">No preference</option><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="industrial">Industrial</option><option value="agricultural">Agricultural</option><option value="institutional">Institutional</option><option value="government">Government</option><option value="forest">Forest</option><option value="mixed">Mixed use</option></select></label>
+<label class="form-field"><span>Influence radius</span><input id="story-influence-radius" max="40" min="2" type="number" value="10"/></label>
+<label class="form-field full-width"><span>Allowed zones <small>Ctrl/Cmd-click for multiple; empty allows all</small></span><select id="story-allowed-zones" multiple="" size="5"><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="industrial">Industrial</option><option value="agricultural">Agricultural</option><option value="institutional">Institutional</option><option value="government">Government</option><option value="forest">Forest</option><option value="mixed">Mixed use</option></select></label>
+<label class="form-field full-width"><span>Disallowed zones</span><select id="story-disallowed-zones" multiple="" size="4"><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="industrial">Industrial</option><option value="agricultural">Agricultural</option><option value="institutional">Institutional</option><option value="government">Government</option><option value="forest">Forest</option><option value="mixed">Mixed use</option></select></label>
+<label class="form-field full-width"><span>Wish</span><textarea id="story-rule-wish" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Manifestation</span><textarea id="story-rule-manifestation" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Encounter table <small>weight | danger | title | description</small></span><textarea id="story-rule-encounters" rows="5"></textarea></label>
+<div class="button-row full-width"><button class="secondary" type="submit">Save story rules</button><button id="story-rule-reset" type="button">Reset rules</button></div>
+</form>
+
+</div>
+</details><div class="workspace-section-heading"><span>05</span><div><strong>Project output</strong><small>Inspect, export, and move overrides</small></div></div><details class="card disclosure">
+<summary>
+<span><small>Inspect</small>World statistics</span>
+<span class="summary-caret">⌄</span>
+</summary>
+<div class="disclosure-body">
+<dl class="stats" id="world-stats"></dl>
+<button id="export-button" type="button">Export World JSON</button>
+<div class="export-image-grid">
+<label class="form-field"><span>PNG scale</span><select id="image-export-scale"><option value="2">2 px / tile</option><option selected="" value="4">4 px / tile</option><option value="8">8 px / tile</option><option value="12">12 px / tile</option></select></label>
+<label class="form-field"><span>Padding</span><select id="image-export-padding"><option value="0">None</option><option selected="" value="24">24 px</option><option value="64">64 px</option></select></label>
+<button class="secondary full-width" id="export-image-button" type="button">Export full map as PNG</button>
+</div>
+<div class="button-row"><button id="export-customization-button" type="button">Export overrides</button><label class="file-button">Import overrides<input accept="application/json" hidden="" id="customization-import-file" type="file"/></label></div>
+</div>
+</details></div><div class="workspace-panel workspace-panel-dm" data-workspace-panel="dm" hidden="" id="dm-workspace">
+<section class="dm-hero card">
+<div class="dm-hero-copy">
+<p class="section-kicker">Session workspace</p>
+<h2>Run PAYAW without editor clutter</h2>
+<p>Focus story sites, reveal lore, and roll weighted encounters while the map remains interactive.</p>
+</div>
+<div class="dm-hero-stats">
+<span><strong id="dm-story-total">0</strong> story sites</span>
+<span><strong id="dm-custom-total">0</strong> custom</span>
+</div>
+</section>
+<section class="card dm-control-card">
+<div class="section-heading compact-heading"><div><p class="section-kicker">Quick controls</p><h2>Session map</h2></div></div>
+<div class="dm-control-grid">
+<label class="form-field"><span>Map view</span><select id="dm-view-preset"><option selected="" value="story">Horror layer</option><option value="town">Town overview</option><option value="terrain">Physical terrain</option><option value="hydrology">Hydrology</option><option value="planning">Urban planning</option></select></label>
+<label class="form-field"><span>Find story site</span><input id="dm-story-search" placeholder="Search name, wish, zone…" type="search"/></label>
+</div>
+<button class="primary dm-roll-button" id="dm-random-encounter-button" type="button">Roll a random story encounter</button>
+<div aria-live="polite" class="dm-random-result" id="dm-random-encounter-result"><span>Select a site below or roll across the whole town.</span></div>
+</section>
+<section class="card dm-sites-card">
+<div class="dm-section-title"><div><p class="section-kicker">Story sites</p><h2>Encounter deck</h2></div><span class="live-dot">LIVE</span></div>
+<div class="story-list dm-story-list" id="story-list"></div>
+</section>
+<section class="card dm-log-card">
+<div class="dm-section-title"><div><p class="section-kicker">Session memory</p><h2>Recent rolls</h2></div><button class="text-button" id="dm-clear-log" type="button">Clear</button></div>
+<div class="dm-session-log" id="dm-session-log"><p class="helper-text">Encounter rolls will appear here.</p></div>
+</section>
+</div><footer><span>Editor:</span> pan, paint, drag, and author · <span>DM:</span> focus sites and roll encounters · Wheel to zoom</footer></aside>
+<main class="viewport-shell">
+<div class="map-toolbar"><span class="map-workspace-badge" id="map-workspace-badge">EDITOR</span>
+<div>
+<strong id="map-title">PAYAW</strong>
+<span id="map-subtitle">Generated town</span>
+</div>
+<div class="toolbar-actions"><button disabled="" id="undo-button" title="Undo (Ctrl/Cmd+Z)" type="button">Undo</button><button disabled="" id="redo-button" title="Redo (Ctrl/Cmd+Shift+Z)" type="button">Redo</button><button id="toolbar-edit-button" type="button">Edit: off</button><button id="fit-map-button" type="button">Fit map</button></div>
+</div>
+<canvas aria-label="Generated PAYAW town" id="world-canvas"></canvas>
+<div class="drop-indicator" id="drop-indicator">Drop image to place</div>
+<div class="cursor-readout" id="cursor-readout">x — · y —</div>
+</main>
+</div>
+<script src="/src/main.ts" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "version": "0.9.0",
+  "workspaces": [
+    "editor",
+    "dm"
+  ],
+  "requiredUiIds": 15,
+  "storyAuthoringInEditor": true,
+  "encounterDeckInDmMode": true,
+  "collapsedEditorModules": true,
+  "dmDisablesEditing": true,
+  "dmTools": [
+    "story search",
+    "random encounter",
+    "per-site roll",
+    "session log",
+    "map presets"
+  ]
+}

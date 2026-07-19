@@ -1,0 +1,20 @@
+{
+  "generationVersion": "payaw-m8.1-editor-core-v1",
+  "storyPointCount": 7,
+  "customStory": {
+    "key": "custom-story:lost-letters-shrine",
+    "source": "custom",
+    "generatedEncounterCount": 6,
+    "movedTo": {
+      "x": 6,
+      "y": 6
+    },
+    "authoredEncounterCount": 1
+  },
+  "partialRegenerationMatchesFull": true,
+  "undoRedo": {
+    "boundedSnapshots": true,
+    "redoInvalidation": true
+  },
+  "imageExportApi": "CanvasRenderer.exportPng"
+}

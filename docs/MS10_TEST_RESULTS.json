@@ -1,0 +1,16 @@
+{
+  "generationVersion": "payaw-m10-bridge-network-v1",
+  "schemaVersion": 10,
+  "islands": 5,
+  "bridges": 3,
+  "totalSpan": 71.49,
+  "types": [
+    "highway-bridge",
+    "highway-bridge",
+    "highway-bridge"
+  ],
+  "approachRoads": 6,
+  "edited": "Dandansoy Regional Bridge",
+  "suppressed": true,
+  "custom": "Test Custom Crossing"
+}
