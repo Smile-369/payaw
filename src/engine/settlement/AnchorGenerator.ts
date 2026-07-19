@@ -1,5 +1,6 @@
 import type { AnchorConfig } from '../config/GenerationConfig';
 import type { AnchorPositionOverride } from '../generation/GenerationOptions';
+import { InvalidPositionOverrideError } from '../generation/InvalidPositionOverrideError';
 import type { Random } from '../rng/Random';
 import type { World } from '../world/World';
 import { AnchorType, type Anchor, type BuiltInAnchorOverride, type CustomAnchorDefinition } from './Anchor';
@@ -65,17 +66,17 @@ function selectPositionOverride(
   const y = Math.round(override.y);
   const tile = world.getTile(x, y);
   if (tile === undefined) {
-    throw new Error(`Manual position for anchor “${rule.name}” is outside the map.`);
+    throw new InvalidPositionOverrideError('anchor', rule.key, rule.name, 'is outside the map.');
   }
   const index = y * world.width + x;
   if (tile.water !== 'land' || tile.river) {
-    throw new Error(`Manual position for anchor “${rule.name}” must be on dry land.`);
+    throw new InvalidPositionOverrideError('anchor', rule.key, rule.name, 'must be on dry land.');
   }
   if (allowedLand !== null && !allowedLand.has(index)) {
-    throw new Error(`Manual position for anchor “${rule.name}” must be on the town plaza's connected landmass.`);
+    throw new InvalidPositionOverrideError('anchor', rule.key, rule.name, "must be on the town plaza's connected landmass.");
   }
   if (placed.some((anchor) => anchor.tileIndex === index)) {
-    throw new Error(`Manual position for anchor “${rule.name}” overlaps another anchor.`);
+    throw new InvalidPositionOverrideError('anchor', rule.key, rule.name, 'overlaps another anchor.');
   }
   return { index, score: 1 };
 }

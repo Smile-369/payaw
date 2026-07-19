@@ -419,6 +419,7 @@ function makeRoad(world: World, type: RoadType, path: readonly number[], bridgeI
     connectsSettlementIds: [],
     length: path.length,
     bridgeId,
+    portId: null,
   };
 }
 
@@ -474,10 +475,14 @@ function commitBridge(world: World, bridge: Bridge, roadConfig: RoadConfig): voi
 }
 
 function resetBridgeInfrastructure(world: World): void {
-  const baseRoads = world.roads.filter((road) => road.bridgeId === null);
+  const baseRoads = world.roads.filter((road) => road.bridgeId === null && road.portId === null);
   world.roads = baseRoads;
   world.bridges = [];
-  for (const island of world.islands) island.bridgeIds = [];
+  world.ports = [];
+  world.waterRoutes = [];
+  for (const island of world.islands) { island.bridgeIds = []; island.portIds = []; }
+  const retainedRoadIds = new Set(baseRoads.map((road) => road.id));
+  for (const settlement of world.settlements) settlement.roadIds = settlement.roadIds.filter((id) => retainedRoadIds.has(id));
   for (const tile of world.tiles) {
     tile.road = false;
     tile.roadId = null;

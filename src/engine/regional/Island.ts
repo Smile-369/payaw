@@ -32,6 +32,7 @@ export interface Island {
   settlementCountTarget: number;
   settlementIds: number[];
   bridgeIds: number[];
+  portIds: number[];
   allowBridges: boolean;
   allowPorts: boolean;
   allowRoads: boolean;

@@ -181,6 +181,32 @@ export interface BridgeConfig {
   readonly minimumExtraConnectionScore: number;
 }
 
+
+export interface MaritimeConfig {
+  readonly maximumPortsPerIsland: number;
+  readonly maximumRoutes: number;
+  readonly extraRouteConnections: number;
+  readonly maximumCoastSamples: number;
+  readonly minimumPortWaterDepth: number;
+  readonly maximumPortRoadDistance: number;
+  readonly portDepthWeight: number;
+  readonly portShelterWeight: number;
+  readonly portFlatnessWeight: number;
+  readonly portRoadAccessWeight: number;
+  readonly portFloodPenalty: number;
+  readonly routeDistanceWeight: number;
+  readonly routeDemandWeight: number;
+  readonly bridgeCompetitionPenalty: number;
+  readonly shallowWaterPenalty: number;
+  readonly openWaterPenalty: number;
+  readonly maximumPathVisits: number;
+  readonly tileSizeKilometers: number;
+  readonly smallBoatSpeedKph: number;
+  readonly ferrySpeedKph: number;
+  readonly cargoSpeedKph: number;
+  readonly boardingMinutes: number;
+}
+
 export interface AccessibilityConfig {
   readonly mainRoadCost: number;
   readonly secondaryRoadCost: number;
@@ -294,6 +320,7 @@ export interface GenerationConfig {
   readonly anchors: AnchorConfig;
   readonly roads: RoadConfig;
   readonly bridges: BridgeConfig;
+  readonly maritime: MaritimeConfig;
   readonly accessibility: AccessibilityConfig;
   readonly blocks: BlockConfig;
   readonly landValue: LandValueConfig;
@@ -304,7 +331,7 @@ export interface GenerationConfig {
 }
 
 export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
-  version: 'payaw-m10-bridge-network-v1',
+  version: 'payaw-m11.1-override-recovery-v1',
   world: {
     width: 256,
     height: 192,
@@ -473,6 +500,30 @@ export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
     populationBenefitWeight: 2.6,
     roleBenefitWeight: 6,
     minimumExtraConnectionScore: 3.5,
+  },
+  maritime: {
+    maximumPortsPerIsland: 1,
+    maximumRoutes: 8,
+    extraRouteConnections: 2,
+    maximumCoastSamples: 120,
+    minimumPortWaterDepth: 0.012,
+    maximumPortRoadDistance: 34,
+    portDepthWeight: 18,
+    portShelterWeight: 5.5,
+    portFlatnessWeight: 4.5,
+    portRoadAccessWeight: 0.22,
+    portFloodPenalty: 5,
+    routeDistanceWeight: 0.11,
+    routeDemandWeight: 2.3,
+    bridgeCompetitionPenalty: 9,
+    shallowWaterPenalty: 14,
+    openWaterPenalty: 0.18,
+    maximumPathVisits: 180000,
+    tileSizeKilometers: 0.08,
+    smallBoatSpeedKph: 18,
+    ferrySpeedKph: 26,
+    cargoSpeedKph: 20,
+    boardingMinutes: 8,
   },
   accessibility: {
     mainRoadCost: 0.42,

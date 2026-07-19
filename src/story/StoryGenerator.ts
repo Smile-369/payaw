@@ -1,6 +1,7 @@
 import { BuildingCondition, BuildingType } from '../engine/buildings/Building';
 import type { StoryConfig } from '../engine/config/GenerationConfig';
 import type { StoryPositionOverride, StoryRuleOverride } from '../engine/generation/GenerationOptions';
+import { InvalidPositionOverrideError } from '../engine/generation/InvalidPositionOverrideError';
 import type { Random } from '../engine/rng/Random';
 import { AnchorRegionPreference, AnchorTerrainPreference } from '../engine/settlement/Anchor';
 import { TerrainType, WaterType } from '../engine/world/Tile';
@@ -170,10 +171,10 @@ function choose(
     const y = Math.round(positionOverride.y);
     const tile = world.getTile(x, y);
     if (tile === undefined || tile.water !== WaterType.Land || tile.river || !islandAllowsStory(world, y * world.width + x)) {
-      throw new Error(`Manual position for story object “${name}” must be on dry land.`);
+      throw new InvalidPositionOverrideError('story', key, name, 'must be on dry land.', id);
     }
     if (zoneRuleScore(world, y * world.width + x, rule) === null) {
-      throw new Error(`Manual position for story object “${rule.name}” violates its allowed or disallowed zone rules.`);
+      throw new InvalidPositionOverrideError('story', key, rule.name, 'violates its allowed or disallowed zone rules.', id);
     }
     return createStoryObject(
       world,

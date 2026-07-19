@@ -132,6 +132,10 @@
 <label class="check-row"><input checked="" id="road-layer" type="checkbox"/><span>Roads</span></label>
 <label class="check-row"><input checked="" id="bridge-layer" type="checkbox"/><span>Bridges</span></label>
 <label class="check-row"><input checked="" id="bridge-label-layer" type="checkbox"/><span>Bridge labels</span></label>
+<label class="check-row"><input checked="" id="port-layer" type="checkbox"/><span>Ports</span></label>
+<label class="check-row"><input checked="" id="port-label-layer" type="checkbox"/><span>Port labels</span></label>
+<label class="check-row"><input checked="" id="water-route-layer" type="checkbox"/><span>Water routes</span></label>
+<label class="check-row"><input checked="" id="water-route-label-layer" type="checkbox"/><span>Route labels</span></label>
 <label class="check-row"><input checked="" id="road-label-layer" type="checkbox"/><span>Street labels</span></label>
 <label class="check-row"><input checked="" id="building-layer" type="checkbox"/><span>Buildings</span></label>
 <label class="check-row"><input checked="" id="custom-image-layer" type="checkbox"/><span>Custom images</span></label>
@@ -172,6 +176,41 @@
 <div class="button-row full-width"><button class="primary" id="bridge-add" type="submit">Add custom bridge</button><button id="bridge-reset-all" type="button">Reset bridge authoring</button></div>
 </form>
 <div class="bridge-list" id="bridge-list"></div>
+</div>
+</details><details class="card disclosure maritime-editor">
+<summary>
+<span><small>Regional transport</small>Ports &amp; water routes</span>
+<span class="count-badge"><span id="port-count">0</span> / <span id="water-route-count">0</span></span>
+</summary>
+<div class="disclosure-body maritime-editor-body">
+<p class="helper-text">Ports are scored from coast depth, shelter, approach terrain, settlement demand, and island policy. Water routes navigate ocean tiles, avoid land, estimate travel time, and include DM encounter tables.</p>
+<div class="maritime-columns">
+<section class="maritime-panel">
+<div class="subsection-heading"><strong>Ports</strong><span>Generated and custom terminals</span></div>
+<div class="regional-summary" id="port-summary"></div>
+<form class="bridge-create-form" id="port-form">
+<label class="form-field full-width"><span>Custom port name</span><input id="port-name" maxlength="56" placeholder="e.g. Payaw Ferry Terminal" required type="text"/></label>
+<label class="form-field"><span>Island</span><select id="port-island"></select></label>
+<label class="form-field"><span>Port type</span><select id="port-type"><option value="fishing-dock">Fishing dock</option><option value="barangay-jetty">Barangay jetty</option><option selected value="ferry-terminal">Ferry terminal</option><option value="commercial-port">Commercial port</option><option value="industrial-port">Industrial port</option><option value="marina">Marina</option></select></label>
+<label class="form-field"><span>Capacity</span><input id="port-capacity" min="20" max="5000" step="10" type="number" value="300"/></label>
+<div class="button-row full-width"><button class="primary" type="submit">Add custom port</button><button id="port-reset-all" type="button">Reset ports</button></div>
+</form>
+<div class="port-list" id="port-list"></div>
+</section>
+<section class="maritime-panel">
+<div class="subsection-heading"><strong>Water routes</strong><span>Ferries, fishing, and cargo</span></div>
+<div class="regional-summary" id="water-route-summary"></div>
+<form class="bridge-create-form" id="water-route-form">
+<label class="form-field full-width"><span>Custom route name</span><input id="water-route-name" maxlength="64" placeholder="e.g. Dandansoy Night Ferry" required type="text"/></label>
+<label class="form-field"><span>From port</span><select id="water-route-from-port"></select></label>
+<label class="form-field"><span>To port</span><select id="water-route-to-port"></select></label>
+<label class="form-field"><span>Route type</span><select id="water-route-type"><option value="fishing-route">Fishing route</option><option selected value="passenger-ferry">Passenger ferry</option><option value="cargo-route">Cargo route</option><option value="coastal-route">Coastal route</option><option value="open-water-route">Open-water route</option><option value="smuggling-route">Smuggling route</option><option value="story-route">Story route</option></select></label>
+<label class="form-field"><span>Vessel</span><select id="water-route-vessel"><option value="small-boat">Small boat</option><option selected value="ferry">Ferry</option><option value="cargo-vessel">Cargo vessel</option></select></label>
+<div class="button-row full-width"><button class="primary" type="submit">Add custom route</button><button id="water-route-reset-all" type="button">Reset routes</button></div>
+</form>
+<div class="water-route-list" id="water-route-list"></div>
+</section>
+</div>
 </div>
 </details><details class="card disclosure anchor-editor">
 <summary>
@@ -573,6 +612,11 @@
 <section class="card dm-sites-card">
 <div class="dm-section-title"><div><p class="section-kicker">Story sites</p><h2>Encounter deck</h2></div><span class="live-dot">LIVE</span></div>
 <div class="story-list dm-story-list" id="story-list"></div>
+</section>
+<section class="card dm-maritime-card">
+<div class="dm-section-title"><div><p class="section-kicker">Regional travel</p><h2>Maritime routes</h2></div><span class="live-dot">SAILING</span></div>
+<div class="dm-random-result" id="dm-maritime-result"><span>Select a ferry or water route to inspect travel time and roll a maritime encounter.</span></div>
+<div class="dm-maritime-list" id="dm-maritime-list"></div>
 </section>
 <section class="card dm-log-card">
 <div class="dm-section-title"><div><p class="section-kicker">Session memory</p><h2>Recent rolls</h2></div><button class="text-button" id="dm-clear-log" type="button">Clear</button></div>

@@ -133,6 +133,16 @@ export function resolveGenerationConfig(
       maximumBridges: options.terrainShape === TerrainShape.Archipelago ? 5 : options.terrainShape === TerrainShape.TwinIslands ? 2 : base.bridges.maximumBridges,
       extraBridgeConnections: options.townScale === TownScale.Urban ? 2 : options.townScale === TownScale.Rural ? 0 : base.bridges.extraBridgeConnections,
     },
+    maritime: {
+      ...base.maritime,
+      maximumRoutes: options.terrainShape === TerrainShape.Archipelago
+        ? 10
+        : options.terrainShape === TerrainShape.TwinIslands ? 4 : base.maritime.maximumRoutes,
+      extraRouteConnections: options.townScale === TownScale.Urban
+        ? 3
+        : options.townScale === TownScale.Rural ? 0 : base.maritime.extraRouteConnections,
+      maximumPathVisits: Math.round(base.maritime.maximumPathVisits * Math.min(1.7, terrainAreaRatio)),
+    },
     blocks: {
       ...base.blocks,
       maximumRoadDistance: town.blockRoadDistance,

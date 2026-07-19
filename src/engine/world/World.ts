@@ -8,6 +8,8 @@ import type { ClimatePreset, TerrainShape, TerrainSize, TownScale } from '../gen
 import type { River } from '../hydrology/River';
 import type { Road } from '../infrastructure/Road';
 import type { Bridge } from '../infrastructure/Bridge';
+import type { Port } from '../infrastructure/Port';
+import type { WaterRoute } from '../infrastructure/WaterRoute';
 import type { Anchor } from '../settlement/Anchor';
 import type { VegetationInstance } from '../vegetation/Vegetation';
 import type { Zone } from '../zoning/Zone';
@@ -40,6 +42,8 @@ export interface SerializedWorld {
   readonly anchors: readonly Anchor[];
   readonly roads: readonly Road[];
   readonly bridges: readonly Bridge[];
+  readonly ports: readonly Port[];
+  readonly waterRoutes: readonly WaterRoute[];
   readonly blocks: readonly Block[];
   readonly zones: readonly Zone[];
   readonly buildings: readonly Building[];
@@ -60,6 +64,8 @@ export class World {
   public anchors: Anchor[];
   public roads: Road[];
   public bridges: Bridge[];
+  public ports: Port[];
+  public waterRoutes: WaterRoute[];
   public blocks: Block[];
   public zones: Zone[];
   public buildings: Building[];
@@ -84,6 +90,8 @@ export class World {
     this.anchors = [];
     this.roads = [];
     this.bridges = [];
+    this.ports = [];
+    this.waterRoutes = [];
     this.blocks = [];
     this.zones = [];
     this.buildings = [];
@@ -97,7 +105,7 @@ export class World {
     }
 
     this.metadata = {
-      schemaVersion: 10,
+      schemaVersion: 11,
       generationVersion: config.version,
       terrainSize: profile.terrainSize,
       townScale: profile.townScale,
@@ -152,6 +160,8 @@ export class World {
       anchors: this.anchors,
       roads: this.roads,
       bridges: this.bridges,
+      ports: this.ports,
+      waterRoutes: this.waterRoutes,
       blocks: this.blocks,
       zones: this.zones,
       buildings: this.buildings,

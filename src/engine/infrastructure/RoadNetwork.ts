@@ -115,6 +115,7 @@ function createRoad(
     connectsSettlementIds: [...connectsSettlementIds],
     length: path.length,
     bridgeId: null,
+    portId: null,
   };
 }
 

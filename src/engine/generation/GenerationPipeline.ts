@@ -23,6 +23,8 @@ import { NamingStage } from './stages/NamingStage';
 import { MountainStage } from './stages/MountainStage';
 import { RoadStage } from './stages/RoadStage';
 import { BridgeStage } from './stages/BridgeStage';
+import { PortStage } from './stages/PortStage';
+import { WaterRouteStage } from './stages/WaterRouteStage';
 import { SlopeStage } from './stages/SlopeStage';
 import { TerrainStage } from './stages/TerrainStage';
 import { ThermalErosionStage } from './stages/ThermalErosionStage';
@@ -55,6 +57,8 @@ const DEFAULT_STAGES: readonly GenerationStage[] = [
   new AnchorStage(),
   new RoadStage(),
   new BridgeStage(),
+  new PortStage(),
+  new WaterRouteStage(),
   new AccessibilityStage(),
   new BlockStage(),
   new LandValueStage(),

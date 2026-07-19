@@ -14,6 +14,8 @@ import {
 import { ASSET_CATEGORY_LABELS, assetTargetsFor, describeAssetTarget } from './customization/AssetTargets';
 import { DEFAULT_GENERATION_CONFIG } from './engine/config/GenerationConfig';
 import { GenerationPipeline } from './engine/generation/GenerationPipeline';
+import { InvalidPositionOverrideError } from './engine/generation/InvalidPositionOverrideError';
+import { recoverPositionOverrides } from './engine/generation/PositionOverrideRecovery';
 import {
   ClimatePreset,
   TerrainShape,
@@ -45,6 +47,8 @@ import { WaterType } from './engine/world/Tile';
 import { DevelopmentLevel, ISLAND_ROLE_LABELS, IslandRole, type IslandOverride } from './engine/regional/Island';
 import { BRIDGE_TYPE_LABELS, BridgeType, type BridgeOverride, type CustomBridgeDefinition } from './engine/infrastructure/Bridge';
 import { RoadType } from './engine/infrastructure/Road';
+import { PORT_TYPE_LABELS, PortType, type PortOverride, type CustomPortDefinition } from './engine/infrastructure/Port';
+import { MaritimeDanger, VESSEL_CLASS_LABELS, VesselClass, WATER_ROUTE_TYPE_LABELS, WaterRouteType, type WaterRouteOverride, type CustomWaterRouteDefinition, type MaritimeEncounter } from './engine/infrastructure/WaterRoute';
 import { brushIndices, floodFillIndices, rectangleIndices, setZoneOverrides, smoothZoneOverrides, type ZoneTool } from './editor/ZoneEditor';
 import { HistoryManager } from './editor/HistoryManager';
 import type { World } from './engine/world/World';
@@ -393,7 +397,7 @@ function saveNameState(signature: string, state: StoredNameState): void {
 }
 
 function emptyMapCustomization(): StoredMapCustomization {
-  return { anchorPositions: [], storyPositions: [], storyRules: [], zoneOverrides: [], placedImages: [], islandOverrides: [], bridgeOverrides: [], customBridges: [] };
+  return { anchorPositions: [], storyPositions: [], storyRules: [], zoneOverrides: [], placedImages: [], islandOverrides: [], bridgeOverrides: [], customBridges: [], portOverrides: [], customPorts: [], waterRouteOverrides: [], customWaterRoutes: [] };
 }
 
 function loadAllMapCustomizations(): MapCustomizationByWorld {
@@ -501,7 +505,50 @@ function loadMapCustomization(signature: string): StoredMapCustomization {
       && typeof item.locked === 'boolean'
     ))
     : [];
-  return { anchorPositions, storyPositions, storyRules, zoneOverrides, placedImages, islandOverrides, bridgeOverrides, customBridges };
+  const portOverrides = Array.isArray(stored.portOverrides)
+    ? stored.portOverrides.filter((item) => (
+      typeof item.key === 'string'
+      && (item.name === undefined || typeof item.name === 'string')
+      && (item.type === undefined || isEnumValue(Object.values(PortType), item.type))
+      && (item.capacity === undefined || Number.isFinite(item.capacity))
+      && (item.position === undefined || validPoint(item.position))
+      && (item.locked === undefined || typeof item.locked === 'boolean')
+      && (item.suppressed === undefined || typeof item.suppressed === 'boolean')
+    )) : [];
+  const customPorts = Array.isArray(stored.customPorts)
+    ? stored.customPorts.filter((item) => (
+      typeof item.key === 'string'
+      && typeof item.name === 'string'
+      && typeof item.islandKey === 'string'
+      && isEnumValue(Object.values(PortType), item.type)
+      && Number.isFinite(item.capacity)
+      && (item.position === undefined || validPoint(item.position))
+      && typeof item.locked === 'boolean'
+    )) : [];
+  const waterRouteOverrides = Array.isArray(stored.waterRouteOverrides)
+    ? stored.waterRouteOverrides.filter((item) => (
+      typeof item.key === 'string'
+      && (item.name === undefined || typeof item.name === 'string')
+      && (item.type === undefined || isEnumValue(Object.values(WaterRouteType), item.type))
+      && (item.vesselClass === undefined || isEnumValue(Object.values(VesselClass), item.vesselClass))
+      && (item.estimatedTravelTimeMinutes === undefined || Number.isFinite(item.estimatedTravelTimeMinutes))
+      && (item.dangerRating === undefined || Number.isFinite(item.dangerRating))
+      && (item.enabled === undefined || typeof item.enabled === 'boolean')
+      && (item.locked === undefined || typeof item.locked === 'boolean')
+      && (item.suppressed === undefined || typeof item.suppressed === 'boolean')
+    )) : [];
+  const customWaterRoutes = Array.isArray(stored.customWaterRoutes)
+    ? stored.customWaterRoutes.filter((item) => (
+      typeof item.key === 'string'
+      && typeof item.name === 'string'
+      && typeof item.fromPortKey === 'string'
+      && typeof item.toPortKey === 'string'
+      && isEnumValue(Object.values(WaterRouteType), item.type)
+      && isEnumValue(Object.values(VesselClass), item.vesselClass)
+      && typeof item.enabled === 'boolean'
+      && typeof item.locked === 'boolean'
+    )) : [];
+  return { anchorPositions, storyPositions, storyRules, zoneOverrides, placedImages, islandOverrides, bridgeOverrides, customBridges, portOverrides, customPorts, waterRouteOverrides, customWaterRoutes };
 }
 
 function saveMapCustomization(signature: string, state: StoredMapCustomization): void {
@@ -544,6 +591,9 @@ function updateStats(container: HTMLElement, world: World): void {
     ['Anchors', world.anchors.length.toLocaleString()],
     ['Roads', world.roads.length.toLocaleString()],
     ['Bridges', world.bridges.length.toLocaleString()],
+    ['Ports', world.ports.length.toLocaleString()],
+    ['Water routes', world.waterRoutes.length.toLocaleString()],
+    ['Maritime travel', `${world.waterRoutes.filter((route) => route.enabled).reduce((sum, route) => sum + route.estimatedTravelTimeMinutes, 0).toFixed(0)} total min`],
     ['Blocks', world.blocks.length.toLocaleString()],
     ['Zones', world.zones.length.toLocaleString()],
     ['Zone overrides', zoneOverrides.length.toLocaleString()],
@@ -725,6 +775,27 @@ const bridgeRoadClass = requireElement<HTMLSelectElement>('#bridge-road-class');
 const bridgeWidth = requireElement<HTMLInputElement>('#bridge-width');
 const bridgeClearance = requireElement<HTMLInputElement>('#bridge-clearance');
 const bridgeResetAll = requireElement<HTMLButtonElement>('#bridge-reset-all');
+const portCount = requireElement<HTMLElement>('#port-count');
+const portSummary = requireElement<HTMLElement>('#port-summary');
+const portList = requireElement<HTMLElement>('#port-list');
+const portForm = requireElement<HTMLFormElement>('#port-form');
+const portName = requireElement<HTMLInputElement>('#port-name');
+const portIsland = requireElement<HTMLSelectElement>('#port-island');
+const portType = requireElement<HTMLSelectElement>('#port-type');
+const portCapacity = requireElement<HTMLInputElement>('#port-capacity');
+const portResetAll = requireElement<HTMLButtonElement>('#port-reset-all');
+const waterRouteCount = requireElement<HTMLElement>('#water-route-count');
+const waterRouteSummary = requireElement<HTMLElement>('#water-route-summary');
+const waterRouteList = requireElement<HTMLElement>('#water-route-list');
+const waterRouteForm = requireElement<HTMLFormElement>('#water-route-form');
+const waterRouteName = requireElement<HTMLInputElement>('#water-route-name');
+const waterRouteFromPort = requireElement<HTMLSelectElement>('#water-route-from-port');
+const waterRouteToPort = requireElement<HTMLSelectElement>('#water-route-to-port');
+const waterRouteType = requireElement<HTMLSelectElement>('#water-route-type');
+const waterRouteVessel = requireElement<HTMLSelectElement>('#water-route-vessel');
+const waterRouteResetAll = requireElement<HTMLButtonElement>('#water-route-reset-all');
+const dmMaritimeList = requireElement<HTMLElement>('#dm-maritime-list');
+const dmMaritimeResult = requireElement<HTMLElement>('#dm-maritime-result');
 
 const layerElements: Readonly<Record<RenderLayer, HTMLInputElement>> = {
   [RenderLayer.Terrain]: requireElement<HTMLInputElement>('#terrain-layer'),
@@ -744,6 +815,10 @@ const layerElements: Readonly<Record<RenderLayer, HTMLInputElement>> = {
   [RenderLayer.Roads]: requireElement<HTMLInputElement>('#road-layer'),
   [RenderLayer.Bridges]: requireElement<HTMLInputElement>('#bridge-layer'),
   [RenderLayer.BridgeLabels]: requireElement<HTMLInputElement>('#bridge-label-layer'),
+  [RenderLayer.Ports]: requireElement<HTMLInputElement>('#port-layer'),
+  [RenderLayer.PortLabels]: requireElement<HTMLInputElement>('#port-label-layer'),
+  [RenderLayer.WaterRoutes]: requireElement<HTMLInputElement>('#water-route-layer'),
+  [RenderLayer.WaterRouteLabels]: requireElement<HTMLInputElement>('#water-route-label-layer'),
   [RenderLayer.RoadLabels]: requireElement<HTMLInputElement>('#road-label-layer'),
   [RenderLayer.Buildings]: requireElement<HTMLInputElement>('#building-layer'),
   [RenderLayer.CustomImages]: requireElement<HTMLInputElement>('#custom-image-layer'),
@@ -774,11 +849,11 @@ const TERRAIN_LABELS: Readonly<Record<AnchorTerrainPreference, string>> = {
 };
 
 const VIEW_PRESETS: Readonly<Record<string, readonly RenderLayer[]>> = {
-  town: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Zones, RenderLayer.Blocks, RenderLayer.BlockLabels, RenderLayer.Rivers, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.RoadLabels, RenderLayer.Buildings, RenderLayer.CustomImages, RenderLayer.Vegetation, RenderLayer.Anchors, RenderLayer.Story],
-  story: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Rivers, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.RoadLabels, RenderLayer.Buildings, RenderLayer.CustomImages, RenderLayer.Vegetation, RenderLayer.Anchors, RenderLayer.Story],
-  terrain: [RenderLayer.Terrain, RenderLayer.Elevation, RenderLayer.Rivers, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Bridges],
-  hydrology: [RenderLayer.Terrain, RenderLayer.Floodplains, RenderLayer.Rivers, RenderLayer.Islands, RenderLayer.Bridges],
-  planning: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Accessibility, RenderLayer.LandValue, RenderLayer.Zones, RenderLayer.Blocks, RenderLayer.BlockLabels, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.RoadLabels, RenderLayer.Anchors],
+  town: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Zones, RenderLayer.Blocks, RenderLayer.BlockLabels, RenderLayer.Rivers, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.Ports, RenderLayer.PortLabels, RenderLayer.WaterRoutes, RenderLayer.WaterRouteLabels, RenderLayer.RoadLabels, RenderLayer.Buildings, RenderLayer.CustomImages, RenderLayer.Vegetation, RenderLayer.Anchors, RenderLayer.Story],
+  story: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Rivers, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.Ports, RenderLayer.PortLabels, RenderLayer.WaterRoutes, RenderLayer.WaterRouteLabels, RenderLayer.RoadLabels, RenderLayer.Buildings, RenderLayer.CustomImages, RenderLayer.Vegetation, RenderLayer.Anchors, RenderLayer.Story],
+  terrain: [RenderLayer.Terrain, RenderLayer.Elevation, RenderLayer.Rivers, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Bridges, RenderLayer.Ports, RenderLayer.WaterRoutes],
+  hydrology: [RenderLayer.Terrain, RenderLayer.Floodplains, RenderLayer.Rivers, RenderLayer.Islands, RenderLayer.Bridges, RenderLayer.Ports, RenderLayer.WaterRoutes],
+  planning: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Accessibility, RenderLayer.LandValue, RenderLayer.Zones, RenderLayer.Blocks, RenderLayer.BlockLabels, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.Ports, RenderLayer.PortLabels, RenderLayer.WaterRoutes, RenderLayer.WaterRouteLabels, RenderLayer.RoadLabels, RenderLayer.Anchors],
 };
 
 const pipeline = new GenerationPipeline();
@@ -805,6 +880,10 @@ let zoneOverrides: ZoneOverride[] = [];
 let islandOverrides: IslandOverride[] = [];
 let bridgeOverrides: BridgeOverride[] = [];
 let customBridges: CustomBridgeDefinition[] = [];
+let portOverrides: PortOverride[] = [];
+let customPorts: CustomPortDefinition[] = [];
+let waterRouteOverrides: WaterRouteOverride[] = [];
+let customWaterRoutes: CustomWaterRouteDefinition[] = [];
 let placedImages: PlacedImage[] = [];
 let importedAssets: ImportedImageAsset[] = [];
 let runtimeImageAssets: RuntimeImageAsset[] = [];
@@ -833,7 +912,7 @@ interface DmSessionEntry {
   readonly time: string;
   readonly site: string;
   readonly title: string;
-  readonly danger: EncounterDanger;
+  readonly danger: string;
 }
 let activeWorkspace: WorkspaceMode = localStorage.getItem(WORKSPACE_STORAGE_KEY) === 'dm' ? 'dm' : 'editor';
 let dmSessionEntries: DmSessionEntry[] = [];
@@ -899,6 +978,10 @@ function generationOptions(
     islandOverrides,
     bridgeOverrides,
     customBridges,
+    portOverrides,
+    customPorts,
+    waterRouteOverrides,
+    customWaterRoutes,
   };
 }
 
@@ -912,6 +995,10 @@ function currentMapCustomization(): StoredMapCustomization {
     islandOverrides,
     bridgeOverrides,
     customBridges,
+    portOverrides,
+    customPorts,
+    waterRouteOverrides,
+    customWaterRoutes,
   };
 }
 
@@ -970,6 +1057,10 @@ function restoreEditorSnapshot(snapshot: EditorSnapshot, label: string): void {
   islandOverrides = [...snapshot.mapCustomization.islandOverrides];
   bridgeOverrides = [...snapshot.mapCustomization.bridgeOverrides];
   customBridges = [...snapshot.mapCustomization.customBridges];
+  portOverrides = [...snapshot.mapCustomization.portOverrides];
+  customPorts = [...snapshot.mapCustomization.customPorts];
+  waterRouteOverrides = [...snapshot.mapCustomization.waterRouteOverrides];
+  customWaterRoutes = [...snapshot.mapCustomization.customWaterRoutes];
   persistAllEditorState();
   applyLabelSettingsToControls(labelSettings);
   generate(customAnchors, builtInOverrides, false, false);
@@ -1109,7 +1200,7 @@ function commitLabelControls(): void {
   syncRendererCustomization();
 }
 
-function setStatus(message: string, state: 'success' | 'error' | 'working' | 'idle' = 'idle'): void {
+function setStatus(message: string, state: 'success' | 'warning' | 'error' | 'working' | 'idle' = 'idle'): void {
   statusMessage.textContent = message;
   statusMessage.dataset.state = state;
 }
@@ -1131,7 +1222,7 @@ function updateProfileHint(): void {
 
 function updateMapHeader(): void {
   mapTitle.textContent = world.seed;
-  mapSubtitle.textContent = `${world.metadata.terrainShape} · ${world.metadata.climatePreset} · ${world.metadata.terrainSize} terrain · ${world.metadata.townScale} town · ${world.islands.length} islands · ${world.bridges.length} bridges · ${world.storyObjects.length} story sites`;
+  mapSubtitle.textContent = `${world.metadata.terrainShape} · ${world.metadata.climatePreset} · ${world.metadata.terrainSize} terrain · ${world.metadata.townScale} town · ${world.islands.length} islands · ${world.bridges.length} bridges · ${world.ports.length} ports · ${world.waterRoutes.length} water routes · ${world.storyObjects.length} story sites`;
 }
 
 function mergedBuiltInDefinition(type: BuiltInAnchorType): BuiltInAnchorOverride {
@@ -1682,6 +1773,10 @@ async function importCustomizationFile(file: File): Promise<void> {
   islandOverrides = [...normalized.islandOverrides];
   bridgeOverrides = [...normalized.bridgeOverrides];
   customBridges = [...normalized.customBridges];
+  portOverrides = [...normalized.portOverrides];
+  customPorts = [...normalized.customPorts];
+  waterRouteOverrides = [...normalized.waterRouteOverrides];
+  customWaterRoutes = [...normalized.customWaterRoutes];
   roadNameOverrides = validNameOverrides(parsed.roadNames);
   blockNameOverrides = validNameOverrides(parsed.blockNames);
   if (Array.isArray(parsed.customStoryPoints)) {
@@ -2391,6 +2486,453 @@ function renderBridgeList(): void {
   }
 }
 
+function replacePortOverride(next: PortOverride): void {
+  portOverrides = [...portOverrides.filter((item) => item.key !== next.key), next]
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function replaceWaterRouteOverride(next: WaterRouteOverride): void {
+  waterRouteOverrides = [...waterRouteOverrides.filter((item) => item.key !== next.key), next]
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function refreshPortIslandOptions(): void {
+  const previous = portIsland.value;
+  portIsland.replaceChildren();
+  for (const island of world.islands) {
+    const option = document.createElement('option');
+    option.value = island.key;
+    option.textContent = `${island.name} · ${formatPopulation(island.allocatedPopulation)} people`;
+    option.disabled = !island.allowPorts;
+    portIsland.append(option);
+  }
+  const fallback = world.islands.find((island) => island.allowPorts)?.key ?? '';
+  portIsland.value = world.islands.some((island) => island.key === previous && island.allowPorts) ? previous : fallback;
+  portIsland.disabled = fallback.length === 0;
+}
+
+function refreshWaterRoutePortOptions(): void {
+  const previousFrom = waterRouteFromPort.value;
+  const previousTo = waterRouteToPort.value;
+  waterRouteFromPort.replaceChildren();
+  waterRouteToPort.replaceChildren();
+  for (const port of world.ports) {
+    const island = world.islands[port.islandId];
+    const label = `${port.name} · ${island?.name ?? 'Unknown island'}`;
+    for (const select of [waterRouteFromPort, waterRouteToPort]) {
+      const option = document.createElement('option');
+      option.value = port.key;
+      option.textContent = label;
+      select.append(option);
+    }
+  }
+  const fallbackFrom = world.ports[0]?.key ?? '';
+  waterRouteFromPort.value = world.ports.some((port) => port.key === previousFrom) ? previousFrom : fallbackFrom;
+  const fallbackTo = world.ports.find((port) => port.key !== waterRouteFromPort.value)?.key ?? '';
+  waterRouteToPort.value = world.ports.some((port) => port.key === previousTo && port.key !== waterRouteFromPort.value) ? previousTo : fallbackTo;
+  const disabled = world.ports.length < 2;
+  waterRouteFromPort.disabled = disabled;
+  waterRouteToPort.disabled = disabled;
+}
+
+function maritimeField(labelText: string, control: HTMLElement): HTMLLabelElement {
+  const label = document.createElement('label');
+  label.className = 'form-field';
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  label.append(text, control);
+  return label;
+}
+
+function renderPortList(): void {
+  portCount.textContent = String(world.ports.length);
+  refreshPortIslandOptions();
+  refreshWaterRoutePortOptions();
+  const generatedCount = world.ports.filter((port) => port.generated).length;
+  const totalCapacity = world.ports.reduce((sum, port) => sum + port.capacity, 0);
+  portSummary.replaceChildren();
+  for (const [label, value] of [
+    ['Ports', String(world.ports.length)],
+    ['Generated', String(generatedCount)],
+    ['Custom', String(world.ports.length - generatedCount)],
+    ['Capacity', totalCapacity.toLocaleString()],
+  ] as const) {
+    const item = document.createElement('span');
+    const strong = document.createElement('strong');
+    strong.textContent = value;
+    item.append(strong, ` ${label.toLocaleLowerCase()}`);
+    portSummary.append(item);
+  }
+
+  portList.replaceChildren();
+  if (world.ports.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'helper-text';
+    empty.textContent = 'No island currently has a valid port site. Enable ports in an island plan or add a custom port to a suitable coast.';
+    portList.append(empty);
+    return;
+  }
+
+  for (const port of world.ports) {
+    const island = world.islands[port.islandId];
+    const card = document.createElement('article');
+    card.className = 'port-item';
+    const heading = document.createElement('div');
+    heading.className = 'maritime-item-heading';
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = port.name;
+    const detail = document.createElement('small');
+    detail.textContent = `${PORT_TYPE_LABELS[port.type]} · capacity ${port.capacity.toLocaleString()} · ${port.routeIds.length} route${port.routeIds.length === 1 ? '' : 's'}`;
+    const chip = document.createElement('span');
+    chip.className = 'maritime-route-chip';
+    chip.textContent = `${island?.name ?? 'Unknown island'} · ${port.generated ? 'generated' : 'custom'} · depth ${port.waterDepth.toFixed(3)}`;
+    copy.append(title, detail, chip);
+    const focus = document.createElement('button');
+    focus.type = 'button';
+    focus.textContent = 'Focus';
+    focus.addEventListener('click', () => focusMapPoint(port.position.x, port.position.y));
+    heading.append(copy, focus);
+
+    const grid = document.createElement('div');
+    grid.className = 'maritime-editor-grid';
+    const nameInput = document.createElement('input');
+    nameInput.value = port.name;
+    nameInput.maxLength = 56;
+    const typeSelect = document.createElement('select');
+    for (const value of Object.values(PortType)) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = PORT_TYPE_LABELS[value];
+      typeSelect.append(option);
+    }
+    typeSelect.value = port.type;
+    const capacityInput = document.createElement('input');
+    capacityInput.type = 'number';
+    capacityInput.min = '20';
+    capacityInput.max = '5000';
+    capacityInput.step = '10';
+    capacityInput.value = String(port.capacity);
+    const xInput = document.createElement('input');
+    xInput.type = 'number'; xInput.step = '0.5'; xInput.value = port.position.x.toFixed(1);
+    const yInput = document.createElement('input');
+    yInput.type = 'number'; yInput.step = '0.5'; yInput.value = port.position.y.toFixed(1);
+    grid.append(
+      maritimeField('Port name', nameInput),
+      maritimeField('Type', typeSelect),
+      maritimeField('Capacity', capacityInput),
+      maritimeField('Coast X', xInput),
+      maritimeField('Coast Y', yInput),
+    );
+
+    const lockLabel = document.createElement('label');
+    lockLabel.className = 'check-row';
+    const lockInput = document.createElement('input');
+    lockInput.type = 'checkbox'; lockInput.checked = port.locked;
+    const lockText = document.createElement('span');
+    lockText.textContent = 'Lock authored port settings';
+    lockLabel.append(lockInput, lockText);
+
+    const actions = document.createElement('div');
+    actions.className = 'button-row';
+    const apply = document.createElement('button');
+    apply.type = 'button'; apply.className = 'primary'; apply.textContent = 'Apply port';
+    apply.addEventListener('click', () => {
+      const snapshot = captureEditorSnapshot();
+      const previous = [...portOverrides];
+      replacePortOverride({
+        key: port.key,
+        name: nameInput.value.trim() || port.name,
+        type: typeSelect.value as PortType,
+        capacity: Number(capacityInput.value),
+        position: { x: Number(xInput.value), y: Number(yInput.value) },
+        locked: lockInput.checked,
+      });
+      persistMapCustomization();
+      if (regenerateFrom('ports', `Updated ${nameInput.value.trim() || port.name}.`)) {
+        recordHistory(snapshot, `edit port ${port.name}`);
+        return;
+      }
+      portOverrides = previous;
+      persistMapCustomization();
+      regenerateFrom('ports', 'Restored the previous port network.');
+    });
+    const reset = document.createElement('button');
+    reset.type = 'button'; reset.textContent = 'Reset edits';
+    reset.disabled = !portOverrides.some((item) => item.key === port.key);
+    reset.addEventListener('click', () => {
+      const snapshot = captureEditorSnapshot();
+      portOverrides = portOverrides.filter((item) => item.key !== port.key);
+      persistMapCustomization();
+      if (regenerateFrom('ports', `Reset ${port.name}.`)) recordHistory(snapshot, `reset port ${port.name}`);
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.className = 'danger';
+    remove.textContent = port.generated ? 'Suppress generated port' : 'Delete custom port';
+    remove.addEventListener('click', () => {
+      const snapshot = captureEditorSnapshot();
+      if (port.generated) replacePortOverride({ key: port.key, suppressed: true });
+      else {
+        customPorts = customPorts.filter((item) => item.key !== port.key);
+        portOverrides = portOverrides.filter((item) => item.key !== port.key);
+        customWaterRoutes = customWaterRoutes.filter((route) => route.fromPortKey !== port.key && route.toPortKey !== port.key);
+      }
+      persistMapCustomization();
+      if (regenerateFrom('ports', `${port.generated ? 'Suppressed' : 'Deleted'} ${port.name}.`)) {
+        recordHistory(snapshot, `${port.generated ? 'suppress' : 'delete'} port ${port.name}`);
+      }
+    });
+    actions.append(apply, reset, remove);
+    card.append(heading, grid, lockLabel, actions);
+    portList.append(card);
+  }
+}
+
+function routeDangerLevel(rating: number): MaritimeDanger {
+  if (rating >= 0.82) return MaritimeDanger.Severe;
+  if (rating >= 0.58) return MaritimeDanger.High;
+  if (rating >= 0.3) return MaritimeDanger.Moderate;
+  return MaritimeDanger.Low;
+}
+
+function routeMidpoint(route: World['waterRoutes'][number]): { readonly x: number; readonly y: number } {
+  const point = route.centerline[Math.floor(route.centerline.length * 0.5)];
+  return point ?? world.ports[route.fromPortId]?.waterPosition ?? { x: world.width * 0.5, y: world.height * 0.5 };
+}
+
+function pickMaritimeEncounter(entries: readonly MaritimeEncounter[]): MaritimeEncounter | undefined {
+  if (entries.length === 0) return undefined;
+  const total = entries.reduce((sum, entry) => sum + Math.max(0, entry.weight), 0);
+  if (total <= 0) return entries[0];
+  let cursor = randomUnit() * total;
+  for (const entry of entries) {
+    cursor -= Math.max(0, entry.weight);
+    if (cursor <= 0) return entry;
+  }
+  return entries[entries.length - 1];
+}
+
+function showMaritimeEncounter(route: World['waterRoutes'][number], encounter: MaritimeEncounter | undefined): void {
+  dmMaritimeResult.replaceChildren();
+  const from = world.ports[route.fromPortId];
+  const to = world.ports[route.toPortId];
+  const source = document.createElement('span');
+  source.className = 'story-source';
+  source.textContent = `${route.name} · ${Math.round(route.estimatedTravelTimeMinutes)} min`;
+  if (encounter === undefined) {
+    const empty = document.createElement('span');
+    empty.textContent = 'This route has no maritime encounter entries.';
+    dmMaritimeResult.append(source, empty);
+    return;
+  }
+  const title = document.createElement('strong');
+  title.textContent = encounter.title;
+  const danger = document.createElement('span');
+  danger.className = 'danger-badge';
+  danger.textContent = encounter.danger;
+  const description = document.createElement('p');
+  description.textContent = encounter.description;
+  const itinerary = document.createElement('small');
+  itinerary.textContent = `${from?.name ?? 'Origin'} → ${to?.name ?? 'Destination'} · ${VESSEL_CLASS_LABELS[route.vesselClass]}`;
+  dmMaritimeResult.append(source, title, danger, description, itinerary);
+  dmSessionEntries = [{
+    time: new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date()),
+    site: route.name,
+    title: encounter.title,
+    danger: encounter.danger,
+  }, ...dmSessionEntries].slice(0, 12);
+  renderDmSessionLog();
+}
+
+function renderDmMaritimeList(): void {
+  dmMaritimeList.replaceChildren();
+  const enabledRoutes = world.waterRoutes.filter((route) => route.enabled);
+  if (enabledRoutes.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'helper-text';
+    empty.textContent = 'No active water routes are available in this world.';
+    dmMaritimeList.append(empty);
+    return;
+  }
+  for (const route of enabledRoutes) {
+    const from = world.ports[route.fromPortId];
+    const to = world.ports[route.toPortId];
+    const card = document.createElement('article');
+    card.className = 'dm-maritime-route';
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = route.name;
+    const detail = document.createElement('small');
+    detail.textContent = `${from?.name ?? 'Origin'} → ${to?.name ?? 'Destination'} · ${Math.round(route.estimatedTravelTimeMinutes)} min · ${routeDangerLevel(route.dangerRating)} danger`;
+    copy.append(title, detail);
+    const actions = document.createElement('div');
+    actions.className = 'button-row compact-buttons';
+    const focus = document.createElement('button');
+    focus.type = 'button'; focus.textContent = 'Focus';
+    focus.addEventListener('click', () => {
+      const point = routeMidpoint(route);
+      focusMapPoint(point.x, point.y);
+    });
+    const roll = document.createElement('button');
+    roll.type = 'button'; roll.className = 'primary'; roll.textContent = 'Roll encounter';
+    roll.addEventListener('click', () => showMaritimeEncounter(route, pickMaritimeEncounter(route.encounters)));
+    actions.append(focus, roll);
+    card.append(copy, actions);
+    dmMaritimeList.append(card);
+  }
+}
+
+function renderWaterRouteList(): void {
+  waterRouteCount.textContent = String(world.waterRoutes.length);
+  refreshWaterRoutePortOptions();
+  const enabledCount = world.waterRoutes.filter((route) => route.enabled).length;
+  const totalMinutes = world.waterRoutes.filter((route) => route.enabled).reduce((sum, route) => sum + route.estimatedTravelTimeMinutes, 0);
+  const averageDanger = world.waterRoutes.length === 0 ? 0 : world.waterRoutes.reduce((sum, route) => sum + route.dangerRating, 0) / world.waterRoutes.length;
+  waterRouteSummary.replaceChildren();
+  for (const [label, value] of [
+    ['Routes', String(world.waterRoutes.length)],
+    ['Active', String(enabledCount)],
+    ['Combined travel', `${Math.round(totalMinutes)} min`],
+    ['Average danger', `${Math.round(averageDanger * 100)}%`],
+  ] as const) {
+    const item = document.createElement('span');
+    const strong = document.createElement('strong');
+    strong.textContent = value;
+    item.append(strong, ` ${label.toLocaleLowerCase()}`);
+    waterRouteSummary.append(item);
+  }
+
+  waterRouteList.replaceChildren();
+  if (world.waterRoutes.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'helper-text';
+    empty.textContent = world.ports.length < 2 ? 'At least two valid ports are required.' : 'No navigable port pair met the current vessel, depth, and demand constraints.';
+    waterRouteList.append(empty);
+    renderDmMaritimeList();
+    return;
+  }
+
+  for (const route of world.waterRoutes) {
+    const from = world.ports[route.fromPortId];
+    const to = world.ports[route.toPortId];
+    const card = document.createElement('article');
+    card.className = 'water-route-item';
+    const heading = document.createElement('div');
+    heading.className = 'maritime-item-heading';
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = route.name;
+    const details = document.createElement('small');
+    details.textContent = `${WATER_ROUTE_TYPE_LABELS[route.type]} · ${VESSEL_CLASS_LABELS[route.vesselClass]} · ${Math.round(route.estimatedTravelTimeMinutes)} min`;
+    const chip = document.createElement('span');
+    chip.className = 'maritime-route-chip';
+    chip.textContent = `${from?.name ?? 'Origin'} → ${to?.name ?? 'Destination'} · ${routeDangerLevel(route.dangerRating)} danger · ${route.generated ? 'generated' : 'custom'}`;
+    copy.append(title, details, chip);
+    const focus = document.createElement('button');
+    focus.type = 'button'; focus.textContent = 'Focus';
+    focus.addEventListener('click', () => {
+      const point = routeMidpoint(route);
+      focusMapPoint(point.x, point.y);
+    });
+    heading.append(copy, focus);
+
+    const grid = document.createElement('div');
+    grid.className = 'maritime-editor-grid';
+    const nameInput = document.createElement('input');
+    nameInput.value = route.name; nameInput.maxLength = 64;
+    const typeSelect = document.createElement('select');
+    for (const value of Object.values(WaterRouteType)) {
+      const option = document.createElement('option'); option.value = value; option.textContent = WATER_ROUTE_TYPE_LABELS[value]; typeSelect.append(option);
+    }
+    typeSelect.value = route.type;
+    const vesselSelect = document.createElement('select');
+    for (const value of Object.values(VesselClass)) {
+      const option = document.createElement('option'); option.value = value; option.textContent = VESSEL_CLASS_LABELS[value]; vesselSelect.append(option);
+    }
+    vesselSelect.value = route.vesselClass;
+    const travelInput = document.createElement('input');
+    travelInput.type = 'number'; travelInput.min = '2'; travelInput.max = '1440'; travelInput.step = '1'; travelInput.value = String(Math.round(route.estimatedTravelTimeMinutes));
+    const dangerInput = document.createElement('input');
+    dangerInput.type = 'number'; dangerInput.min = '0'; dangerInput.max = '1'; dangerInput.step = '0.05'; dangerInput.value = route.dangerRating.toFixed(2);
+    grid.append(
+      maritimeField('Route name', nameInput),
+      maritimeField('Type', typeSelect),
+      maritimeField('Vessel', vesselSelect),
+      maritimeField('Travel minutes', travelInput),
+      maritimeField('Danger 0–1', dangerInput),
+    );
+
+    const flags = document.createElement('div');
+    flags.className = 'check-grid';
+    const enabledLabel = document.createElement('label');
+    enabledLabel.className = 'check-row';
+    const enabledInput = document.createElement('input'); enabledInput.type = 'checkbox'; enabledInput.checked = route.enabled;
+    const enabledText = document.createElement('span'); enabledText.textContent = 'Route active'; enabledLabel.append(enabledInput, enabledText);
+    const lockLabel = document.createElement('label');
+    lockLabel.className = 'check-row';
+    const lockInput = document.createElement('input'); lockInput.type = 'checkbox'; lockInput.checked = route.locked;
+    const lockText = document.createElement('span'); lockText.textContent = 'Lock authored route'; lockLabel.append(lockInput, lockText);
+    flags.append(enabledLabel, lockLabel);
+
+    const actions = document.createElement('div');
+    actions.className = 'button-row';
+    const apply = document.createElement('button');
+    apply.type = 'button'; apply.className = 'primary'; apply.textContent = 'Apply route';
+    apply.addEventListener('click', () => {
+      const snapshot = captureEditorSnapshot();
+      const previous = [...waterRouteOverrides];
+      replaceWaterRouteOverride({
+        key: route.key,
+        name: nameInput.value.trim() || route.name,
+        type: typeSelect.value as WaterRouteType,
+        vesselClass: vesselSelect.value as VesselClass,
+        estimatedTravelTimeMinutes: Number(travelInput.value),
+        dangerRating: Number(dangerInput.value),
+        enabled: enabledInput.checked,
+        locked: lockInput.checked,
+      });
+      persistMapCustomization();
+      if (regenerateFrom('water-routes', `Updated ${nameInput.value.trim() || route.name}.`)) {
+        recordHistory(snapshot, `edit water route ${route.name}`);
+        return;
+      }
+      waterRouteOverrides = previous;
+      persistMapCustomization();
+      regenerateFrom('water-routes', 'Restored the previous water-route network.');
+    });
+    const roll = document.createElement('button');
+    roll.type = 'button'; roll.textContent = 'Roll encounter';
+    roll.addEventListener('click', () => showMaritimeEncounter(route, pickMaritimeEncounter(route.encounters)));
+    const reset = document.createElement('button');
+    reset.type = 'button'; reset.textContent = 'Reset edits';
+    reset.disabled = !waterRouteOverrides.some((item) => item.key === route.key);
+    reset.addEventListener('click', () => {
+      const snapshot = captureEditorSnapshot();
+      waterRouteOverrides = waterRouteOverrides.filter((item) => item.key !== route.key);
+      persistMapCustomization();
+      if (regenerateFrom('water-routes', `Reset ${route.name}.`)) recordHistory(snapshot, `reset water route ${route.name}`);
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.className = 'danger'; remove.textContent = route.generated ? 'Suppress generated route' : 'Delete custom route';
+    remove.addEventListener('click', () => {
+      const snapshot = captureEditorSnapshot();
+      if (route.generated) replaceWaterRouteOverride({ key: route.key, suppressed: true });
+      else {
+        customWaterRoutes = customWaterRoutes.filter((item) => item.key !== route.key);
+        waterRouteOverrides = waterRouteOverrides.filter((item) => item.key !== route.key);
+      }
+      persistMapCustomization();
+      if (regenerateFrom('water-routes', `${route.generated ? 'Suppressed' : 'Deleted'} ${route.name}.`)) {
+        recordHistory(snapshot, `${route.generated ? 'suppress' : 'delete'} water route ${route.name}`);
+      }
+    });
+    actions.append(apply, roll, reset, remove);
+    card.append(heading, grid, flags, actions);
+    waterRouteList.append(card);
+  }
+  renderDmMaritimeList();
+}
+
 function renderNameEditors(): void {
   const selectedRoad = Number(roadNameTarget.value);
   roadNameTarget.replaceChildren();
@@ -2431,6 +2973,8 @@ function refreshWorldUi(fitAfter = false): void {
   updateMapHeader();
   renderIslandList();
   renderBridgeList();
+  renderPortList();
+  renderWaterRouteList();
   renderAnchorList();
   renderNameEditors();
   renderStoryList();
@@ -2450,23 +2994,56 @@ function generate(
   setStatus('Generating terrain, town, and story layer…', 'working');
   const signature = worldSignature();
   const names = loadNameState(signature);
-  const mapCustomization = loadMapCustomization(signature);
+  let mapCustomization = loadMapCustomization(signature);
+  const recoveredOverrides: string[] = [];
+
   try {
-    const nextWorld = pipeline.generate(seedInput.value, {
-      ...generationOptions(
-        candidateCustom,
-        candidateBuiltIns,
-        mapCustomization.anchorPositions,
-        mapCustomization.storyPositions,
-      ),
-      roadNameOverrides: names.roads,
-      blockNameOverrides: names.blocks,
-      storyRuleOverrides: mapCustomization.storyRules,
-      zoneOverrides: mapCustomization.zoneOverrides,
-      islandOverrides: mapCustomization.islandOverrides,
-      bridgeOverrides: mapCustomization.bridgeOverrides,
-      customBridges: mapCustomization.customBridges,
-    });
+    let nextWorld: World | undefined;
+    const maximumAttempts = mapCustomization.anchorPositions.length + mapCustomization.storyPositions.length + 1;
+
+    for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
+      try {
+        nextWorld = pipeline.generate(seedInput.value, {
+          ...generationOptions(
+            candidateCustom,
+            candidateBuiltIns,
+            mapCustomization.anchorPositions,
+            mapCustomization.storyPositions,
+          ),
+          roadNameOverrides: names.roads,
+          blockNameOverrides: names.blocks,
+          storyRuleOverrides: mapCustomization.storyRules,
+          zoneOverrides: mapCustomization.zoneOverrides,
+          islandOverrides: mapCustomization.islandOverrides,
+          bridgeOverrides: mapCustomization.bridgeOverrides,
+          customBridges: mapCustomization.customBridges,
+          portOverrides: mapCustomization.portOverrides,
+          customPorts: mapCustomization.customPorts,
+          waterRouteOverrides: mapCustomization.waterRouteOverrides,
+          customWaterRoutes: mapCustomization.customWaterRoutes,
+        });
+        break;
+      } catch (error) {
+        if (!(error instanceof InvalidPositionOverrideError)) throw error;
+        const recovered = recoverPositionOverrides(
+          mapCustomization.anchorPositions,
+          mapCustomization.storyPositions,
+          error,
+        );
+        if (!recovered.removed) throw error;
+        mapCustomization = {
+          ...mapCustomization,
+          anchorPositions: recovered.anchorPositions,
+          storyPositions: recovered.storyPositions,
+        };
+        recoveredOverrides.push(`${error.kind} “${error.displayName}”`);
+      }
+    }
+
+    if (nextWorld === undefined) {
+      throw new Error('World generation could not recover from its saved position overrides. Reset moved objects and try again.');
+    }
+
     world = nextWorld;
     activeWorldSignature = signature;
     roadNameOverrides = [...names.roads];
@@ -2479,18 +3056,30 @@ function generate(
     islandOverrides = [...mapCustomization.islandOverrides];
     bridgeOverrides = [...mapCustomization.bridgeOverrides];
     customBridges = [...mapCustomization.customBridges];
+    portOverrides = [...mapCustomization.portOverrides];
+    customPorts = [...mapCustomization.customPorts];
+    waterRouteOverrides = [...mapCustomization.waterRouteOverrides];
+    customWaterRoutes = [...mapCustomization.customWaterRoutes];
+
+    // Persist the repaired state so the same stale override cannot block the
+    // next load. Only invalid position records are removed; names, zoning,
+    // assets, transport authoring, and every valid moved object are preserved.
+    if (recoveredOverrides.length > 0) saveMapCustomization(signature, mapCustomization);
+
     refreshWorldUi(fitAfter);
     saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset() });
     if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
     const duration = Object.values(world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
-    setStatus(`Generated ${world.width}×${world.height} world in ${duration.toFixed(0)} ms.`, 'success');
+    const recoveryMessage = recoveredOverrides.length === 0
+      ? ''
+      : ` Reset ${recoveredOverrides.length} stale saved position${recoveredOverrides.length === 1 ? '' : 's'}: ${recoveredOverrides.join(', ')}.`;
+    setStatus(`Generated ${world.width}×${world.height} world in ${duration.toFixed(0)} ms.${recoveryMessage}`, recoveredOverrides.length === 0 ? 'success' : 'warning');
     return true;
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), 'error');
     return false;
   }
 }
-
 
 function regenerateFrom(stageId: string, successMessage: string): boolean {
   setStatus('Updating authored world…', 'working');
@@ -3063,6 +3652,111 @@ bridgeResetAll.addEventListener('click', () => {
   customBridges = previousCustom;
   persistMapCustomization();
   regenerateFrom('bridges', 'Restored previous bridge authoring.');
+});
+
+portForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (portIsland.value.length === 0) {
+    setStatus('Choose a port-enabled island.', 'error');
+    return;
+  }
+  const snapshot = captureEditorSnapshot();
+  const definition: CustomPortDefinition = {
+    key: `port:custom:${createRuleId()}`,
+    name: portName.value.trim(),
+    islandKey: portIsland.value,
+    type: portType.value as PortType,
+    capacity: Math.max(20, Math.min(5000, Number(portCapacity.value) || 300)),
+    locked: true,
+  };
+  const previous = [...customPorts];
+  customPorts = [...customPorts, definition];
+  persistMapCustomization();
+  if (!regenerateFrom('ports', `Added ${definition.name}.`) || !world.ports.some((port) => port.key === definition.key)) {
+    customPorts = previous;
+    persistMapCustomization();
+    regenerateFrom('ports', 'Restored the previous port network.');
+    setStatus('No valid coastline site was found on that island. Try another island or enable ports in its island plan.', 'error');
+    return;
+  }
+  portName.value = '';
+  recordHistory(snapshot, `add port ${definition.name}`);
+});
+
+portResetAll.addEventListener('click', () => {
+  if (portOverrides.length === 0 && customPorts.length === 0) return;
+  const snapshot = captureEditorSnapshot();
+  const previousOverrides = [...portOverrides];
+  const previousCustom = [...customPorts];
+  const previousRouteCustom = [...customWaterRoutes];
+  portOverrides = [];
+  customPorts = [];
+  customWaterRoutes = customWaterRoutes.filter((route) => !route.fromPortKey.startsWith('port:custom:') && !route.toPortKey.startsWith('port:custom:'));
+  persistMapCustomization();
+  if (regenerateFrom('ports', 'Reset port authoring to generated defaults.')) {
+    recordHistory(snapshot, 'reset port authoring');
+    return;
+  }
+  portOverrides = previousOverrides;
+  customPorts = previousCustom;
+  customWaterRoutes = previousRouteCustom;
+  persistMapCustomization();
+  regenerateFrom('ports', 'Restored previous port authoring.');
+});
+
+waterRouteFromPort.addEventListener('change', () => {
+  if (waterRouteToPort.value === waterRouteFromPort.value) {
+    waterRouteToPort.value = world.ports.find((port) => port.key !== waterRouteFromPort.value)?.key ?? '';
+  }
+});
+
+waterRouteForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (waterRouteFromPort.value.length === 0 || waterRouteToPort.value.length === 0 || waterRouteFromPort.value === waterRouteToPort.value) {
+    setStatus('Choose two different ports.', 'error');
+    return;
+  }
+  const snapshot = captureEditorSnapshot();
+  const definition: CustomWaterRouteDefinition = {
+    key: `water-route:custom:${createRuleId()}`,
+    name: waterRouteName.value.trim(),
+    fromPortKey: waterRouteFromPort.value,
+    toPortKey: waterRouteToPort.value,
+    type: waterRouteType.value as WaterRouteType,
+    vesselClass: waterRouteVessel.value as VesselClass,
+    enabled: true,
+    locked: true,
+  };
+  const previous = [...customWaterRoutes];
+  customWaterRoutes = [...customWaterRoutes, definition];
+  persistMapCustomization();
+  if (!regenerateFrom('water-routes', `Added ${definition.name}.`) || !world.waterRoutes.some((route) => route.key === definition.key)) {
+    customWaterRoutes = previous;
+    persistMapCustomization();
+    regenerateFrom('water-routes', 'Restored the previous water-route network.');
+    setStatus('No navigable ocean path was found for that vessel. Try another port pair or a smaller vessel.', 'error');
+    return;
+  }
+  waterRouteName.value = '';
+  recordHistory(snapshot, `add water route ${definition.name}`);
+});
+
+waterRouteResetAll.addEventListener('click', () => {
+  if (waterRouteOverrides.length === 0 && customWaterRoutes.length === 0) return;
+  const snapshot = captureEditorSnapshot();
+  const previousOverrides = [...waterRouteOverrides];
+  const previousCustom = [...customWaterRoutes];
+  waterRouteOverrides = [];
+  customWaterRoutes = [];
+  persistMapCustomization();
+  if (regenerateFrom('water-routes', 'Reset water routes to generated defaults.')) {
+    recordHistory(snapshot, 'reset water-route authoring');
+    return;
+  }
+  waterRouteOverrides = previousOverrides;
+  customWaterRoutes = previousCustom;
+  persistMapCustomization();
+  regenerateFrom('water-routes', 'Restored previous water-route authoring.');
 });
 
 

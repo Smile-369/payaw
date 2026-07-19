@@ -1,5 +1,23 @@
 # Changelog
 
+## Milestone 11.1 — Saved Position Recovery
+
+- Added typed invalid-position errors for anchors and story locations.
+- Full generation automatically removes and persists only stale position overrides.
+- Procedural placement is restored without deleting unrelated customization.
+- Direct object dragging remains strict.
+- Added focused recovery tests.
+
+## Milestone 11 — Maritime Network
+
+- Added deterministic port placement and port approach roads.
+- Added small-boat, ferry, and cargo-vessel water navigation.
+- Added generated and custom water routes with travel time and danger.
+- Added weighted deterministic maritime encounter tables and DM rolls.
+- Added port and route editors, overrides, undo/redo, layers, labels, and exports.
+- Added bridge/port road ownership for deterministic partial regeneration.
+- Incremented the world schema to version 11.
+
 ## 0.10.0 — Inter-Island Bridge Network
 
 - Added deterministic coast-to-coast bridge candidate generation.

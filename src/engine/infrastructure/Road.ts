@@ -15,4 +15,6 @@ export interface Road {
   readonly length: number;
   /** null for ordinary roads; otherwise the owning inter-island bridge. */
   readonly bridgeId: number | null;
+  /** null unless this is an approach road created for a maritime port. */
+  readonly portId: number | null;
 }

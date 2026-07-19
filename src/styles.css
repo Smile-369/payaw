@@ -188,6 +188,7 @@ select { cursor: pointer; }
 }
 
 .status-message[data-state='success'] { color: #a9c9a4; }
+.status-message[data-state='warning'] { color: #d5b47a; }
 .status-message[data-state='error'] { color: #e39b94; }
 .status-message[data-state='working'] { color: #d5b47a; }
 
@@ -1536,4 +1537,40 @@ textarea {
 .bridge-route-chip { display: inline-flex; align-items: center; width: fit-content; padding: .2rem .48rem; border-radius: 999px; font-size: .72rem; background: rgba(213, 184, 107, .12); color: #ead7a0; }
 @media (max-width: 720px) {
   .bridge-create-form, .bridge-editor-grid { grid-template-columns: 1fr; }
+}
+
+/* Milestone 11 maritime authoring */
+.maritime-editor-body { display: grid; gap: .9rem; }
+.maritime-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; align-items: start; }
+.maritime-panel { min-width: 0; padding: .8rem; border: 1px solid rgba(95, 176, 190, .16); border-radius: 1rem; background: linear-gradient(155deg, rgba(37, 87, 94, .11), rgba(255, 255, 255, .014)); }
+.maritime-panel .bridge-create-form { margin-top: .7rem; }
+.port-list,
+.water-route-list,
+.dm-maritime-list { display: grid; gap: .75rem; }
+.port-item,
+.water-route-item {
+  display: grid;
+  gap: .7rem;
+  padding: .78rem;
+  border: 1px solid rgba(94, 183, 198, .18);
+  border-radius: .88rem;
+  background: rgba(11, 25, 27, .55);
+}
+.maritime-item-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .7rem; }
+.maritime-item-heading > div { display: grid; gap: .18rem; min-width: 0; }
+.maritime-item-heading strong { font-size: .9rem; }
+.maritime-item-heading small { color: var(--muted, #99a39d); line-height: 1.35; }
+.maritime-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+.maritime-editor-grid .form-field:first-child { grid-column: 1 / -1; }
+.maritime-route-chip { display: inline-flex; align-items: center; width: fit-content; padding: .2rem .48rem; border-radius: 999px; font-size: .7rem; background: rgba(76, 172, 192, .13); color: #a9e2eb; }
+.dm-maritime-card { padding: .9rem; }
+.dm-maritime-route { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .72rem; border: 1px solid rgba(83, 174, 191, .17); border-radius: .82rem; background: rgba(15, 36, 39, .45); }
+.dm-maritime-route > div:first-child { display: grid; gap: .18rem; min-width: 0; }
+.dm-maritime-route small { color: var(--muted, #9ca9a5); line-height: 1.35; }
+.compact-buttons { flex-wrap: nowrap; }
+@media (max-width: 1180px) { .maritime-columns { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  .maritime-editor-grid { grid-template-columns: 1fr; }
+  .maritime-editor-grid .form-field:first-child { grid-column: auto; }
+  .dm-maritime-route { align-items: flex-start; flex-direction: column; }
 }

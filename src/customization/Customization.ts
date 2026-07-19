@@ -1,6 +1,8 @@
 import type { BuildingType } from '../engine/buildings/Building';
 import type { IslandOverride } from '../engine/regional/Island';
 import type { BridgeOverride, CustomBridgeDefinition } from '../engine/infrastructure/Bridge';
+import type { PortOverride, CustomPortDefinition } from '../engine/infrastructure/Port';
+import type { WaterRouteOverride, CustomWaterRouteDefinition } from '../engine/infrastructure/WaterRoute';
 import type {
   AnchorPositionOverride,
   StoryPositionOverride,
@@ -51,6 +53,10 @@ export interface StoredMapCustomization {
   readonly islandOverrides: readonly IslandOverride[];
   readonly bridgeOverrides: readonly BridgeOverride[];
   readonly customBridges: readonly CustomBridgeDefinition[];
+  readonly portOverrides: readonly PortOverride[];
+  readonly customPorts: readonly CustomPortDefinition[];
+  readonly waterRouteOverrides: readonly WaterRouteOverride[];
+  readonly customWaterRoutes: readonly CustomWaterRouteDefinition[];
 }
 
 export interface RuntimeImageAsset {

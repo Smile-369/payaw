@@ -32,7 +32,7 @@ const options = { terrainShape: TerrainShape.Archipelago, townScale: TownScale.S
 const world = pipeline.generate(seed, options);
 const repeated = pipeline.generate(seed, options);
 
-assert(world.metadata.schemaVersion === 10, 'Milestone 10 schema version was not exported.');
+assert(world.metadata.schemaVersion >= 10, 'Milestone 10 bridge schema was not exported.');
 assert(world.bridges.length >= 1, 'Archipelago generation did not produce any bridges.');
 assert(bridgeSnapshot(world) === bridgeSnapshot(repeated), 'Bridge generation is not deterministic.');
 

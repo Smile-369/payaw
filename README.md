@@ -1,150 +1,154 @@
-# PAYAW Procedural World Engine — Milestone 10
+# PAYAW Procedural World Engine — Milestone 11.1
 
-**Milestone 10: Inter-Island Bridge Network** adds deterministic, first-class bridges to the regional world introduced in Milestone 9.
+**Milestone 11.1: Saved Position Recovery** fixes stale manual anchor and story locations that can become invalid after terrain or profile changes. It includes all Milestone 11 maritime features.
 
-Bridges are not decorative lines. Each bridge owns a water-crossing deck, bridge approach roads, island references, support points, a stable identity, generated or authored properties, renderer layers, and non-destructive editor overrides.
+## Milestone 11.1 fix
 
-The existing World Editor, DM Mode, regional islands and settlements, story encounters, zone authoring, custom assets, undo/redo, label controls, PNG export, and JSON/override export remain available.
+- Full generation no longer fails because an old Town Plaza or story-point override lands on water.
+- Only the invalid saved position is removed.
+- The affected object returns to a deterministic procedural location.
+- Valid moved objects and all other customization remain untouched.
+- The repaired state is saved automatically.
+- Direct dragging remains strict and still rejects invalid placements.
 
-## What Milestone 10 adds
+See `docs/MILESTONE_11_1.md` and `docs/VALIDATION_11_1.md`.
 
-### Bridge demand and candidate generation
+---
 
-PAYAW samples coastlines between inhabited islands that permit roads and bridges. A crossing candidate is rejected when it:
+## What Milestone 11 adds
 
-- Connects an island to itself
-- Falls outside the configured span range
-- Crosses interior land instead of water
-- Intersects an unintended third island
-- Cannot connect to a road or settlement on either side
+### Procedural ports
 
-Valid candidates are scored using:
+Each inhabited island that permits ports is evaluated for a coastal terminal. Candidate sites are scored using:
 
-- Connected island population
-- Primary-settlement and port-hub importance
-- Span length
-- Average water depth
-- Shoreline approach direction
-- Endpoint slope
-- Distance to the existing road network
+- Adjacent navigable water depth
+- Shelter from open-water exposure
+- Flat and buildable approach terrain
+- Road-network proximity
+- Flood risk
+- Island role and population demand
 
-The engine first selects a deterministic minimum regional connection network, then may add a limited number of high-value extra links.
+Generated port types include:
 
-### First-class bridge entities
+- Fishing dock
+- Barangay jetty
+- Ferry terminal
+- Commercial port
+- Industrial port
+- Marina
 
-Each bridge records:
+Every port records its island, settlement, land and water positions, capacity, depth, shelter, road access, access-road ID, connected route IDs, and generated/custom state.
 
-- Stable key and generated/editable name
-- Origin and destination islands
-- Coast endpoints
-- Centerline and water deck tiles
-- Bridge type and road class
-- Length, deck width, and clearance
-- Support points
-- Approach-road IDs
-- Deck-road ID
-- Generated/custom and locked state
+### Water navigation
 
-Bridge types include:
+Water routes use a dedicated ocean traversal field. Each vessel has a minimum draft and different speed:
 
-- Footbridge
-- Causeway
-- Local bridge
-- Highway bridge
-- Long-span bridge
+- Small boat
+- Ferry
+- Cargo vessel
 
-### Road integration
+A* rejects land tiles and impassably shallow water. Its cost also accounts for shallow-water risk and exposure far from shore. This produces routes that follow navigable water rather than drawing straight lines through islands.
 
-A selected bridge produces three connected pieces:
+### Regional route selection
 
-```text
-Island road network
-→ approach road
-→ bridge deck
-→ approach road
-→ destination road network
-```
+Route demand considers:
 
-Approach roads use the existing A* terrain-cost pathfinder. They account for slope, flood risk, mountains, forests, rivers, and existing-road reuse. The deck is stored as a separate bridge-owned road that can cross water tiles.
+- Population connected
+- Port capacity and type
+- Island roles
+- Route distance
+- Existing bridge competition
+- Whether a pair is already connected
 
-Bridge-owned roads are excluded from normal street rendering and labeling so the bridge renderer and bridge label system remain authoritative.
+The generator first builds a maritime regional backbone between disconnected island groups and can then add a limited number of valuable extra connections.
 
-### Bridge Editor
+Route types include:
 
-The World Editor now contains a **Bridges** module.
+- Fishing route
+- Passenger ferry
+- Cargo route
+- Coastal route
+- Open-water route
+- Smuggling route
+- Story route
 
-For generated bridges, you can edit:
+### Travel times and danger
 
-- Name
-- Bridge type
-- Road class
-- Deck width
-- Clearance
-- Approximate endpoint coordinates, which snap to valid coast tiles
-- Lock state
-- Suppression state
-
-You can also add a custom bridge by selecting:
-
-- Origin island
-- Destination island
-- Name
-- Bridge type
-- Road class
-- Deck width
-- Clearance
-
-Custom bridge definitions suppress automatic duplication of the same island pair.
-
-All bridge authoring supports:
-
-- Undo and redo
-- Local persistence
-- Portable override export/import
-- Reset to generated defaults
-- Partial regeneration beginning at the bridge stage
-
-### Rendering and labels
-
-New independent layers:
-
-- Bridge decks and supports
-- Bridge labels
-
-Bridge labels do not depend on street-label visibility. Imported artwork can also target `infrastructure:bridge` and render at bridge midpoints.
-
-Bridges are included in full-map PNG and World JSON export when their corresponding layers are enabled.
-
-## Generation order
+Each route calculates:
 
 ```text
-Terrain and hydrology
-→ Landmasses, islands, and settlements
-→ Anchors
-→ Intra-island roads
-→ Bridges and approach roads
-→ Accessibility
-→ Blocks
-→ Land value and zoning
-→ Buildings and vegetation
-→ Story layer
+boarding time
++ water distance × tile scale ÷ vessel speed
+= estimated journey time
 ```
 
-Placing bridges before accessibility allows cross-island connections to influence downstream development and travel potential.
+Routes also receive a 0–1 danger rating from distance, open-water exposure, and shallow-water risk.
 
-## Milestone boundary
+### Maritime encounters
 
-Milestone 10 generates road bridges only. It does not generate:
+Every generated or custom route includes a deterministic weighted encounter table. Examples include sudden fog, engine failure, a missing passenger, floating shrines, and ghost vessels.
+
+DM Mode now provides:
+
+- Route itinerary and estimated travel time
+- Vessel and danger level
+- Map focus
+- Weighted maritime encounter rolls
+- Maritime entries in the recent-roll log
+
+### Port and route editor
+
+The World Editor now allows you to:
+
+- Add custom ports to selected islands
+- Rename and reclassify ports
+- Change capacity
+- Move ports to another valid coastal point
+- Lock, suppress, delete, or reset ports
+- Add routes between any two ports
+- Change route type and vessel class
+- Override travel time and danger
+- Enable or disable service
+- Lock, suppress, delete, or reset routes
+
+All changes are non-destructive overrides and support undo/redo.
+
+### Partial regeneration
+
+```text
+Port edit
+→ ports and access roads
+→ water routes
+→ accessibility
+→ blocks and zoning
+→ buildings, vegetation, and story
+
+Water-route edit
+→ water routes
+→ accessibility and downstream analysis
+```
+
+Roads now track bridge and port ownership independently. This prevents stale approach roads from surviving partial regeneration.
+
+### Rendering and exports
+
+Independent layers were added for:
 
 - Ports
-- Ferry terminals
-- Water-navigation fields
-- Passenger or cargo routes
-- Schedules or travel-time simulation
+- Port labels
+- Water routes
+- Water-route labels
 
-Those belong to the maritime and mobility milestones that follow.
+Imported artwork can target:
 
-## Run
+```text
+infrastructure:port
+infrastructure:water-route
+```
+
+Ports and routes are included in World JSON, override files, and full-map PNG exports.
+
+## Run locally
 
 ```bash
 corepack enable
@@ -156,15 +160,23 @@ pnpm dev
 
 ```bash
 pnpm check
-pnpm test:ms8
-pnpm test:ms81
-pnpm test:ms82
 pnpm test:ms9
 pnpm test:ms10
-```
-
-After dependencies are installed, create a production bundle with:
-
-```bash
+pnpm test:ms11
 pnpm build
 ```
+
+## Current focused result
+
+The Milestone 11 archipelago fixture generated:
+
+| System | Result |
+|---|---:|
+| Islands | 5 |
+| Bridges | 3 |
+| Ports | 4 |
+| Water routes | 6 |
+| Passenger routes | 6 |
+| Combined travel time | 149 minutes |
+
+See [`docs/MILESTONE_11.md`](docs/MILESTONE_11.md) and [`docs/VALIDATION_11.md`](docs/VALIDATION_11.md) for architecture and validation details.

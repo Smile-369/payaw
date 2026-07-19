@@ -3,6 +3,8 @@ import type { ZoneType } from '../zoning/Zone';
 import type { CustomStoryPointDefinition, StoryEncounterDefinition } from '../../story/StoryObject';
 import type { IslandOverride } from '../regional/Island';
 import type { BridgeOverride, CustomBridgeDefinition } from '../infrastructure/Bridge';
+import type { PortOverride, CustomPortDefinition } from '../infrastructure/Port';
+import type { WaterRouteOverride, CustomWaterRouteDefinition } from '../infrastructure/WaterRoute';
 
 export enum TerrainSize {
   Small = 'small',
@@ -91,6 +93,10 @@ export interface GenerationOptions {
   readonly islandOverrides?: readonly IslandOverride[];
   readonly bridgeOverrides?: readonly BridgeOverride[];
   readonly customBridges?: readonly CustomBridgeDefinition[];
+  readonly portOverrides?: readonly PortOverride[];
+  readonly customPorts?: readonly CustomPortDefinition[];
+  readonly waterRouteOverrides?: readonly WaterRouteOverride[];
+  readonly customWaterRoutes?: readonly CustomWaterRouteDefinition[];
 }
 
 export interface ResolvedGenerationOptions {
@@ -110,6 +116,10 @@ export interface ResolvedGenerationOptions {
   readonly islandOverrides: readonly IslandOverride[];
   readonly bridgeOverrides: readonly BridgeOverride[];
   readonly customBridges: readonly CustomBridgeDefinition[];
+  readonly portOverrides: readonly PortOverride[];
+  readonly customPorts: readonly CustomPortDefinition[];
+  readonly waterRouteOverrides: readonly WaterRouteOverride[];
+  readonly customWaterRoutes: readonly CustomWaterRouteDefinition[];
 }
 
 export const DEFAULT_GENERATION_OPTIONS: ResolvedGenerationOptions = {
@@ -129,6 +139,10 @@ export const DEFAULT_GENERATION_OPTIONS: ResolvedGenerationOptions = {
   islandOverrides: [],
   bridgeOverrides: [],
   customBridges: [],
+  portOverrides: [],
+  customPorts: [],
+  waterRouteOverrides: [],
+  customWaterRoutes: [],
 };
 
 export function resolveGenerationOptions(options: GenerationOptions = {}): ResolvedGenerationOptions {
@@ -149,5 +163,9 @@ export function resolveGenerationOptions(options: GenerationOptions = {}): Resol
     islandOverrides: options.islandOverrides ?? DEFAULT_GENERATION_OPTIONS.islandOverrides,
     bridgeOverrides: options.bridgeOverrides ?? DEFAULT_GENERATION_OPTIONS.bridgeOverrides,
     customBridges: options.customBridges ?? DEFAULT_GENERATION_OPTIONS.customBridges,
+    portOverrides: options.portOverrides ?? DEFAULT_GENERATION_OPTIONS.portOverrides,
+    customPorts: options.customPorts ?? DEFAULT_GENERATION_OPTIONS.customPorts,
+    waterRouteOverrides: options.waterRouteOverrides ?? DEFAULT_GENERATION_OPTIONS.waterRouteOverrides,
+    customWaterRoutes: options.customWaterRoutes ?? DEFAULT_GENERATION_OPTIONS.customWaterRoutes,
   };
 }

@@ -28,6 +28,8 @@ const INFRASTRUCTURE_TARGETS: readonly AssetTargetOption[] = [
   { value: `road-${RoadType.Secondary}`, label: 'Secondary road marker' },
   { value: `road-${RoadType.Local}`, label: 'Local road marker' },
   { value: 'bridge', label: 'Bridge' },
+  { value: 'port', label: 'Port / jetty' },
+  { value: 'water-route', label: 'Water route marker' },
   { value: 'street-light', label: 'Street light' },
   { value: 'power-pole', label: 'Power pole' },
   { value: 'fence', label: 'Fence' },

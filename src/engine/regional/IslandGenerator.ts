@@ -152,6 +152,7 @@ export function generateIslands(
       settlementCountTarget: baseSettlementCount(role, developmentLevel, landmass.area),
       settlementIds: [],
       bridgeIds: [],
+      portIds: [],
       allowBridges: role !== IslandRole.ProtectedNature && role !== IslandRole.StoryIsland,
       allowPorts: landmass.coastlineLength > 8 && role !== IslandRole.ProtectedNature,
       allowRoads: developmentLevel !== DevelopmentLevel.Undeveloped,

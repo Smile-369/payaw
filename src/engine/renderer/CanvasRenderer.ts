@@ -3,6 +3,8 @@ import { AssetTargetCategory, EMPTY_RENDER_CUSTOMIZATION, type RenderCustomizati
 import { AnchorSource, AnchorType } from '../settlement/Anchor';
 import { BuildingCondition, BuildingType } from '../buildings/Building';
 import { RoadType } from '../infrastructure/Road';
+import { PortType } from '../infrastructure/Port';
+import { WaterRouteType } from '../infrastructure/WaterRoute';
 import { RiverCourse, WaterType } from '../world/Tile';
 import { VegetationType } from '../vegetation/Vegetation';
 import type { World } from '../world/World';
@@ -293,19 +295,21 @@ export class CanvasRenderer {
     }
     if (this.layers.isVisible(RenderLayer.Floodplains)) this.drawRaster(cache.floodplainCanvas, 1);
     if (this.layers.isVisible(RenderLayer.Rivers)) this.drawRivers(world);
+    if (this.layers.isVisible(RenderLayer.WaterRoutes)) this.drawWaterRoutes(world);
     if (this.layers.isVisible(RenderLayer.Islands)) this.drawIslandBoundaries(world);
     if (this.layers.isVisible(RenderLayer.Blocks)) this.drawBlockGeometry(world, camera.zoom);
     if (this.layers.isVisible(RenderLayer.Roads)) this.drawRoadGeometry(world);
-    if (this.layers.isVisible(RenderLayer.Bridges)) {
-      this.drawBridgeGeometry(world);
-      this.drawInfrastructureAssets(world);
-    }
+    if (this.layers.isVisible(RenderLayer.Bridges)) this.drawBridgeGeometry(world);
+    if (this.layers.isVisible(RenderLayer.Ports)) this.drawPorts(world, camera.zoom, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.Bridges) || this.layers.isVisible(RenderLayer.Ports) || this.layers.isVisible(RenderLayer.WaterRoutes)) this.drawInfrastructureAssets(world);
     if (this.layers.isVisible(RenderLayer.Buildings)) this.drawBuildings(world, camera.zoom, visibleBounds);
     if (this.layers.isVisible(RenderLayer.Vegetation)) this.drawVegetation(world, camera.zoom, visibleBounds);
     if (this.layers.isVisible(RenderLayer.CustomImages)) this.drawPlacedImages(visibleBounds);
 
     const labelBounds: LabelBounds[] = [];
+    if (this.layers.isVisible(RenderLayer.WaterRouteLabels)) this.drawWaterRouteLabels(world, camera.zoom, labelBounds, visibleBounds);
     if (this.layers.isVisible(RenderLayer.BridgeLabels)) this.drawBridgeLabels(world, camera.zoom, labelBounds, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.PortLabels)) this.drawPortLabels(world, camera.zoom, labelBounds, visibleBounds);
     if (this.layers.isVisible(RenderLayer.RoadLabels)) this.drawRoadLabels(world, camera.zoom, labelBounds, visibleBounds);
     if (this.layers.isVisible(RenderLayer.BlockLabels)) this.drawBlockLabels(world, camera.zoom, labelBounds, visibleBounds);
     if (this.layers.isVisible(RenderLayer.IslandLabels)) this.drawIslandLabels(world, camera.zoom, labelBounds, visibleBounds);
@@ -530,6 +534,120 @@ export class CanvasRenderer {
       this.context.fillStyle = 'rgba(248, 242, 218, 0.96)';
       this.context.fillText(block.name, block.centroid.x, block.centroid.y);
       this.context.globalAlpha = 1;
+      occupied.push(bounds);
+    }
+  }
+
+  private drawWaterRoutes(world: World): void {
+    this.context.save();
+    this.context.lineCap = 'round';
+    this.context.lineJoin = 'round';
+    for (const route of world.waterRoutes) {
+      if (!route.enabled || route.centerline.length < 2) continue;
+      const first = route.centerline[0];
+      if (first === undefined) continue;
+      this.context.beginPath();
+      this.context.moveTo(first.x, first.y);
+      for (let index = 1; index < route.centerline.length; index += 1) {
+        const point = route.centerline[index];
+        if (point !== undefined) this.context.lineTo(point.x, point.y);
+      }
+      const color = route.type === WaterRouteType.CargoRoute
+        ? 'rgba(226, 174, 86, 0.88)'
+        : route.type === WaterRouteType.FishingRoute
+          ? 'rgba(127, 222, 193, 0.82)'
+          : route.type === WaterRouteType.StoryRoute || route.type === WaterRouteType.SmugglingRoute
+            ? 'rgba(196, 135, 229, 0.90)'
+            : 'rgba(116, 205, 245, 0.90)';
+      this.context.strokeStyle = 'rgba(7, 31, 44, 0.66)';
+      this.context.lineWidth = 1.02;
+      this.context.setLineDash([]);
+      this.context.stroke();
+      this.context.strokeStyle = color;
+      this.context.lineWidth = 0.46;
+      this.context.setLineDash(route.type === WaterRouteType.PassengerFerry ? [2.4, 1.4] : [1.2, 1.1]);
+      this.context.stroke();
+    }
+    this.context.setLineDash([]);
+    this.context.restore();
+  }
+
+  private drawPorts(world: World, zoom: number, visibleBounds: WorldBounds): void {
+    for (const port of world.ports) {
+      if (!pointInBounds(port.position.x, port.position.y, visibleBounds, 8)) continue;
+      const radius = Math.max(0.38, 1.5 / Math.max(1, zoom));
+      this.context.save();
+      this.context.translate(port.position.x, port.position.y);
+      const angle = Math.atan2(port.waterPosition.y - port.position.y, port.waterPosition.x - port.position.x);
+      this.context.rotate(angle);
+      this.context.strokeStyle = 'rgba(10, 27, 34, 0.96)';
+      this.context.fillStyle = port.type === PortType.IndustrialPort
+        ? 'rgba(232, 170, 79, 0.98)'
+        : port.type === PortType.FishingDock
+          ? 'rgba(124, 216, 179, 0.98)'
+          : 'rgba(116, 207, 244, 0.98)';
+      this.context.lineWidth = Math.max(0.12, 1.4 / Math.max(1, zoom));
+      this.context.fillRect(-radius * 0.65, -radius * 0.65, radius * 1.3, radius * 1.3);
+      this.context.strokeRect(-radius * 0.65, -radius * 0.65, radius * 1.3, radius * 1.3);
+      this.context.beginPath();
+      this.context.moveTo(radius * 0.65, 0);
+      this.context.lineTo(radius * 2.1, 0);
+      this.context.stroke();
+      this.context.restore();
+    }
+  }
+
+  private drawPortLabels(world: World, zoom: number, occupied: LabelBounds[], visibleBounds: WorldBounds): void {
+    if (zoom < 2.1) return;
+    const fontSize = Math.max(2.2, 7.5 / Math.max(1, zoom));
+    this.context.font = `700 ${fontSize}px ui-sans-serif`;
+    this.context.textAlign = 'center';
+    this.context.textBaseline = 'bottom';
+    for (const port of world.ports) {
+      if (!pointInBounds(port.position.x, port.position.y, visibleBounds, 12)) continue;
+      const width = this.context.measureText(port.name).width + fontSize;
+      const bounds: LabelBounds = {
+        left: port.position.x - width * 0.5,
+        right: port.position.x + width * 0.5,
+        top: port.position.y - fontSize * 2.1,
+        bottom: port.position.y - fontSize * 0.35,
+      };
+      if (this.customization.labels.avoidCollisions && occupied.some((item) => boundsOverlap(item, bounds))) continue;
+      this.context.lineWidth = Math.max(0.14, 1.7 / Math.max(1, zoom));
+      this.context.strokeStyle = 'rgba(7, 24, 31, 0.90)';
+      this.context.fillStyle = 'rgba(215, 249, 255, 0.98)';
+      this.context.strokeText(port.name, port.position.x, port.position.y - 0.9);
+      this.context.fillText(port.name, port.position.x, port.position.y - 0.9);
+      occupied.push(bounds);
+    }
+  }
+
+  private drawWaterRouteLabels(world: World, zoom: number, occupied: LabelBounds[], visibleBounds: WorldBounds): void {
+    if (zoom < 1.65) return;
+    const fontSize = Math.max(2.2, 7.2 / Math.max(1, zoom));
+    this.context.font = `650 ${fontSize}px ui-sans-serif`;
+    this.context.textAlign = 'center';
+    this.context.textBaseline = 'middle';
+    for (const route of world.waterRoutes) {
+      if (!route.enabled || route.centerline.length === 0) continue;
+      const middleIndex = Math.floor(route.centerline.length * 0.5);
+      const point = route.centerline[middleIndex];
+      if (point === undefined || !pointInBounds(point.x, point.y, visibleBounds, 16)) continue;
+      const before = route.centerline[Math.max(0, middleIndex - 3)] ?? point;
+      const after = route.centerline[Math.min(route.centerline.length - 1, middleIndex + 3)] ?? point;
+      const angle = normalizeReadableAngle(Math.atan2(after.y - before.y, after.x - before.x));
+      const width = this.context.measureText(route.name).width + fontSize;
+      const bounds: LabelBounds = { left: point.x - width * 0.5, right: point.x + width * 0.5, top: point.y - fontSize, bottom: point.y + fontSize };
+      if (this.customization.labels.avoidCollisions && occupied.some((item) => boundsOverlap(item, bounds))) continue;
+      this.context.save();
+      this.context.translate(point.x, point.y);
+      this.context.rotate(angle);
+      this.context.lineWidth = Math.max(0.13, 1.6 / Math.max(1, zoom));
+      this.context.strokeStyle = 'rgba(5, 24, 39, 0.86)';
+      this.context.fillStyle = 'rgba(191, 237, 255, 0.96)';
+      this.context.strokeText(route.name, 0, 0);
+      this.context.fillText(route.name, 0, 0);
+      this.context.restore();
       occupied.push(bounds);
     }
   }
@@ -837,6 +955,19 @@ export class CanvasRenderer {
       if (midpoint !== undefined && asset !== undefined) {
         this.drawTargetAsset(asset, midpoint.x, midpoint.y, Math.max(2, bridge.deckWidth * 2.4), Math.max(2, bridge.deckWidth * 1.8), 0.95);
       }
+    }
+
+    const portAssets = this.assetsFor(AssetTargetCategory.Infrastructure, 'port');
+    for (const port of world.ports) {
+      const asset = portAssets[port.id % Math.max(1, portAssets.length)];
+      if (asset !== undefined) this.drawTargetAsset(asset, port.position.x, port.position.y, 2.8, 2.8, 0.96);
+    }
+
+    const routeAssets = this.assetsFor(AssetTargetCategory.Infrastructure, 'water-route');
+    for (const route of world.waterRoutes) {
+      const asset = routeAssets[route.id % Math.max(1, routeAssets.length)];
+      const midpoint = route.centerline[Math.floor(route.centerline.length * 0.5)];
+      if (asset !== undefined && midpoint !== undefined) this.drawTargetAsset(asset, midpoint.x, midpoint.y, 2.1, 2.1, 0.92);
     }
 
     const benchAssets = this.assetsFor(AssetTargetCategory.Infrastructure, 'bench');
