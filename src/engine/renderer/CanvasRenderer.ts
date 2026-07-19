@@ -11,6 +11,7 @@ import type { World } from '../world/World';
 import { StoryObjectType } from '../../story/StoryObject';
 import { Camera } from './Camera';
 import { LayerVisibility, RenderLayer } from './Layers';
+import { SpatialGridIndex } from './SpatialGridIndex';
 import {
   accessibilityColor,
   elevationColor,
@@ -22,6 +23,60 @@ import {
   zoneColor,
   type Rgba,
 } from './Palette';
+
+export type RasterCacheLayer =
+  | 'terrainCanvas'
+  | 'elevationCanvas'
+  | 'moistureCanvas'
+  | 'temperatureCanvas'
+  | 'accessibilityCanvas'
+  | 'landValueCanvas'
+  | 'zonesCanvas'
+  | 'generatedZonesCanvas'
+  | 'zoneOverridesCanvas'
+  | 'floodplainCanvas';
+
+export const ALL_RASTER_CACHE_LAYERS: readonly RasterCacheLayer[] = [
+  'terrainCanvas', 'elevationCanvas', 'moistureCanvas', 'temperatureCanvas',
+  'accessibilityCanvas', 'landValueCanvas', 'zonesCanvas', 'generatedZonesCanvas',
+  'zoneOverridesCanvas', 'floodplainCanvas',
+];
+
+export function rasterCacheLayersForStage(stageId: string): readonly RasterCacheLayer[] {
+  switch (stageId) {
+    case 'place-naming':
+    case 'buildings':
+    case 'vegetation':
+    case 'story-layer':
+      return [];
+    case 'zone-overrides':
+      return ['zonesCanvas', 'zoneOverridesCanvas'];
+    case 'zoning':
+      return ['zonesCanvas', 'generatedZonesCanvas', 'zoneOverridesCanvas'];
+    case 'land-value':
+    case 'blocks':
+      return ['landValueCanvas', 'zonesCanvas', 'generatedZonesCanvas', 'zoneOverridesCanvas'];
+    case 'accessibility':
+    case 'water-routes':
+    case 'ports':
+    case 'bridges':
+    case 'road-network':
+    case 'anchor-placement':
+    case 'settlements':
+    case 'islands':
+    case 'landmasses':
+      return ['accessibilityCanvas', 'landValueCanvas', 'zonesCanvas', 'generatedZonesCanvas', 'zoneOverridesCanvas'];
+    default:
+      return ALL_RASTER_CACHE_LAYERS;
+  }
+}
+
+export interface RendererDiagnostics {
+  readonly cacheBuildMs: number;
+  readonly lastRenderMs: number;
+  readonly visibleBuildings: number;
+  readonly visibleVegetation: number;
+}
 
 interface CachedWorldLayers {
   readonly cacheKey: string;
@@ -141,6 +196,11 @@ export class CanvasRenderer {
   private customization: RenderCustomization = EMPTY_RENDER_CUSTOMIZATION;
   private assetDefinitionsReference: readonly RuntimeImageAsset[] = [];
   private readonly assetLookup = new Map<string, RuntimeImageAsset[]>();
+  private readonly buildingIndex = new SpatialGridIndex(24);
+  private readonly vegetationIndex = new SpatialGridIndex(24);
+  private diagnostics: RendererDiagnostics = { cacheBuildMs: 0, lastRenderMs: 0, visibleBuildings: 0, visibleVegetation: 0 };
+
+  public getDiagnostics(): RendererDiagnostics { return { ...this.diagnostics }; }
 
   public constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -179,64 +239,88 @@ export class CanvasRenderer {
     }
   }
 
-  public rebuildCache(world: World): void {
+  public rebuildCache(
+    world: World,
+    invalidatedLayers: readonly RasterCacheLayer[] = ALL_RASTER_CACHE_LAYERS,
+  ): void {
+    const startedAt = performance.now();
+    const previous = this.cache !== undefined
+      && this.cache.width === world.width
+      && this.cache.height === world.height
+      ? this.cache
+      : undefined;
+    const invalidated = new Set(invalidatedLayers);
+    const cached = <K extends RasterCacheLayer>(key: K, factory: () => HTMLCanvasElement): HTMLCanvasElement => {
+      if (previous !== undefined && !invalidated.has(key)) return previous[key];
+      return factory();
+    };
+
     this.cache = {
       cacheKey: `${world.seed}::${world.metadata.generationVersion}`,
       width: world.width,
       height: world.height,
-      terrainCanvas: createLayerCanvas(world, (index) => {
+      terrainCanvas: cached('terrainCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Terrain renderer encountered an invalid tile index.');
         return terrainColor(tile.terrain);
-      }),
-      elevationCanvas: createLayerCanvas(world, (index) => {
+      })),
+      elevationCanvas: cached('elevationCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Elevation renderer encountered an invalid tile index.');
         return elevationColor(tile.elevation);
-      }),
-      moistureCanvas: createLayerCanvas(world, (index) => {
+      })),
+      moistureCanvas: cached('moistureCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Moisture renderer encountered an invalid tile index.');
         return moistureColor(tile.moisture);
-      }),
-      temperatureCanvas: createLayerCanvas(world, (index) => {
+      })),
+      temperatureCanvas: cached('temperatureCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Temperature renderer encountered an invalid tile index.');
         return temperatureColor(tile.temperature);
-      }),
-      accessibilityCanvas: createLayerCanvas(world, (index) => {
+      })),
+      accessibilityCanvas: cached('accessibilityCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Accessibility renderer encountered an invalid tile index.');
         return accessibilityColor(tile.accessibility);
-      }),
-      landValueCanvas: createLayerCanvas(world, (index) => {
+      })),
+      landValueCanvas: cached('landValueCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Land-value renderer encountered an invalid tile index.');
         return landValueColor(tile.landValue);
-      }),
-      zonesCanvas: createLayerCanvas(world, (index) => {
+      })),
+      zonesCanvas: cached('zonesCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Zone renderer encountered an invalid tile index.');
         return zoneColor(tile.zoneType);
-      }),
-      generatedZonesCanvas: createLayerCanvas(world, (index) => {
+      })),
+      generatedZonesCanvas: cached('generatedZonesCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Generated-zone renderer encountered an invalid tile index.');
         return zoneColor(tile.generatedZoneType);
-      }),
-      zoneOverridesCanvas: createLayerCanvas(world, (index) => {
+      })),
+      zoneOverridesCanvas: cached('zoneOverridesCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined || !tile.hasZoneOverride) return [0, 0, 0, 0];
         if (tile.zoneOverrideType === null) return [56, 52, 48, tile.zoneLocked ? 255 : 215];
         const color = zoneColor(tile.zoneOverrideType);
         return [color[0], color[1], color[2], tile.zoneLocked ? 255 : 220];
-      }),
-      floodplainCanvas: createLayerCanvas(world, (index) => {
+      })),
+      floodplainCanvas: cached('floodplainCanvas', () => createLayerCanvas(world, (index) => {
         const tile = world.tiles[index];
         if (tile === undefined) throw new Error('Floodplain renderer encountered an invalid tile index.');
         return floodRiskColor(tile.floodRisk);
-      }),
+      })),
     };
+
+    this.buildingIndex.clear();
+    for (const building of world.buildings) {
+      const tile = world.tiles[building.tileIndices[0] ?? -1];
+      if (tile !== undefined) this.buildingIndex.insert(building.id, tile.x, tile.y);
+    }
+    this.vegetationIndex.clear();
+    for (const plant of world.vegetation) this.vegetationIndex.insert(plant.id, plant.x, plant.y);
+    this.diagnostics = { ...this.diagnostics, cacheBuildMs: performance.now() - startedAt };
   }
 
   public render(
@@ -244,6 +328,7 @@ export class CanvasRenderer {
     camera: Camera,
     viewport?: { readonly width: number; readonly height: number; readonly pixelRatio: number },
   ): void {
+    const renderStartedAt = performance.now();
     this.resize(viewport);
 
     const expectedCacheKey = `${world.seed}::${world.metadata.generationVersion}`;
@@ -321,6 +406,7 @@ export class CanvasRenderer {
     this.context.globalAlpha = 1;
     if (this.layers.isVisible(RenderLayer.Grid) && camera.zoom >= 5) this.drawGrid(world);
     this.context.restore();
+    this.diagnostics = { ...this.diagnostics, lastRenderMs: performance.now() - renderStartedAt };
   }
 
   public async exportPng(world: World, options: ImageExportOptions): Promise<Blob> {
@@ -850,7 +936,11 @@ export class CanvasRenderer {
     };
     this.context.lineJoin = 'round';
     this.context.lineWidth = Math.max(0.12, 0.65 / Math.max(1, zoom));
-    for (const building of world.buildings) {
+    const visibleBuildingIds = this.buildingIndex.query(visibleBounds, 10);
+    this.diagnostics = { ...this.diagnostics, visibleBuildings: visibleBuildingIds.length };
+    for (const buildingId of visibleBuildingIds) {
+      const building = world.buildings[buildingId];
+      if (building === undefined) continue;
       const locationTile = world.tiles[building.tileIndices[0] ?? -1];
       if (locationTile !== undefined && !pointInBounds(locationTile.x, locationTile.y, visibleBounds, 10)) continue;
       const first = building.footprint[0];
@@ -1063,8 +1153,11 @@ export class CanvasRenderer {
       [VegetationType.ForestTree]: '#315f3d',
       [VegetationType.Scrub]: '#738257',
     };
-    for (const plant of world.vegetation) {
-      if (!pointInBounds(plant.x, plant.y, visibleBounds, 2)) continue;
+    const visibleVegetationIds = this.vegetationIndex.query(visibleBounds, 2);
+    this.diagnostics = { ...this.diagnostics, visibleVegetation: visibleVegetationIds.length };
+    for (const vegetationId of visibleVegetationIds) {
+      const plant = world.vegetation[vegetationId];
+      if (plant === undefined || !pointInBounds(plant.x, plant.y, visibleBounds, 2)) continue;
       const assets = this.assetsFor(AssetTargetCategory.Vegetation, plant.type);
       const asset = assets.length === 0 ? undefined : assets[plant.id % assets.length];
       if (asset !== undefined) {

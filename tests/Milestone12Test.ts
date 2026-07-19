@@ -18,7 +18,7 @@ const options = {
 const world = pipeline.generate(seed, options);
 const repeat = pipeline.generate(seed, options);
 
-assert(world.metadata.schemaVersion === 12, 'Milestone 12 schema version was not exported.');
+assert(world.metadata.schemaVersion >= 12, 'Milestone 12 schema compatibility was not preserved.');
 assert(world.metadata.targetIslandCount === 6, 'Requested island count was not preserved in metadata.');
 assert(world.metadata.islandSpacingKilometers === 3.5, 'Requested island spacing was not preserved in metadata.');
 assert(world.metadata.tileSizeMeters === 125, 'Metro-region tile scale is not 125 meters.');

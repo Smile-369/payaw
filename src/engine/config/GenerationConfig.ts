@@ -335,7 +335,7 @@ export interface GenerationConfig {
 }
 
 export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
-  version: 'payaw-m12-metro-region-v1',
+  version: 'payaw-m14-performance-v1',
   world: {
     width: 256,
     height: 192,

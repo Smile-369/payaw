@@ -130,12 +130,51 @@ function applyOverride(island: Island, override: IslandOverride | undefined): vo
   }
 }
 
+
+function applySatelliteSettlementTarget(
+  world: World,
+  satelliteSettlementCount: number,
+  overrides: readonly IslandOverride[],
+): void {
+  const primary = world.islands.find((island) => island.role === IslandRole.PrimarySettlement) ?? world.islands[0];
+  if (primary === undefined) return;
+  const explicitCounts = new Set(
+    overrides.filter((override) => override.settlementCount !== undefined).map((override) => override.key),
+  );
+
+  for (const island of world.islands) {
+    if (explicitCounts.has(island.key)) continue;
+    island.settlementCountTarget = island === primary ? 1 : 0;
+  }
+
+  let remaining = Math.max(0, Math.min(12, Math.round(satelliteSettlementCount)));
+  const secondaryCandidates = world.islands
+    .filter((island) => island !== primary && island.allowRoads && roleWeight(island.role) > 0)
+    .sort((left, right) => right.viabilityScore - left.viabilityScore || left.id - right.id);
+  const candidates = [...secondaryCandidates, primary];
+
+  while (remaining > 0) {
+    let allocatedThisPass = false;
+    for (const island of candidates) {
+      if (remaining <= 0) break;
+      if (explicitCounts.has(island.key)) continue;
+      const maximum = island === primary ? 13 : 3;
+      if (island.settlementCountTarget >= maximum) continue;
+      island.settlementCountTarget += 1;
+      remaining -= 1;
+      allocatedThisPass = true;
+    }
+    if (!allocatedThisPass) break;
+  }
+}
+
 export function generateIslands(
   world: World,
   townScale: TownScale,
   random: Random,
   overrides: readonly IslandOverride[] = [],
   maximumIslandCount?: number,
+  satelliteSettlementCount = 4,
 ): void {
   const minimumArea = Math.max(20, Math.floor(world.tiles.length * 0.00042));
   const candidates = world.landmasses
@@ -197,6 +236,8 @@ export function generateIslands(
       }
     }
   }
+
+  applySatelliteSettlementTarget(world, satelliteSettlementCount, overrides);
 
   for (const tile of world.tiles) tile.islandId = null;
   for (const island of world.islands) {

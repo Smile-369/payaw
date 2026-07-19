@@ -1718,3 +1718,79 @@ textarea {
   .profile-grid { grid-template-columns: 1fr; }
   .project-json-panel .button-row { align-items: stretch; flex-direction: column; }
 }
+
+/* Milestone 14 performance controls */
+.generation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.generation-progress {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.generation-progress[hidden] { display: none; }
+
+.generation-progress-track {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.generation-progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(92, 201, 160, 0.95), rgba(236, 197, 102, 0.95));
+  transition: width 120ms ease-out;
+}
+
+.generation-progress-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted-text, #9da9a2);
+  font-size: 0.74rem;
+}
+
+.performance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.performance-grid > div {
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.performance-grid small,
+.performance-grid strong {
+  display: block;
+}
+
+.performance-grid small {
+  margin-bottom: 0.2rem;
+  color: var(--muted-text, #9da9a2);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.performance-grid strong {
+  overflow: hidden;
+  color: var(--text, #eff5ef);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

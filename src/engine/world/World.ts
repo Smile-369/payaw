@@ -25,6 +25,7 @@ export interface WorldMetadata {
   readonly climatePreset: ClimatePreset;
   readonly targetIslandCount: number;
   readonly islandSpacingKilometers: number;
+  readonly satelliteSettlementCount: number;
   readonly tileSizeMeters: number;
   readonly worldWidthKilometers: number;
   readonly worldHeightKilometers: number;
@@ -58,6 +59,34 @@ export interface SerializedWorld {
 }
 
 export class World {
+  /** Rehydrate a structured-cloned worker result without re-running generation. */
+  public static fromSerialized(serialized: SerializedWorld, diagnostics: WorldDiagnostics): World {
+    const world = Object.create(World.prototype) as World;
+    Object.assign(world, {
+      seed: serialized.seed,
+      width: serialized.width,
+      height: serialized.height,
+      tiles: [...serialized.tiles],
+      landmasses: [...serialized.landmasses],
+      islands: [...serialized.islands],
+      settlements: [...serialized.settlements],
+      rivers: [...serialized.rivers],
+      anchors: [...serialized.anchors],
+      roads: [...serialized.roads],
+      bridges: [...serialized.bridges],
+      ports: [...serialized.ports],
+      waterRoutes: [...serialized.waterRoutes],
+      blocks: [...serialized.blocks],
+      zones: [...serialized.zones],
+      buildings: [...serialized.buildings],
+      vegetation: [...serialized.vegetation],
+      storyObjects: [...serialized.storyObjects],
+      metadata: serialized.metadata,
+      diagnostics,
+    });
+    return world;
+  }
+
   public readonly seed: string;
   public readonly width: number;
   public readonly height: number;
@@ -82,7 +111,7 @@ export class World {
   public constructor(
     seed: string,
     config: GenerationConfig,
-    profile: { readonly terrainSize: TerrainSize; readonly townScale: TownScale; readonly terrainShape: TerrainShape; readonly climatePreset: ClimatePreset; readonly islandCount: number; readonly islandSpacingKilometers: number },
+    profile: { readonly terrainSize: TerrainSize; readonly townScale: TownScale; readonly terrainShape: TerrainShape; readonly climatePreset: ClimatePreset; readonly islandCount: number; readonly islandSpacingKilometers: number; readonly satelliteSettlementCount: number },
   ) {
     this.seed = seed;
     this.width = config.world.width;
@@ -110,7 +139,7 @@ export class World {
     }
 
     this.metadata = {
-      schemaVersion: 12,
+      schemaVersion: 14,
       generationVersion: config.version,
       terrainSize: profile.terrainSize,
       townScale: profile.townScale,
@@ -118,6 +147,7 @@ export class World {
       climatePreset: profile.climatePreset,
       targetIslandCount: profile.terrainShape === 'twin-islands' ? 2 : profile.terrainShape === 'archipelago' ? profile.islandCount : 1,
       islandSpacingKilometers: profile.islandSpacingKilometers,
+      satelliteSettlementCount: profile.satelliteSettlementCount,
       tileSizeMeters: config.world.tileSizeMeters,
       worldWidthKilometers: this.width * config.world.tileSizeMeters / 1000,
       worldHeightKilometers: this.height * config.world.tileSizeMeters / 1000,

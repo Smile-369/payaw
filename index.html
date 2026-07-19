@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <meta content="#0b0f0d" name="theme-color"/>
-<title>PAYAW World Studio · Milestone 12</title>
+<title>PAYAW World Studio · Milestone 14</title>
 </head>
 <body>
 <div id="app">
@@ -17,8 +17,8 @@
 <h1>World Studio</h1>
 </div>
 </div>
-<span class="version-pill">M12</span>
-<p class="subtitle">Build a Metro Bacolod-scale region with authored islands, settlements, bridges, ports, and routes. Run encounters in DM Mode.</p>
+<span class="version-pill">M14</span>
+<p class="subtitle">Build a responsive Metro Bacolod-scale region with cancellable generation, authored settlements, bridges, ports, and routes.</p>
 </header>
 <nav aria-label="Workspace" class="workspace-switcher">
 <button aria-selected="true" class="workspace-tab" data-workspace="editor" id="workspace-editor-button" type="button">
@@ -94,12 +94,38 @@
 <div class="input-with-unit"><input id="island-spacing-input" type="number" min="0.5" max="12" step="0.5" value="4"/><span>km</span></div>
 <small>Approximate minimum water gap between major islands.</small>
 </label>
+<label class="form-field">
+<span>Satellite towns</span>
+<input id="satellite-count-input" type="number" min="0" max="12" step="1" value="4"/>
+<small>Set to 0 for only the primary Poblacion.</small>
+</label>
 </div>
 <p class="regional-scale-readout" id="regional-scale-readout">Metro-scale region: 32 × 24 km · 125 m per tile</p>
 <p class="helper-text" id="profile-hint">Small terrain with a balanced semi-urban settlement.</p>
+<div class="generation-actions">
 <button class="primary" id="generate-button" type="button">Generate world</button>
+<button id="cancel-generation-button" type="button" hidden>Cancel</button>
+</div>
+<div class="generation-progress" id="generation-progress" hidden>
+<div class="generation-progress-track"><span id="generation-progress-fill"></span></div>
+<div class="generation-progress-copy"><span id="generation-progress-stage">Preparing…</span><span id="generation-progress-percent">0%</span></div>
+</div>
 <div aria-live="polite" class="status-message" id="generation-status" role="status">Ready.</div>
-</section><details class="card disclosure">
+</section>
+<details class="card disclosure performance-panel">
+<summary><span><small>Milestone 14</small>Performance diagnostics</span><span class="summary-caret">⌄</span></summary>
+<div class="disclosure-body">
+<div class="performance-grid">
+<div><small>Generation</small><strong id="perf-generation-total">—</strong></div>
+<div><small>Slowest stage</small><strong id="perf-slowest-stage">—</strong></div>
+<div><small>Layer cache</small><strong id="perf-cache-time">—</strong></div>
+<div><small>Last render</small><strong id="perf-render-time">—</strong></div>
+<div><small>Visible buildings</small><strong id="perf-visible-buildings">—</strong></div>
+<div><small>Visible vegetation</small><strong id="perf-visible-vegetation">—</strong></div>
+</div>
+<p class="helper-text">Full generation yields between deterministic stages. Dense point layers use viewport indexes, and partial regeneration only rebuilds raster caches affected by the edited stage.</p>
+</div>
+</details><details class="card disclosure">
 <summary>
 <span><small>Display</small>Map view</span>
 <span class="summary-caret">⌄</span>

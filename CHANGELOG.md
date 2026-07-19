@@ -1,3 +1,17 @@
+# 0.14.0
+
+- Added 0–12 satellite-settlement control; zero produces only the primary settlement.
+- Added deterministic allocation of requested satellite settlements across viable islands.
+- Added a dedicated Web Worker for user-triggered full-world generation.
+- Added immediate generation cancellation by terminating the active worker.
+- Added 31-stage generation progress reporting and live timing diagnostics.
+- Added worker-result rehydration without regenerating on the main thread.
+- Added per-raster-layer cache invalidation for partial regeneration.
+- Added viewport spatial indexes for buildings and vegetation.
+- Added live renderer diagnostics for cache, frame time, and visible dense objects.
+- Updated world schema and engine generation version for Milestone 14.
+- Added focused deterministic, cancellation, and satellite-count tests.
+
 # 0.13.0
 
 - Added eight explicit World Layout presets.

@@ -14,6 +14,8 @@ import {
 import { ASSET_CATEGORY_LABELS, assetTargetsFor, describeAssetTarget } from './customization/AssetTargets';
 import { DEFAULT_GENERATION_CONFIG } from './engine/config/GenerationConfig';
 import { GenerationPipeline } from './engine/generation/GenerationPipeline';
+import { GenerationWorkerClient } from './browser/GenerationWorkerClient';
+import { GenerationCancelledError, type GenerationProgress } from './engine/generation/GenerationScheduler';
 import { InvalidPositionOverrideError } from './engine/generation/InvalidPositionOverrideError';
 import { recoverPositionOverrides } from './engine/generation/PositionOverrideRecovery';
 import {
@@ -30,7 +32,7 @@ import {
   type ZoneOverride,
 } from './engine/generation/GenerationOptions';
 import { Camera } from './engine/renderer/Camera';
-import { CanvasRenderer } from './engine/renderer/CanvasRenderer';
+import { CanvasRenderer, rasterCacheLayersForStage } from './engine/renderer/CanvasRenderer';
 import { RenderLayer } from './engine/renderer/Layers';
 import {
   ANCHOR_LABELS,
@@ -79,6 +81,7 @@ interface StoredProfile {
   readonly climatePreset: ClimatePreset;
   readonly islandCount: number;
   readonly islandSpacingKilometers: number;
+  readonly satelliteSettlementCount: number;
 }
 
 interface StoredNameState {
@@ -133,6 +136,7 @@ function downloadWorld(
     climatePreset: world.metadata.climatePreset,
     islandCount: world.metadata.targetIslandCount,
     islandSpacingKilometers: world.metadata.islandSpacingKilometers,
+    satelliteSettlementCount: world.metadata.satelliteSettlementCount,
   };
   const authoring = {
     customAnchors,
@@ -310,6 +314,7 @@ function defaultStoredProfile(): StoredProfile {
     climatePreset: ClimatePreset.TropicalMonsoon,
     islandCount: 5,
     islandSpacingKilometers: 4,
+    satelliteSettlementCount: 4,
   };
 }
 
@@ -326,6 +331,7 @@ function loadProfile(): StoredProfile {
       climatePreset: isEnumValue(Object.values(ClimatePreset), value.climatePreset) ? value.climatePreset : defaults.climatePreset,
       islandCount: Math.round(finiteSetting(value.islandCount, defaults.islandCount, 2, 12)),
       islandSpacingKilometers: finiteSetting(value.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),
+      satelliteSettlementCount: Math.round(finiteSetting(value.satelliteSettlementCount, defaults.satelliteSettlementCount, 0, 12)),
     };
   } catch {
     return defaults;
@@ -693,9 +699,21 @@ const terrainShapeSelect = requireElement<HTMLSelectElement>('#terrain-shape');
 const climatePresetSelect = requireElement<HTMLSelectElement>('#climate-preset');
 const islandCountInput = requireElement<HTMLInputElement>('#island-count-input');
 const islandSpacingInput = requireElement<HTMLInputElement>('#island-spacing-input');
+const satelliteCountInput = requireElement<HTMLInputElement>('#satellite-count-input');
 const regionalScaleReadout = requireElement<HTMLElement>('#regional-scale-readout');
 const profileHint = requireElement<HTMLElement>('#profile-hint');
 const generateButton = requireElement<HTMLButtonElement>('#generate-button');
+const cancelGenerationButton = requireElement<HTMLButtonElement>('#cancel-generation-button');
+const generationProgress = requireElement<HTMLElement>('#generation-progress');
+const generationProgressFill = requireElement<HTMLElement>('#generation-progress-fill');
+const generationProgressStage = requireElement<HTMLElement>('#generation-progress-stage');
+const generationProgressPercent = requireElement<HTMLElement>('#generation-progress-percent');
+const perfGenerationTotal = requireElement<HTMLElement>('#perf-generation-total');
+const perfSlowestStage = requireElement<HTMLElement>('#perf-slowest-stage');
+const perfCacheTime = requireElement<HTMLElement>('#perf-cache-time');
+const perfRenderTime = requireElement<HTMLElement>('#perf-render-time');
+const perfVisibleBuildings = requireElement<HTMLElement>('#perf-visible-buildings');
+const perfVisibleVegetation = requireElement<HTMLElement>('#perf-visible-vegetation');
 const randomSeedButton = requireElement<HTMLButtonElement>('#random-seed-button');
 const exportButton = requireElement<HTMLButtonElement>('#export-button');
 const exportImageButton = requireElement<HTMLButtonElement>('#export-image-button');
@@ -928,6 +946,7 @@ const VIEW_PRESETS: Readonly<Record<string, readonly RenderLayer[]>> = {
 };
 
 const pipeline = new GenerationPipeline();
+const generationWorker = new GenerationWorkerClient(pipeline);
 const renderer = new CanvasRenderer(canvas);
 const camera = new Camera();
 const assetRepository = new AssetRepository();
@@ -939,6 +958,7 @@ terrainShapeSelect.value = profile.terrainShape;
 climatePresetSelect.value = profile.climatePreset;
 islandCountInput.value = String(profile.islandCount);
 islandSpacingInput.value = String(profile.islandSpacingKilometers);
+satelliteCountInput.value = String(profile.satelliteSettlementCount);
 const storedAnchors = loadAnchorState();
 let customAnchors = [...storedAnchors.customAnchors];
 let builtInOverrides = [...storedAnchors.builtInOverrides];
@@ -963,6 +983,8 @@ let importedAssets: ImportedImageAsset[] = [];
 let runtimeImageAssets: RuntimeImageAsset[] = [];
 let world: World;
 let activeWorldSignature = '';
+let activeGenerationController: AbortController | null = null;
+let generationSequence = 0;
 let renderRequested = true;
 let dragging = false;
 let editMode = false;
@@ -1026,9 +1048,10 @@ function selectedTerrainShape(): TerrainShape { return terrainShapeSelect.value 
 function selectedClimatePreset(): ClimatePreset { return climatePresetSelect.value as ClimatePreset; }
 function selectedIslandCount(): number { return Math.max(2, Math.min(12, Math.round(Number(islandCountInput.value) || 5))); }
 function selectedIslandSpacing(): number { return Math.max(0.5, Math.min(12, Number(islandSpacingInput.value) || 4)); }
+function selectedSatelliteCount(): number { return Math.max(0, Math.min(12, Math.round(Number(satelliteCountInput.value) || 0))); }
 
 function worldSignature(): string {
-  return `${seedInput.value.trim()}|${selectedTerrainSize()}|${selectedTownScale()}|${selectedTerrainShape()}|${selectedClimatePreset()}|${selectedIslandCount()}|${selectedIslandSpacing().toFixed(2)}`;
+  return `${seedInput.value.trim()}|${selectedTerrainSize()}|${selectedTownScale()}|${selectedTerrainShape()}|${selectedClimatePreset()}|${selectedIslandCount()}|${selectedIslandSpacing().toFixed(2)}|${selectedSatelliteCount()}`;
 }
 
 function generationOptions(
@@ -1047,6 +1070,7 @@ function generationOptions(
     climatePreset: selectedClimatePreset(),
     islandCount: selectedIslandCount(),
     islandSpacingKilometers: selectedIslandSpacing(),
+    satelliteSettlementCount: selectedSatelliteCount(),
     roadNameOverrides,
     blockNameOverrides,
     anchorPositionOverrides: candidateAnchorPositions,
@@ -1287,6 +1311,75 @@ function setStatus(message: string, state: 'success' | 'warning' | 'error' | 'wo
   statusMessage.dataset.state = state;
 }
 
+const GENERATION_STAGE_LABELS: Readonly<Record<string, string>> = {
+  terrain: 'Elevation',
+  'mountain-structure': 'Mountain structure',
+  'thermal-erosion': 'Thermal erosion',
+  coastline: 'Coastline',
+  slope: 'Terrain slopes',
+  climate: 'Climate',
+  'hydraulic-erosion': 'Hydraulic erosion',
+  'eroded-coastline': 'Eroded coastline',
+  'eroded-slope': 'Eroded slopes',
+  'terrain-hydrology': 'Hydrology',
+  'final-coastline': 'Final coastline',
+  'delta-drainage-repair': 'Drainage repair',
+  'final-slope': 'Final slopes',
+  'terrain-classification': 'Terrain classification',
+  landmasses: 'Landmass detection',
+  islands: 'Island planning',
+  settlements: 'Settlements',
+  'anchor-placement': 'Anchors',
+  'road-network': 'Road network',
+  bridges: 'Bridges',
+  ports: 'Ports',
+  'water-routes': 'Water routes',
+  accessibility: 'Accessibility',
+  blocks: 'Blocks',
+  'land-value': 'Land value',
+  zoning: 'Zoning',
+  'zone-overrides': 'Zone overrides',
+  'place-naming': 'Place names',
+  buildings: 'Buildings',
+  vegetation: 'Vegetation',
+  'story-layer': 'Story layer',
+};
+
+function setGenerationRunning(running: boolean): void {
+  generateButton.disabled = running;
+  randomSeedButton.disabled = running;
+  cancelGenerationButton.hidden = !running;
+  generationProgress.hidden = !running;
+  if (!running) {
+    generationProgressFill.style.width = '0%';
+    generationProgressPercent.textContent = '0%';
+  }
+}
+
+function updateGenerationProgress(progress: GenerationProgress): void {
+  const completedStages = progress.stageIndex + 1;
+  const percent = Math.round(completedStages / Math.max(1, progress.stageCount) * 100);
+  generationProgressFill.style.width = `${percent}%`;
+  generationProgressPercent.textContent = `${percent}%`;
+  generationProgressStage.textContent = `${GENERATION_STAGE_LABELS[progress.stageId] ?? progress.stageId} · ${progress.stageDurationMs.toFixed(0)} ms`;
+}
+
+function updatePerformancePanel(): void {
+  if (world === undefined) return;
+  const stageEntries = Object.entries(world.diagnostics.stageTimingsMs);
+  const total = stageEntries.reduce((sum, [, duration]) => sum + duration, 0);
+  const slowest = [...stageEntries].sort((left, right) => right[1] - left[1])[0];
+  const rendererDiagnostics = renderer.getDiagnostics();
+  perfGenerationTotal.textContent = `${total.toFixed(0)} ms`;
+  perfSlowestStage.textContent = slowest === undefined
+    ? '—'
+    : `${GENERATION_STAGE_LABELS[slowest[0]] ?? slowest[0]} · ${slowest[1].toFixed(0)} ms`;
+  perfCacheTime.textContent = `${rendererDiagnostics.cacheBuildMs.toFixed(1)} ms`;
+  perfRenderTime.textContent = `${rendererDiagnostics.lastRenderMs.toFixed(1)} ms`;
+  perfVisibleBuildings.textContent = rendererDiagnostics.visibleBuildings.toLocaleString();
+  perfVisibleVegetation.textContent = rendererDiagnostics.visibleVegetation.toLocaleString();
+}
+
 function fitCamera(): void {
   camera.fit(world.width, world.height, canvas.clientWidth, canvas.clientHeight);
   requestRender();
@@ -1311,7 +1404,10 @@ function updateProfileHint(): void {
   const islandText = archipelago
     ? ` ${selectedIslandCount()} major islands with approximately ${selectedIslandSpacing().toFixed(1)} km minimum gaps.`
     : twin ? ` Two major islands with approximately ${selectedIslandSpacing().toFixed(1)} km minimum separation.` : '';
-  profileHint.textContent = `${shapeText}, ${climateText.toLowerCase()}, ${terrainText}, with ${townText}.${islandText}`;
+  const satelliteText = selectedSatelliteCount() === 0
+    ? ' Only the primary Poblacion will be generated.'
+    : ` ${selectedSatelliteCount()} satellite settlement${selectedSatelliteCount() === 1 ? '' : 's'} will be generated.`;
+  profileHint.textContent = `${shapeText}, ${climateText.toLowerCase()}, ${terrainText}, with ${townText}.${islandText}${satelliteText}`;
   regionalScaleReadout.textContent = `Metro-scale region: ${widthKilometers} × ${heightKilometers} km · 125 m per tile`;
 }
 
@@ -1937,6 +2033,7 @@ function projectProfileFrom(value: unknown): StoredProfile {
     climatePreset: isEnumValue(Object.values(ClimatePreset), item.climatePreset) ? item.climatePreset : defaults.climatePreset,
     islandCount: Math.round(finiteSetting(item.islandCount ?? item.targetIslandCount, defaults.islandCount, 2, 12)),
     islandSpacingKilometers: finiteSetting(item.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),
+    satelliteSettlementCount: Math.round(finiteSetting(item.satelliteSettlementCount, defaults.satelliteSettlementCount, 0, 12)),
   };
 }
 
@@ -1966,7 +2063,7 @@ async function importProjectFile(file: File): Promise<void> {
   const root = parsed as Record<string, unknown>;
   const metadata = typeof root.metadata === 'object' && root.metadata !== null ? root.metadata as Record<string, unknown> : {};
   const schemaVersion = typeof metadata.schemaVersion === 'number' ? metadata.schemaVersion : 8;
-  if (schemaVersion > 12) throw new Error(`This project uses schema ${schemaVersion}, but this editor supports up to schema 12.`);
+  if (schemaVersion > 14) throw new Error(`This project uses schema ${schemaVersion}, but this editor supports up to schema 14.`);
 
   const project = typeof root.project === 'object' && root.project !== null ? root.project as Record<string, unknown> : {};
   const authoring = typeof project.authoring === 'object' && project.authoring !== null
@@ -2009,6 +2106,7 @@ async function importProjectFile(file: File): Promise<void> {
   climatePresetSelect.value = profile.climatePreset;
   islandCountInput.value = String(profile.islandCount);
   islandSpacingInput.value = String(profile.islandSpacingKilometers);
+  satelliteCountInput.value = String(profile.satelliteSettlementCount);
   updateProfileHint();
 
   customAnchors = [...anchorState.customAnchors];
@@ -2029,7 +2127,7 @@ async function importProjectFile(file: File): Promise<void> {
   for (const asset of assets) await assetRepository.put(asset);
   await refreshAssetLibrary();
 
-  if (!generate(customAnchors, builtInOverrides, true, true)) {
+  if (!await generateResponsive(customAnchors, builtInOverrides, true, true)) {
     throw new Error(statusMessage.textContent ?? 'The imported PAYAW project could not be generated.');
   }
   setStatus(`Imported PAYAW project JSON${assets.length > 0 ? ` with ${assets.length} embedded asset${assets.length === 1 ? '' : 's'}` : ''}.`, 'success');
@@ -2467,7 +2565,7 @@ function renderIslandList(): void {
     const settlementInput = document.createElement('input');
     settlementInput.type = 'number';
     settlementInput.min = '0';
-    settlementInput.max = '6';
+    settlementInput.max = '13';
     settlementInput.step = '1';
     settlementInput.value = String(island.settlementCountTarget);
     grid.append(makeField('Settlement count', settlementInput));
@@ -3240,8 +3338,9 @@ function syncBlockNameInput(): void {
   blockNameInput.value = world.blocks[Number(blockNameTarget.value)]?.name ?? '';
 }
 
-function refreshWorldUi(fitAfter = false): void {
-  renderer.rebuildCache(world);
+function refreshWorldUi(fitAfter = false, regeneratedFromStage?: string): void {
+  if (regeneratedFromStage === undefined) renderer.rebuildCache(world);
+  else renderer.rebuildCache(world, rasterCacheLayersForStage(regeneratedFromStage));
   syncRendererCustomization();
   updateStats(stats, world);
   updateMapHeader();
@@ -3256,6 +3355,7 @@ function refreshWorldUi(fitAfter = false): void {
   renderCustomStoryList();
   updateZoneEditorUi();
   renderPlacedImageList();
+  updatePerformancePanel();
   if (fitAfter) fitCamera();
 }
 
@@ -3345,7 +3445,7 @@ function generate(
     if (recoveredOverrides.length > 0) saveMapCustomization(signature, mapCustomization);
 
     refreshWorldUi(fitAfter);
-    saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(), islandSpacingKilometers: selectedIslandSpacing() });
+    saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(), islandSpacingKilometers: selectedIslandSpacing(), satelliteSettlementCount: selectedSatelliteCount() });
     if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
     const duration = Object.values(world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
     const recoveryMessage = recoveredOverrides.length === 0
@@ -3359,11 +3459,138 @@ function generate(
   }
 }
 
+async function generateResponsive(
+  candidateCustom: readonly CustomAnchorDefinition[] = customAnchors,
+  candidateBuiltIns: readonly BuiltInAnchorOverride[] = builtInOverrides,
+  fitAfter = true,
+  clearEditorHistory = false,
+): Promise<boolean> {
+  activeGenerationController?.abort();
+  const controller = new AbortController();
+  activeGenerationController = controller;
+  const runId = ++generationSequence;
+  setGenerationRunning(true);
+  setStatus('Generating deterministic world in scheduled stages…', 'working');
+  generationProgressStage.textContent = 'Preparing generation…';
+
+  const signature = worldSignature();
+  const names = loadNameState(signature);
+  let mapCustomization = loadMapCustomization(signature);
+  const recoveredOverrides: string[] = [];
+
+  try {
+    let nextWorld: World | undefined;
+    const maximumAttempts = mapCustomization.anchorPositions.length + mapCustomization.settlementPositions.length + mapCustomization.storyPositions.length + 1;
+
+    for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
+      try {
+        nextWorld = await generationWorker.generate(seedInput.value, {
+          ...generationOptions(
+            candidateCustom,
+            candidateBuiltIns,
+            mapCustomization.anchorPositions,
+            mapCustomization.settlementPositions,
+            mapCustomization.storyPositions,
+          ),
+          roadNameOverrides: names.roads,
+          blockNameOverrides: names.blocks,
+          storyRuleOverrides: mapCustomization.storyRules,
+          zoneOverrides: mapCustomization.zoneOverrides,
+          islandOverrides: mapCustomization.islandOverrides,
+          bridgeOverrides: mapCustomization.bridgeOverrides,
+          customBridges: mapCustomization.customBridges,
+          portOverrides: mapCustomization.portOverrides,
+          customPorts: mapCustomization.customPorts,
+          waterRouteOverrides: mapCustomization.waterRouteOverrides,
+          customWaterRoutes: mapCustomization.customWaterRoutes,
+        }, {
+          signal: controller.signal,
+          onProgress: updateGenerationProgress,
+          yieldBetweenStages: true,
+        });
+        break;
+      } catch (error) {
+        if (error instanceof GenerationCancelledError) throw error;
+        if (!(error instanceof InvalidPositionOverrideError)) throw error;
+        const recovered = recoverPositionOverrides(
+          mapCustomization.anchorPositions,
+          mapCustomization.settlementPositions,
+          mapCustomization.storyPositions,
+          error,
+        );
+        if (!recovered.removed) throw error;
+        mapCustomization = {
+          ...mapCustomization,
+          anchorPositions: recovered.anchorPositions,
+          settlementPositions: recovered.settlementPositions,
+          storyPositions: recovered.storyPositions,
+        };
+        recoveredOverrides.push(`${error.kind} “${error.displayName}”`);
+        generationProgressStage.textContent = `Recovering stale ${error.kind} position…`;
+      }
+    }
+
+    if (runId !== generationSequence || controller.signal.aborted) throw new GenerationCancelledError();
+    if (nextWorld === undefined) {
+      throw new Error('World generation could not recover from its saved position overrides. Reset moved objects and try again.');
+    }
+
+    world = nextWorld;
+    activeWorldSignature = signature;
+    roadNameOverrides = [...names.roads];
+    blockNameOverrides = [...names.blocks];
+    anchorPositionOverrides = [...mapCustomization.anchorPositions];
+    settlementPositionOverrides = [...mapCustomization.settlementPositions];
+    storyPositionOverrides = [...mapCustomization.storyPositions];
+    storyRuleOverrides = [...mapCustomization.storyRules];
+    zoneOverrides = [...mapCustomization.zoneOverrides];
+    placedImages = [...mapCustomization.placedImages];
+    islandOverrides = [...mapCustomization.islandOverrides];
+    bridgeOverrides = [...mapCustomization.bridgeOverrides];
+    customBridges = [...mapCustomization.customBridges];
+    portOverrides = [...mapCustomization.portOverrides];
+    customPorts = [...mapCustomization.customPorts];
+    waterRouteOverrides = [...mapCustomization.waterRouteOverrides];
+    customWaterRoutes = [...mapCustomization.customWaterRoutes];
+
+    if (recoveredOverrides.length > 0) saveMapCustomization(signature, mapCustomization);
+    refreshWorldUi(fitAfter);
+    saveProfile({
+      terrainSize: selectedTerrainSize(),
+      townScale: selectedTownScale(),
+      terrainShape: selectedTerrainShape(),
+      climatePreset: selectedClimatePreset(),
+      islandCount: selectedIslandCount(),
+      islandSpacingKilometers: selectedIslandSpacing(),
+      satelliteSettlementCount: selectedSatelliteCount(),
+    });
+    if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
+    const duration = Object.values(world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
+    const recoveryMessage = recoveredOverrides.length === 0
+      ? ''
+      : ` Reset ${recoveredOverrides.length} stale saved position${recoveredOverrides.length === 1 ? '' : 's'}: ${recoveredOverrides.join(', ')}.`;
+    setStatus(`Generated ${world.width}×${world.height} world in ${duration.toFixed(0)} ms without locking the editor between stages.${recoveryMessage}`, recoveredOverrides.length === 0 ? 'success' : 'warning');
+    return true;
+  } catch (error) {
+    if (error instanceof GenerationCancelledError) {
+      setStatus('Generation cancelled. The previous world remains active.', 'warning');
+      return false;
+    }
+    setStatus(error instanceof Error ? error.message : String(error), 'error');
+    return false;
+  } finally {
+    if (runId === generationSequence) {
+      activeGenerationController = null;
+      setGenerationRunning(false);
+    }
+  }
+}
+
 function regenerateFrom(stageId: string, successMessage: string): boolean {
   setStatus('Updating authored world…', 'working');
   try {
     pipeline.regenerateFrom(world, stageId, generationOptions());
-    refreshWorldUi(false);
+    refreshWorldUi(false, stageId);
     const duration = Object.entries(world.diagnostics.stageTimingsMs)
       .filter(([id]) => id === stageId || id === 'story-layer' || id === 'buildings' || id === 'vegetation')
       .reduce((sum, [, value]) => sum + value, 0);
@@ -3698,6 +3925,7 @@ function animationFrame(): void {
   if (renderRequested) {
     renderer.render(world, camera);
     renderRequested = false;
+    updatePerformancePanel();
   }
   window.requestAnimationFrame(animationFrame);
 }
@@ -3741,13 +3969,14 @@ dmClearLog.addEventListener('click', () => {
   dmSessionEntries = [];
   renderDmSessionLog();
 });
-generateButton.addEventListener('click', () => generate(customAnchors, builtInOverrides, true, true));
+generateButton.addEventListener('click', () => { void generateResponsive(customAnchors, builtInOverrides, true, true); });
+cancelGenerationButton.addEventListener('click', () => activeGenerationController?.abort());
 seedInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') generate(customAnchors, builtInOverrides, true, true);
+  if (event.key === 'Enter') void generateResponsive(customAnchors, builtInOverrides, true, true);
 });
 randomSeedButton.addEventListener('click', () => {
   seedInput.value = createCryptoSeed();
-  generate(customAnchors, builtInOverrides, true, true);
+  void generateResponsive(customAnchors, builtInOverrides, true, true);
 });
 terrainSizeSelect.addEventListener('change', updateProfileHint);
 townScaleSelect.addEventListener('change', updateProfileHint);
@@ -3755,6 +3984,7 @@ terrainShapeSelect.addEventListener('change', updateProfileHint);
 climatePresetSelect.addEventListener('change', updateProfileHint);
 islandCountInput.addEventListener('input', updateProfileHint);
 islandSpacingInput.addEventListener('input', updateProfileHint);
+satelliteCountInput.addEventListener('input', updateProfileHint);
 exportButton.addEventListener('click', () => downloadWorld(world, currentMapCustomization(), importedAssets, labelSettings, customStoryDefinitions));
 exportImageButton.addEventListener('click', () => { void exportVisibleMapImage(); });
 undoButton.addEventListener('click', undo);

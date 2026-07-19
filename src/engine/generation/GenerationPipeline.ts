@@ -1,9 +1,14 @@
 import { DEFAULT_GENERATION_CONFIG, type GenerationConfig } from '../config/GenerationConfig';
 import { SeededRandom } from '../rng/Random';
-import { resolveGenerationOptions, type GenerationOptions } from './GenerationOptions';
+import { resolveGenerationOptions, type GenerationOptions, type ResolvedGenerationOptions } from './GenerationOptions';
 import { resolveGenerationConfig } from './GenerationProfiles';
 import { World } from '../world/World';
 import type { GenerationStage } from './GenerationStage';
+import {
+  throwIfGenerationCancelled,
+  yieldToBrowser,
+  type GenerationRunOptions,
+} from './GenerationScheduler';
 import { AccessibilityStage } from './stages/AccessibilityStage';
 import { AnchorStage } from './stages/AnchorStage';
 import { BlockStage } from './stages/BlockStage';
@@ -70,6 +75,11 @@ const DEFAULT_STAGES: readonly GenerationStage[] = [
   new StoryStage(),
 ];
 
+interface PreparedRun {
+  readonly runtimeConfig: GenerationConfig;
+  readonly resolvedOptions: ResolvedGenerationOptions;
+}
+
 export class GenerationPipeline {
   private readonly config: GenerationConfig;
   private readonly stages: readonly GenerationStage[];
@@ -82,49 +92,139 @@ export class GenerationPipeline {
     this.stages = stages;
   }
 
-  /** Re-run only the selected stage and everything after it on an existing world. */
-  public regenerateFrom(world: World, startStageId: string, options: GenerationOptions = {}): World {
+  public stageIds(): readonly string[] {
+    return this.stages.map((stage) => stage.id);
+  }
+
+  private prepare(options: GenerationOptions): PreparedRun {
     const resolvedOptions = resolveGenerationOptions(options);
-    const runtimeConfig = resolveGenerationConfig(this.config, resolvedOptions);
+    return {
+      resolvedOptions,
+      runtimeConfig: resolveGenerationConfig(this.config, resolvedOptions),
+    };
+  }
+
+  private runStage(
+    stage: GenerationStage,
+    stageIndex: number,
+    stageCount: number,
+    world: World,
+    runtimeConfig: GenerationConfig,
+    resolvedOptions: ResolvedGenerationOptions,
+    rootRandom: SeededRandom,
+    runStartedAt: number,
+    stageTimings: Record<string, number>,
+    runOptions: GenerationRunOptions,
+  ): void {
+    throwIfGenerationCancelled(runOptions.signal);
+    const startedAt = performance.now();
+    stage.run({ config: runtimeConfig, options: resolvedOptions, random: rootRandom.fork(stage.id), world });
+    const stageDurationMs = performance.now() - startedAt;
+    stageTimings[stage.id] = stageDurationMs;
+    runOptions.onProgress?.({
+      stageId: stage.id,
+      stageIndex,
+      stageCount,
+      stageDurationMs,
+      elapsedMs: performance.now() - runStartedAt,
+      completed: stageIndex === stageCount - 1,
+    });
+  }
+
+  /** Re-run only the selected stage and everything after it on an existing world. */
+  public regenerateFrom(
+    world: World,
+    startStageId: string,
+    options: GenerationOptions = {},
+    runOptions: GenerationRunOptions = {},
+  ): World {
+    const { resolvedOptions, runtimeConfig } = this.prepare(options);
     const startIndex = this.stages.findIndex((stage) => stage.id === startStageId);
     if (startIndex < 0) throw new Error(`Unknown generation stage: ${startStageId}`);
     const rootRandom = new SeededRandom(world.seed);
     const stageTimings: Record<string, number> = { ...world.diagnostics.stageTimingsMs };
+    const startedAt = performance.now();
 
     for (let index = startIndex; index < this.stages.length; index += 1) {
       const stage = this.stages[index];
       if (stage === undefined) continue;
-      const startedAt = performance.now();
-      stage.run({ config: runtimeConfig, options: resolvedOptions, random: rootRandom.fork(stage.id), world });
-      stageTimings[stage.id] = performance.now() - startedAt;
+      this.runStage(stage, index - startIndex, this.stages.length - startIndex, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
     }
 
-    world.diagnostics = {
-      generatedAt: new Date().toISOString(),
-      stageTimingsMs: stageTimings,
-    };
+    world.diagnostics = { generatedAt: new Date().toISOString(), stageTimingsMs: stageTimings };
     return world;
   }
 
-  public generate(seed: string, options: GenerationOptions = {}): World {
+  public async regenerateFromAsync(
+    world: World,
+    startStageId: string,
+    options: GenerationOptions = {},
+    runOptions: GenerationRunOptions = {},
+  ): Promise<World> {
+    const { resolvedOptions, runtimeConfig } = this.prepare(options);
+    const startIndex = this.stages.findIndex((stage) => stage.id === startStageId);
+    if (startIndex < 0) throw new Error(`Unknown generation stage: ${startStageId}`);
+    const rootRandom = new SeededRandom(world.seed);
+    const stageTimings: Record<string, number> = { ...world.diagnostics.stageTimingsMs };
+    const startedAt = performance.now();
+
+    for (let index = startIndex; index < this.stages.length; index += 1) {
+      const stage = this.stages[index];
+      if (stage === undefined) continue;
+      this.runStage(stage, index - startIndex, this.stages.length - startIndex, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
+      if (runOptions.yieldBetweenStages !== false && index < this.stages.length - 1) await yieldToBrowser();
+    }
+
+    throwIfGenerationCancelled(runOptions.signal);
+    world.diagnostics = { generatedAt: new Date().toISOString(), stageTimingsMs: stageTimings };
+    return world;
+  }
+
+  public generate(
+    seed: string,
+    options: GenerationOptions = {},
+    runOptions: GenerationRunOptions = {},
+  ): World {
     const normalizedSeed = seed.trim();
     if (normalizedSeed.length === 0) throw new Error('A non-empty seed is required.');
-    const resolvedOptions = resolveGenerationOptions(options);
-    const runtimeConfig = resolveGenerationConfig(this.config, resolvedOptions);
+    const { resolvedOptions, runtimeConfig } = this.prepare(options);
     const world = new World(normalizedSeed, runtimeConfig, resolvedOptions);
     const rootRandom = new SeededRandom(normalizedSeed);
     const stageTimings: Record<string, number> = {};
+    const startedAt = performance.now();
 
-    for (const stage of this.stages) {
-      const startedAt = performance.now();
-      stage.run({ config: runtimeConfig, options: resolvedOptions, random: rootRandom.fork(stage.id), world });
-      stageTimings[stage.id] = performance.now() - startedAt;
+    for (let index = 0; index < this.stages.length; index += 1) {
+      const stage = this.stages[index];
+      if (stage === undefined) continue;
+      this.runStage(stage, index, this.stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
     }
 
-    world.diagnostics = {
-      generatedAt: new Date().toISOString(),
-      stageTimingsMs: stageTimings,
-    };
+    world.diagnostics = { generatedAt: new Date().toISOString(), stageTimingsMs: stageTimings };
+    return world;
+  }
+
+  public async generateAsync(
+    seed: string,
+    options: GenerationOptions = {},
+    runOptions: GenerationRunOptions = {},
+  ): Promise<World> {
+    const normalizedSeed = seed.trim();
+    if (normalizedSeed.length === 0) throw new Error('A non-empty seed is required.');
+    const { resolvedOptions, runtimeConfig } = this.prepare(options);
+    const world = new World(normalizedSeed, runtimeConfig, resolvedOptions);
+    const rootRandom = new SeededRandom(normalizedSeed);
+    const stageTimings: Record<string, number> = {};
+    const startedAt = performance.now();
+
+    for (let index = 0; index < this.stages.length; index += 1) {
+      const stage = this.stages[index];
+      if (stage === undefined) continue;
+      this.runStage(stage, index, this.stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
+      if (runOptions.yieldBetweenStages !== false && index < this.stages.length - 1) await yieldToBrowser();
+    }
+
+    throwIfGenerationCancelled(runOptions.signal);
+    world.diagnostics = { generatedAt: new Date().toISOString(), stageTimingsMs: stageTimings };
     return world;
   }
 }

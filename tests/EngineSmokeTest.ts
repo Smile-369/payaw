@@ -1,6 +1,6 @@
 import { DEFAULT_GENERATION_CONFIG } from '../src/engine/config/GenerationConfig';
 import { GenerationPipeline } from '../src/engine/generation/GenerationPipeline';
-import { TerrainSize, TownScale } from '../src/engine/generation/GenerationOptions';
+import { TerrainShape, TerrainSize, TownScale } from '../src/engine/generation/GenerationOptions';
 import { BuildingType } from '../src/engine/buildings/Building';
 import { BUILDING_TEMPLATES } from '../src/engine/buildings/BuildingTemplates';
 import { ElevationStage } from '../src/engine/generation/stages/ElevationStage';
@@ -551,7 +551,7 @@ function validateCanonicalTerrainContract(): void {
   const terrainOnly = new GenerationPipeline(
     DEFAULT_GENERATION_CONFIG,
     [new ElevationStage()],
-  ).generate('payaw-terrain-contract');
+  ).generate('payaw-terrain-contract', { terrainShape: TerrainShape.LegacyFullIsland });
   const values = new Float32Array(terrainOnly.tiles.map((tile) => tile.elevation));
   const bytes = new Uint8Array(values.buffer);
   let hash = 0x811c9dc5;

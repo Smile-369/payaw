@@ -1,109 +1,101 @@
+# PAYAW Procedural World Engine — Milestone 14
 
-## Milestone 13 world layouts
+Milestone 14 is the performance release for PAYAW's Metro Bacolod-scale regional editor. It keeps the deterministic generation and non-destructive authoring model from Milestone 13, while moving full-world generation off the browser's UI thread and reducing unnecessary render work.
 
-The generation panel now includes Single Small Island, Single Medium Island, Single Large Island, Archipelago, Twin Islands, Peninsula, Inland Coast, and Delta. Single Large Island is the default Metro Bacolod-scale layout. Archipelago keeps its 2–12 island count and distance controls, while satellite settlements remain movable through non-destructive overrides. See `docs/MILESTONE_13.md`.
-# PAYAW Procedural World Engine — Milestone 12
+## What changed
 
-Milestone 12 expands PAYAW into a Metro Bacolod-scale regional generator with authored island count and spacing, movable satellite settlements, portable project JSON, bridges, ports, and water routes.
+### Optional satellite settlements
+
+The **Satellite Towns** setting now accepts **0–12**.
+
+- `0` generates only the primary settlement/Poblacion.
+- Higher values deterministically allocate satellite settlements across viable islands and the primary landmass.
+- Manual per-island settlement-count overrides still take priority.
+- Existing movable-settlement overrides and stale-position recovery remain supported.
+
+### Background generation
+
+User-triggered full generation runs in a dedicated Web Worker.
+
+- The editor remains responsive while terrain, hydrology, settlements, roads, buildings, and story layers are generated.
+- The progress display reports all 31 deterministic generation stages.
+- **Cancel** immediately terminates the active worker.
+- A cancelled run leaves the previously completed world active.
+- Browsers without Worker support use the scheduled main-thread fallback.
+
+Initial startup generation remains synchronous so the editor always opens with a complete valid world. Later full regenerations use the worker.
+
+### Renderer optimization
+
+- Raster layers are cached independently.
+- Partial regeneration invalidates only raster layers affected by the changed generation stage.
+- Building and vegetation drawing use a deterministic uniform-grid spatial index.
+- Dense point layers query the visible viewport instead of scanning every object each frame.
+- Render diagnostics expose cache-build time, last-frame render time, and visible object counts.
+
+### Performance diagnostics
+
+The World Foundation panel includes live values for:
+
+- Total generation time
+- Slowest generation stage
+- Raster-cache rebuild time
+- Last render time
+- Visible buildings
+- Visible vegetation
 
 ## Regional scale
 
-PAYAW now uses a fixed scale of **125 meters per tile**.
+The physical map scale remains **125 meters per tile**.
 
-| Terrain extent | Tiles | Approximate regional size |
+| Extent | Grid | Approximate size |
 |---|---:|---:|
 | Small | 256×192 | 32×24 km |
 | Medium | 320×240 | 40×30 km |
 | Large | 384×288 | 48×36 km |
 
-This is intended as a regional planning scale comparable to a Metro Bacolod-sized play area rather than a single compact town map.
+**Single Large Island** remains the default world layout.
 
-## Island controls
+## World layouts
 
-When using **Archipelago**, the World Foundation panel exposes:
+- Single Small Island
+- Single Medium Island
+- Single Large Island
+- Archipelago
+- Twin Islands
+- Peninsula
+- Inland Coast
+- Delta
 
-- Major island count: 2–12
-- Approximate minimum island spacing: 0.5–12 km
+Archipelago retains the authored 2–12 island count and island-spacing controls. PAYAW does not provide finished-landmass dragging; macro geography is regenerated coherently from the selected layout and seed.
 
-Twin Islands is fixed to two islands but still allows spacing control. The generator treats island count as the stronger constraint and progressively relaxes spacing only when the requested layout cannot physically fit inside the selected terrain extent.
+## JSON compatibility
 
-## Regional settlement behavior
+Project JSON export/import includes the satellite settlement count and all previous authoring data. PAYAW accepts projects through schema version 14 and migrates older supported layout names.
 
-Archipelagos reserve viable high-ranked secondary islands for satellite communities before ecological classification. This prevents every non-primary island from becoming protected wilderness.
+## Run locally
 
-Regional town scale influences how many secondary islands are developed:
-
-- Rural: one preferred secondary community
-- Semi-urban: two preferred secondary communities
-- Urban: three preferred secondary communities
-
-Satellite settlements can be moved directly in **Object editing** mode. Position overrides must remain on the settlement's assigned island, on dry land, below slope and flood limits, and far enough from another settlement center. The primary Poblacion remains aligned to the Town Plaza anchor.
-
-## JSON import and export
-
-The Project Output section now includes a dedicated **Import Project JSON** control and drag-and-drop area.
-
-Supported files:
-
-- `payaw-project` full project exports
-- Serialized PAYAW world JSON containing a seed and metadata
-- `payaw-world-overrides` customization exports
-
-A full project import restores:
-
-- Seed
-- Terrain size and town scale
-- World shape and climate
-- Island count and spacing
-- Custom and edited anchors
-- Custom story points and encounter tables
-- Moved anchors, settlements, and story sites
-- Zone overrides
-- Road and block names
-- Label controls
-- Island, bridge, port, and water-route overrides
-- Placed images
-- Embedded imported image assets
-
-Import is validation-first. PAYAW rejects future schema versions, malformed files, unsupported formats, and project JSON above 64 MB. The world is regenerated from its deterministic seed and profile, then validated authoring data is reapplied. Imported tile arrays are not trusted as mutable engine state.
-
-## Existing systems included
-
-Milestone 12 retains:
-
-- World Editor and separate DM Mode
-- Undo and redo
-- Asset targeting and freeform map images
-- Zone editor
-- Editable road and block names
-- Label controls
-- Custom story points and weighted encounters
-- Island editor
-- Procedural and custom bridges
-- Procedural and custom ports
-- Ferry and water-route editing
-- Full-map PNG export
-- World and override JSON export
-- Automatic stale-position recovery
-
-## Run
+Requirements: Node.js 20.19 or newer.
 
 ```bash
-corepack enable
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
-## Validate
+Production validation:
 
 ```bash
-pnpm check
-pnpm test:ms9
-pnpm test:ms10
-pnpm test:ms11
-pnpm test:ms111
-pnpm test:ms12
-pnpm build
+npm run check
+npm run test:ms14
+npm run build
 ```
 
-See `docs/MILESTONE_12.md` and `docs/VALIDATION_12.md` for implementation and validation details.
+Additional regression scripts are available as `test:ms13`, `test:ms12`, `test:ms111`, `test:ms11`, `test:ms10`, `test:ms9`, `test:ms82`, `test:ms81`, and `test:ms8`.
+
+## Architecture notes
+
+See:
+
+- `docs/MILESTONE_14.md`
+- `docs/VALIDATION_14.md`
+- `docs/MS14_TEST_RESULTS.json`

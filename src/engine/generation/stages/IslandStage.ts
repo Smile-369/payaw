@@ -9,6 +9,6 @@ export class IslandStage implements GenerationStage {
     const requestedCount = options.terrainShape === TerrainShape.Archipelago
       ? options.islandCount
       : options.terrainShape === TerrainShape.TwinIslands ? 2 : undefined;
-    generateIslands(world, options.townScale, random, options.islandOverrides, requestedCount);
+    generateIslands(world, options.townScale, random, options.islandOverrides, requestedCount, options.satelliteSettlementCount);
   }
 }
