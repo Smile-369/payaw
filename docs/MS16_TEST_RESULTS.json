@@ -1,0 +1,32 @@
+{
+  "milestone": "16.1",
+  "schemaVersion": 16,
+  "generationVersion": "payaw-m16-npc-routing-v2",
+  "npcCount": 25,
+  "anchorCount": 9,
+  "minimumAnchorDegree": 2,
+  "travelLocations": 45,
+  "alternateRoutes": 3,
+  "sampleDriveMinutes": 15.8,
+  "dom": {
+    "uniqueElementIds": 283,
+    "duplicateElementIds": 0,
+    "categoryMenus": 9,
+    "storyFlowControlsPresent": false
+  },
+  "commands": {
+    "typescript": "passed",
+    "focusedTest": "passed",
+    "productionBuild": "passed",
+    "milestone13Regression": "passed",
+    "milestone14Regression": "passed",
+    "extractedArchiveCheck": "passed",
+    "extractedArchiveFocusedTest": "passed",
+    "extractedArchiveBuild": "passed"
+  },
+  "build": {
+    "viteVersion": "8.1.5",
+    "modulesTransformed": 110,
+    "generationWorkerEmitted": true
+  }
+}

@@ -1,0 +1,6 @@
+PAYAW 0.17.1 historical engine-suite status
+
+Command: npm run test:engine
+Result: NOT COMPLETED in the bounded QA environment.
+
+The process reached EngineSmokeTest and sustained high CPU/memory usage without producing a final result. This is a pre-existing monolithic test-runner performance concern. Focused Milestone 8.2, 13, 14, 15, 16, 16.2, 16.3, 16.4, 17, and 17.1 suites completed successfully.

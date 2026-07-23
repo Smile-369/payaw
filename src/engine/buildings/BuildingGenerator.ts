@@ -317,6 +317,7 @@ function createBuilding(
   const stories = random.int(template.minimumStories, template.maximumStories);
   const building: Building = {
     id,
+    generatedId: id,
     type: template.type,
     templateId: template.id,
     blockId: block.id,

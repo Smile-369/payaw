@@ -1,0 +1,16 @@
+PAYAW 0.17.1 retained regression summary
+
+PASS test:ms13 — terrain layouts
+PASS test:ms14 — async generation and cancellation
+PASS test:ms15 — studio UI and zero-satellite generation
+PASS test:ms16 — NPCs, anchors, roads, and route alternatives
+PASS test:ms162 — live clock and NPC period positioning
+PASS test:ms163 — settlement movement validation
+PASS test:ms164 — cross-island settlement overrides
+PASS test:ms82 — collapsed editor disclosures and DM/editor separation
+
+Focused living-world validation:
+PASS test:ms17
+PASS test:ms171
+
+The historical monolithic test:engine was attempted under a bounded QA run but remained resource-intensive and did not complete. It is not reported as passed.

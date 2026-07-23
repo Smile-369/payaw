@@ -47,6 +47,31 @@ function chooseAnchorConnections(
 
   for (const edge of extras.slice(0, config.extraAnchorConnections)) {
     selected.push(edge);
+    selectedKeys.add(edgeKey(edge));
+  }
+
+  // Every anchor should have at least two independent graph connections when the
+  // settlement has enough anchors. This creates real forks and alternate approaches
+  // instead of a tree where peripheral landmarks have only one road in or out.
+  if (anchors.length >= 3) {
+    const degree = new Map<number, number>();
+    for (const anchor of anchors) degree.set(anchor.id, 0);
+    for (const edge of selected) {
+      degree.set(edge.from, (degree.get(edge.from) ?? 0) + 1);
+      degree.set(edge.to, (degree.get(edge.to) ?? 0) + 1);
+    }
+    for (const anchor of anchors) {
+      while ((degree.get(anchor.id) ?? 0) < 2) {
+        const candidate = allEdges
+          .filter((edge) => (edge.from === anchor.id || edge.to === anchor.id) && !selectedKeys.has(edgeKey(edge)))
+          .sort((left, right) => left.weight - right.weight || edgeKey(left).localeCompare(edgeKey(right)))[0];
+        if (candidate === undefined) break;
+        selected.push(candidate);
+        selectedKeys.add(edgeKey(candidate));
+        degree.set(candidate.from, (degree.get(candidate.from) ?? 0) + 1);
+        degree.set(candidate.to, (degree.get(candidate.to) ?? 0) + 1);
+      }
+    }
   }
   return selected;
 }
@@ -107,6 +132,8 @@ function createRoad(
   const bridgeTiles = path.filter((index) => world.tiles[index]?.river === true);
   return {
     id: world.roads.length,
+    generatedId: world.roads.length,
+    source: 'generated',
     name: '',
     type,
     path: [...path],
@@ -314,7 +341,7 @@ function connectIslandSettlements(world: World, config: RoadConfig): void {
     if (!island.allowRoads || island.settlementIds.length < 2) continue;
     const settlements = island.settlementIds
       .map((id) => world.settlements[id])
-      .filter((value): value is NonNullable<typeof value> => value !== undefined)
+      .filter((value): value is NonNullable<typeof value> => value !== undefined && value.generateRoads !== false && value.hidden !== true)
       .sort((left, right) => right.populationTarget - left.populationTarget || left.id - right.id);
     const connected = new Set<number>([settlements[0]?.id ?? -1]);
     while (connected.size < settlements.length) {
@@ -347,6 +374,7 @@ function connectIslandSettlements(world: World, config: RoadConfig): void {
 
 function growSettlementBackbones(world: World, config: RoadConfig, random: Random): void {
   for (const settlement of world.settlements) {
+    if (settlement.generateRoads === false || settlement.hidden === true) continue;
     const island = world.islands[settlement.islandId];
     if (island === undefined || !island.allowRoads) continue;
     const spokeCount = settlement.isPrimary ? 2 : settlement.populationTarget >= 2500 ? 2 : 1;

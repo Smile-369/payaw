@@ -1,0 +1,10 @@
+{
+  "htmlIdCount": 540,
+  "uniqueHtmlIdCount": 540,
+  "duplicateIds": {},
+  "campaignRequiredSelectorCount": 103,
+  "missingCampaignSelectors": [],
+  "packageVersion": "0.20.0",
+  "schemaVersion": 20,
+  "internalRegistryUrls": false
+}

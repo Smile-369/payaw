@@ -1,10 +1,10 @@
+import type { AuthoredMapFeature, AuthoredSettlementDefinition, GeneratedFeatureOverride, SettlementAuthoringOverride, TerrainTileOverride } from '../../authoring/AuthoringLayer';
 import type { BuiltInAnchorOverride, CustomAnchorDefinition } from '../settlement/Anchor';
 import type { ZoneType } from '../zoning/Zone';
 import type { CustomStoryPointDefinition, StoryEncounterDefinition } from '../../story/StoryObject';
 import type { IslandOverride } from '../regional/Island';
 import type { BridgeOverride, CustomBridgeDefinition } from '../infrastructure/Bridge';
 import type { PortOverride, CustomPortDefinition } from '../infrastructure/Port';
-import type { WaterRouteOverride, CustomWaterRouteDefinition } from '../infrastructure/WaterRoute';
 
 export enum TerrainSize {
   Small = 'small',
@@ -66,6 +66,8 @@ export interface SettlementPositionOverride {
   readonly key: string;
   readonly x: number;
   readonly y: number;
+  /** Stable destination island identity. Older files may omit this and infer it from x/y. */
+  readonly islandKey?: string;
 }
 
 /** A manual zoning instruction. null means explicitly clear zoning on the tile. */
@@ -87,6 +89,8 @@ export interface StoryRuleOverride {
   readonly wish?: string;
   readonly manifestation?: string;
   readonly encounters?: readonly StoryEncounterDefinition[];
+  /** Non-destructive removal used by the GM story-point editor. */
+  readonly suppressed?: boolean;
 }
 
 export interface GenerationOptions {
@@ -96,17 +100,19 @@ export interface GenerationOptions {
   readonly townScale?: TownScale;
   readonly terrainShape?: TerrainShape;
   readonly climatePreset?: ClimatePreset;
-  /** Requested major-island count for archipelago generation. */
   readonly islandCount?: number;
-  /** Requested minimum open-water gap between generated islands, in kilometers. */
   readonly islandSpacingKilometers?: number;
-  /** Exact number of non-primary settlement centers generated across the region. */
   readonly satelliteSettlementCount?: number;
   readonly roadNameOverrides?: readonly EntityNameOverride[];
   readonly blockNameOverrides?: readonly EntityNameOverride[];
   readonly anchorPositionOverrides?: readonly AnchorPositionOverride[];
   readonly storyPositionOverrides?: readonly StoryPositionOverride[];
   readonly settlementPositionOverrides?: readonly SettlementPositionOverride[];
+  readonly authoredSettlements?: readonly AuthoredSettlementDefinition[];
+  readonly settlementAuthoringOverrides?: readonly SettlementAuthoringOverride[];
+  readonly terrainOverrides?: readonly TerrainTileOverride[];
+  readonly generatedFeatureOverrides?: readonly GeneratedFeatureOverride[];
+  readonly authoredFeatures?: readonly AuthoredMapFeature[];
   readonly storyRuleOverrides?: readonly StoryRuleOverride[];
   readonly zoneOverrides?: readonly ZoneOverride[];
   readonly customStoryPoints?: readonly CustomStoryPointDefinition[];
@@ -115,8 +121,6 @@ export interface GenerationOptions {
   readonly customBridges?: readonly CustomBridgeDefinition[];
   readonly portOverrides?: readonly PortOverride[];
   readonly customPorts?: readonly CustomPortDefinition[];
-  readonly waterRouteOverrides?: readonly WaterRouteOverride[];
-  readonly customWaterRoutes?: readonly CustomWaterRouteDefinition[];
 }
 
 export interface ResolvedGenerationOptions {
@@ -134,6 +138,11 @@ export interface ResolvedGenerationOptions {
   readonly anchorPositionOverrides: readonly AnchorPositionOverride[];
   readonly storyPositionOverrides: readonly StoryPositionOverride[];
   readonly settlementPositionOverrides: readonly SettlementPositionOverride[];
+  readonly authoredSettlements: readonly AuthoredSettlementDefinition[];
+  readonly settlementAuthoringOverrides: readonly SettlementAuthoringOverride[];
+  readonly terrainOverrides: readonly TerrainTileOverride[];
+  readonly generatedFeatureOverrides: readonly GeneratedFeatureOverride[];
+  readonly authoredFeatures: readonly AuthoredMapFeature[];
   readonly storyRuleOverrides: readonly StoryRuleOverride[];
   readonly zoneOverrides: readonly ZoneOverride[];
   readonly customStoryPoints: readonly CustomStoryPointDefinition[];
@@ -142,8 +151,6 @@ export interface ResolvedGenerationOptions {
   readonly customBridges: readonly CustomBridgeDefinition[];
   readonly portOverrides: readonly PortOverride[];
   readonly customPorts: readonly CustomPortDefinition[];
-  readonly waterRouteOverrides: readonly WaterRouteOverride[];
-  readonly customWaterRoutes: readonly CustomWaterRouteDefinition[];
 }
 
 export const DEFAULT_GENERATION_OPTIONS: ResolvedGenerationOptions = {
@@ -161,6 +168,11 @@ export const DEFAULT_GENERATION_OPTIONS: ResolvedGenerationOptions = {
   anchorPositionOverrides: [],
   storyPositionOverrides: [],
   settlementPositionOverrides: [],
+  authoredSettlements: [],
+  settlementAuthoringOverrides: [],
+  terrainOverrides: [],
+  generatedFeatureOverrides: [],
+  authoredFeatures: [],
   storyRuleOverrides: [],
   zoneOverrides: [],
   customStoryPoints: [],
@@ -169,8 +181,6 @@ export const DEFAULT_GENERATION_OPTIONS: ResolvedGenerationOptions = {
   customBridges: [],
   portOverrides: [],
   customPorts: [],
-  waterRouteOverrides: [],
-  customWaterRoutes: [],
 };
 
 export function resolveGenerationOptions(options: GenerationOptions = {}): ResolvedGenerationOptions {
@@ -189,6 +199,11 @@ export function resolveGenerationOptions(options: GenerationOptions = {}): Resol
     anchorPositionOverrides: options.anchorPositionOverrides ?? DEFAULT_GENERATION_OPTIONS.anchorPositionOverrides,
     storyPositionOverrides: options.storyPositionOverrides ?? DEFAULT_GENERATION_OPTIONS.storyPositionOverrides,
     settlementPositionOverrides: options.settlementPositionOverrides ?? DEFAULT_GENERATION_OPTIONS.settlementPositionOverrides,
+    authoredSettlements: options.authoredSettlements ?? DEFAULT_GENERATION_OPTIONS.authoredSettlements,
+    settlementAuthoringOverrides: options.settlementAuthoringOverrides ?? DEFAULT_GENERATION_OPTIONS.settlementAuthoringOverrides,
+    terrainOverrides: options.terrainOverrides ?? DEFAULT_GENERATION_OPTIONS.terrainOverrides,
+    generatedFeatureOverrides: options.generatedFeatureOverrides ?? DEFAULT_GENERATION_OPTIONS.generatedFeatureOverrides,
+    authoredFeatures: options.authoredFeatures ?? DEFAULT_GENERATION_OPTIONS.authoredFeatures,
     storyRuleOverrides: options.storyRuleOverrides ?? DEFAULT_GENERATION_OPTIONS.storyRuleOverrides,
     zoneOverrides: options.zoneOverrides ?? DEFAULT_GENERATION_OPTIONS.zoneOverrides,
     customStoryPoints: options.customStoryPoints ?? DEFAULT_GENERATION_OPTIONS.customStoryPoints,
@@ -197,7 +212,5 @@ export function resolveGenerationOptions(options: GenerationOptions = {}): Resol
     customBridges: options.customBridges ?? DEFAULT_GENERATION_OPTIONS.customBridges,
     portOverrides: options.portOverrides ?? DEFAULT_GENERATION_OPTIONS.portOverrides,
     customPorts: options.customPorts ?? DEFAULT_GENERATION_OPTIONS.customPorts,
-    waterRouteOverrides: options.waterRouteOverrides ?? DEFAULT_GENERATION_OPTIONS.waterRouteOverrides,
-    customWaterRoutes: options.customWaterRoutes ?? DEFAULT_GENERATION_OPTIONS.customWaterRoutes,
   };
 }

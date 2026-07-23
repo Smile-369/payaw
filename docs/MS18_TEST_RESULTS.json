@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 20,
+  "generationVersion": "payaw-m20-campaign-system-v1",
+  "authoredSettlement": {
+    "name": "Barangay Malipayon",
+    "kind": "barangay",
+    "x": 3,
+    "y": 4
+  },
+  "movedSettlement": {
+    "name": "Riverside Subdivision",
+    "kind": "subdivision",
+    "x": 251,
+    "y": 186,
+    "parentKey": "settlement:authored:test-barangay"
+  },
+  "terrainOverride": {
+    "index": 2056,
+    "terrain": "mountain",
+    "elevation": 0.91
+  },
+  "authoredRoadCount": 1,
+  "hiddenPayawFeatureStored": true,
+  "suppressedRoadStableId": 0,
+  "suppressedBuildingStableId": 0
+}

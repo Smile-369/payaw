@@ -2,7 +2,8 @@ import type { BuildingType } from '../engine/buildings/Building';
 import type { IslandOverride } from '../engine/regional/Island';
 import type { BridgeOverride, CustomBridgeDefinition } from '../engine/infrastructure/Bridge';
 import type { PortOverride, CustomPortDefinition } from '../engine/infrastructure/Port';
-import type { WaterRouteOverride, CustomWaterRouteDefinition } from '../engine/infrastructure/WaterRoute';
+import type { AuthoringLayerState } from '../authoring/AuthoringLayer';
+import type { NPCLocationAuthoringState } from '../campaign/NPCLocationAuthoring';
 import type {
   AnchorPositionOverride,
   SettlementPositionOverride,
@@ -57,8 +58,8 @@ export interface StoredMapCustomization {
   readonly customBridges: readonly CustomBridgeDefinition[];
   readonly portOverrides: readonly PortOverride[];
   readonly customPorts: readonly CustomPortDefinition[];
-  readonly waterRouteOverrides: readonly WaterRouteOverride[];
-  readonly customWaterRoutes: readonly CustomWaterRouteDefinition[];
+  readonly authoringLayer: AuthoringLayerState;
+  readonly npcLocationAuthoring: NPCLocationAuthoringState;
 }
 
 export interface RuntimeImageAsset {
@@ -66,8 +67,17 @@ export interface RuntimeImageAsset {
   readonly image: HTMLImageElement;
 }
 
+export interface TravelPathOverlaySegment {
+  readonly mode: 'walk' | 'drive' | 'public-transport';
+  readonly tileIndices: readonly number[];
+}
+
+export interface TravelPathOverlay {
+  readonly segments: readonly TravelPathOverlaySegment[];
+}
+
 export interface DragPreview {
-  readonly kind: 'anchor' | 'settlement' | 'story';
+  readonly kind: 'anchor' | 'settlement' | 'story' | 'authored-feature';
   readonly key: string;
   readonly x: number;
   readonly y: number;
@@ -139,6 +149,10 @@ export interface RenderCustomization {
   readonly labels: LabelDisplaySettings;
   readonly zoneDisplayMode: ZoneDisplayMode;
   readonly zoneBrushPreview: readonly number[];
+  readonly travelPath: TravelPathOverlay | null;
+  readonly authoringLayer: AuthoringLayerState;
+  readonly activeAuthoringFeatureId: string | null;
+  readonly authoringDraftPoints: readonly { readonly x: number; readonly y: number }[];
 }
 
 export const EMPTY_RENDER_CUSTOMIZATION: RenderCustomization = {
@@ -149,4 +163,8 @@ export const EMPTY_RENDER_CUSTOMIZATION: RenderCustomization = {
   labels: DEFAULT_LABEL_DISPLAY_SETTINGS,
   zoneDisplayMode: 'final',
   zoneBrushPreview: [],
+  travelPath: null,
+  authoringLayer: { authoredSettlements: [], settlementOverrides: [], terrainOverrides: [], generatedFeatureOverrides: [], features: [] },
+  activeAuthoringFeatureId: null,
+  authoringDraftPoints: [],
 };

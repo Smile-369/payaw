@@ -10,23 +10,14 @@ const projectPath = dirname(scriptDirectory);
 const outputPath = join(projectPath, '.test-build');
 const localCompilerPath = join(projectPath, 'node_modules', 'typescript', 'bin', 'tsc');
 const html = readFileSync(join(projectPath, 'index.html'), 'utf8');
-const source = readFileSync(join(projectPath, 'src', 'main.ts'), 'utf8');
-const css = readFileSync(join(projectPath, 'src', 'styles.css'), 'utf8');
+const pipeline = readFileSync(join(projectPath, 'src', 'engine', 'generation', 'GenerationPipeline.ts'), 'utf8');
+const world = readFileSync(join(projectPath, 'src', 'engine', 'world', 'World.ts'), 'utf8');
 
-for (const id of [
-  'port-count', 'port-summary', 'port-list', 'port-form', 'port-name', 'port-island', 'port-type', 'port-capacity', 'port-reset-all',
-  'water-route-count', 'water-route-summary', 'water-route-list', 'water-route-form', 'water-route-name', 'water-route-from-port', 'water-route-to-port',
-  'water-route-type', 'water-route-vessel', 'water-route-reset-all', 'port-layer', 'port-label-layer', 'water-route-layer', 'water-route-label-layer',
-  'dm-maritime-list', 'dm-maritime-result',
-]) {
-  const matches = html.match(new RegExp(`id=["']${id}["']`, 'g')) ?? [];
-  assert.equal(matches.length, 1, `${id} must exist exactly once`);
-}
-assert(source.includes('function renderPortList()'), 'Port editor renderer is missing.');
-assert(source.includes('function renderWaterRouteList()'), 'Water-route editor renderer is missing.');
-assert(source.includes("regenerateFrom('ports'"), 'Port edits must use port-stage regeneration.');
-assert(source.includes("regenerateFrom('water-routes'"), 'Water-route edits must use route-stage regeneration.');
-assert(css.includes('.port-item') && css.includes('.water-route-item'), 'Maritime editor styling is missing.');
+assert(html.includes('id="port-count"'), 'Coastal reference port count is missing.');
+assert(!html.includes('id="water-route-'), 'Retired water-route UI returned.');
+assert(!pipeline.includes('WaterRouteStage'), 'Retired water-route stage returned to generation.');
+assert(!world.includes('waterRoutes'), 'Retired water-route state returned to world persistence.');
+assert(!existsSync(join(projectPath, 'src', 'engine', 'infrastructure', 'WaterRoute.ts')), 'Retired water-route domain module returned.');
 
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompilerPath, '-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });

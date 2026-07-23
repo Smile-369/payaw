@@ -1,0 +1,62 @@
+===== ms13 =====
+
+> payaw-procgen@0.17.0 test:ms13
+> node scripts/run-ms13-tests.mjs
+
+{
+  "layouts": [
+    {
+      "layout": "single-small-island",
+      "landTiles": 5501,
+      "detectedIslands": 1,
+      "settlements": 5
+    },
+    {
+      "layout": "single-medium-island",
+      "landTiles": 8390,
+      "detectedIslands": 2,
+      "settlements": 5
+    },
+    {
+      "layout": "single-large-island",
+      "landTiles": 14925,
+      "detectedIslands": 2,
+      "settlements": 5
+    },
+    {
+      "layout": "archipelago",
+      "landTiles": 3986,
+      "detectedIslands": 4,
+      "settlements": 5
+    },
+    {
+      "layout": "twin-islands",
+      "landTiles": 5333,
+      "detectedIslands": 2,
+      "settlements": 5
+    },
+    {
+      "layout": "peninsula",
+      "landTiles": 14142,
+      "detectedIslands": 4,
+      "settlements": 5
+    },
+    {
+      "layout": "inland-coast",
+      "landTiles": 21458,
+      "detectedIslands": 2,
+      "settlements": 5
+    },
+    {
+      "layout": "delta",
+      "landTiles": 25361,
+      "detectedIslands": 3,
+      "settlements": 5
+    }
+  ]
+}
+===== ms14 =====
+
+> payaw-procgen@0.17.0 test:ms14
+> node scripts/run-ms14-tests.mjs
+

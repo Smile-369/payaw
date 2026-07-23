@@ -5,6 +5,12 @@ export class SettlementStage implements GenerationStage {
   public readonly id = 'settlements';
 
   public run({ world, random, options }: GenerationContext): void {
-    generateSettlements(world, random, options.settlementPositionOverrides);
+    generateSettlements(
+      world,
+      random,
+      options.settlementPositionOverrides,
+      options.authoredSettlements,
+      options.settlementAuthoringOverrides,
+    );
   }
 }

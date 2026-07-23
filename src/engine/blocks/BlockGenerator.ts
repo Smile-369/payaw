@@ -59,7 +59,9 @@ function buildCandidateMask(world: World, config: BlockConfig): Uint8Array {
     const portDistance = distanceToClosestAnchor(tile.x, tile.y, portAnchors);
     const airportDistance = distanceToClosestAnchor(tile.x, tile.y, airportAnchors);
     const withinSettlement = settlements.some((settlement) => (
-      world.tiles[index]?.islandId === settlement.islandId
+      settlement.generateBuildings !== false
+      && settlement.hidden !== true
+      && world.tiles[index]?.islandId === settlement.islandId
       && Math.hypot(tile.x - settlement.x, tile.y - settlement.y) <= settlement.influenceRadius
     ));
     if (

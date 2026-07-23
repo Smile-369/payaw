@@ -1,0 +1,14 @@
+
+> payaw-procgen@0.17.0 build
+> tsc --noEmit && vite build
+
+[36mvite v8.1.5 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 119 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             58.12 kB │ gzip:  12.16 kB
+dist/assets/generation.worker-B_4luZ6g.js  168.62 kB
+dist/assets/index-COE_XnqI.css              49.00 kB │ gzip:  10.88 kB
+dist/assets/index-B487afzQ.js              382.47 kB │ gzip: 111.45 kB │ map: 1,320.27 kB
+
+[32m✓ built in 885ms[39m

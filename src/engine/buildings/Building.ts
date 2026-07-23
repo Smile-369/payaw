@@ -46,6 +46,8 @@ export interface BuildingEntrance extends GridPoint {
 
 export interface Building {
   readonly id: number;
+  /** Stable identity before authoring suppression and runtime reindexing. */
+  readonly generatedId?: number;
   readonly type: BuildingType;
   readonly templateId: string;
   readonly blockId: number | null;
@@ -57,4 +59,7 @@ export interface Building {
   readonly stories: number;
   readonly condition: BuildingCondition;
   readonly anchorId: number | null;
+  readonly source?: 'generated' | 'authored';
+  readonly authoringFeatureId?: string;
+  readonly authoredName?: string;
 }

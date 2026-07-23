@@ -1,0 +1,30 @@
+PAYAW Milestone 20 targeted test run
+
+PASS  npm run test:ms20
+      Campaign schema, scenes, clock, events, reveals, messages, assets,
+      checklists, sessions, checkpoints, encounters, search, backlinks,
+      reference health, normalization, export, and event idempotency.
+
+PASS  npm run test:ms19
+      NPC/location authoring, residential homes, authored schedule precedence,
+      venue status, schema migration, and M20 lineage compatibility.
+
+PASS  npm run test:ms18
+      World authoring, cross-island community movement, terrain overrides,
+      authored roads, Hidden Payaw, and generated-feature suppression.
+
+PASS  npm run test:ms171
+      Persisted events, timezone fallback, restricted transport, and
+      author-driven NPC placement compatibility.
+
+PASS  npm run test:ms164
+      Cross-island community-anchor reassignment and destination generation.
+
+PASS  npm run test:ms162
+      Clock/NPC visibility and retained simulation display compatibility.
+
+PASS  npm run test:ms82
+      Editor/DM workspace regression and collapsed editor disclosures.
+
+NOT RUN  npm run test:engine
+         Legacy monolithic stress/benchmark suite; intentionally excluded.

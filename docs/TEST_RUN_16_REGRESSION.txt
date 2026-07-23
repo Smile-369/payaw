@@ -1,0 +1,14 @@
+
+> payaw-procgen@0.17.0 test:ms16
+> node scripts/run-ms16-tests.mjs
+
+{
+  "schemaVersion": 17,
+  "generationVersion": "payaw-m17-living-world-v1",
+  "npcCount": 25,
+  "anchorCount": 9,
+  "minimumAnchorDegree": 2,
+  "travelLocations": 45,
+  "alternateRoutes": 3,
+  "sampleDriveMinutes": 15.8
+}

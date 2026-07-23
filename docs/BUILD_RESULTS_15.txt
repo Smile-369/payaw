@@ -1,0 +1,12 @@
+PAYAW Milestone 15 production build
+Validation date: 2026-07-19
+
+vite v8.1.5
+106 modules transformed
+
+dist/index.html                             48.51 kB | gzip 10.28 kB
+dist/assets/generation.worker-D3ZmBA2t.js  161.37 kB
+dist/assets/index-CuhodY_H.css              41.88 kB | gzip 9.33 kB
+dist/assets/index-BitFHBqy.js              329.54 kB | gzip 94.76 kB | map 1,144.86 kB
+
+Build completed successfully.

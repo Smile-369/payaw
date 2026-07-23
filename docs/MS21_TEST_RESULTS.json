@@ -1,0 +1,11 @@
+{
+  "release": "0.21.1",
+  "baselineStoryPoints": 6,
+  "storyPointsAfterRemoval": 5,
+  "removedStoryKey": "balete-1",
+  "communityAnchor": {
+    "key": "settlement:authored:ms21-community",
+    "name": "Barangay Paglaum",
+    "kind": "barangay"
+  }
+}

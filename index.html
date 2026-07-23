@@ -5,7 +5,8 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <meta content="#0b0f0d" name="theme-color"/>
-<title>PAYAW World Studio · Milestone 14</title>
+<meta content="PAYAW campaign authoring, session direction, and private player rooms" name="description"/>
+<title>PAYAW Campaign Studio</title>
 </head>
 <body>
 <div id="app">
@@ -17,8 +18,8 @@
 <h1>World Studio</h1>
 </div>
 </div>
-<span class="version-pill">M14</span>
-<p class="subtitle">Build a responsive Metro Bacolod-scale region with cancellable generation, authored settlements, bridges, ports, and routes.</p>
+<span class="version-pill">M20</span>
+<p class="subtitle">Generate a campaign region, then reshape it freely through non-destructive GM authoring.</p>
 </header>
 <nav aria-label="Workspace" class="workspace-switcher">
 <button aria-selected="true" class="workspace-tab" data-workspace="editor" id="workspace-editor-button" type="button">
@@ -32,7 +33,7 @@
 </nav>
 <div class="workspace-context">
 <div><p class="section-kicker" id="workspace-kicker">World Editor</p><h2 id="workspace-title">Build the world</h2></div>
-<p id="workspace-description">Generation, layout, zoning, assets, labels, and story authoring.</p>
+<p id="workspace-description">Terrain generation, anchor-based world authoring, NPCs, locations, and point-to-point travel planning.</p>
 </div>
 <div class="workspace-panel workspace-panel-editor" data-workspace-panel="editor" id="editor-workspace"><div class="workspace-section-heading"><span>01</span><div><strong>World foundation</strong><small>Seed, geography, climate, and map display</small></div></div><section class="card generator-card">
 <div class="section-heading">
@@ -53,7 +54,7 @@
 </select>
 </label>
 <label class="form-field">
-<span>Town scale</span>
+<span>Built-up density</span>
 <select id="town-scale">
 <option value="rural">Rural</option>
 <option selected="" value="semi-urban">Semi-urban</option>
@@ -94,14 +95,9 @@
 <div class="input-with-unit"><input id="island-spacing-input" type="number" min="0.5" max="12" step="0.5" value="4"/><span>km</span></div>
 <small>Approximate minimum water gap between major islands.</small>
 </label>
-<label class="form-field">
-<span>Satellite towns</span>
-<input id="satellite-count-input" type="number" min="0" max="12" step="1" value="4"/>
-<small>Set to 0 for only the primary Poblacion.</small>
-</label>
 </div>
 <p class="regional-scale-readout" id="regional-scale-readout">Metro-scale region: 32 × 24 km · 125 m per tile</p>
-<p class="helper-text" id="profile-hint">Small terrain with a balanced semi-urban settlement.</p>
+<p class="helper-text" id="profile-hint">Small terrain with balanced semi-urban development. Communities are placed later as movable anchor points.</p>
 <div class="generation-actions">
 <button class="primary" id="generate-button" type="button">Generate world</button>
 <button id="cancel-generation-button" type="button" hidden>Cancel</button>
@@ -113,7 +109,7 @@
 <div aria-live="polite" class="status-message" id="generation-status" role="status">Ready.</div>
 </section>
 <details class="card disclosure performance-panel">
-<summary><span><small>Milestone 14</small>Performance diagnostics</span><span class="summary-caret">⌄</span></summary>
+<summary><span><small>Diagnostics</small>Generation performance</span><span class="summary-caret">⌄</span></summary>
 <div class="disclosure-body">
 <div class="performance-grid">
 <div><small>Generation</small><strong id="perf-generation-total">—</strong></div>
@@ -166,36 +162,103 @@
 <label class="check-row"><input checked="" id="river-layer" type="checkbox"/><span>Rivers</span></label>
 <label class="check-row"><input checked="" id="island-layer" type="checkbox"/><span>Island boundaries</span></label>
 <label class="check-row"><input checked="" id="island-label-layer" type="checkbox"/><span>Island labels</span></label>
-<label class="check-row"><input checked="" id="settlement-layer" type="checkbox"/><span>Settlements</span></label>
+<label class="check-row"><input checked="" id="settlement-layer" type="checkbox"/><span>Community anchors</span></label>
 <label class="check-row"><input checked="" id="road-layer" type="checkbox"/><span>Roads</span></label>
 <label class="check-row"><input checked="" id="bridge-layer" type="checkbox"/><span>Bridges</span></label>
 <label class="check-row"><input checked="" id="bridge-label-layer" type="checkbox"/><span>Bridge labels</span></label>
 <label class="check-row"><input checked="" id="port-layer" type="checkbox"/><span>Ports</span></label>
 <label class="check-row"><input checked="" id="port-label-layer" type="checkbox"/><span>Port labels</span></label>
-<label class="check-row"><input checked="" id="water-route-layer" type="checkbox"/><span>Water routes</span></label>
-<label class="check-row"><input checked="" id="water-route-label-layer" type="checkbox"/><span>Route labels</span></label>
 <label class="check-row"><input checked="" id="road-label-layer" type="checkbox"/><span>Street labels</span></label>
 <label class="check-row"><input checked="" id="building-layer" type="checkbox"/><span>Buildings</span></label>
 <label class="check-row"><input checked="" id="custom-image-layer" type="checkbox"/><span>Custom images</span></label>
 <label class="check-row"><input checked="" id="vegetation-layer" type="checkbox"/><span>Vegetation</span></label>
-<label class="check-row"><input checked="" id="anchor-layer" type="checkbox"/><span>Anchors</span></label>
+<label class="check-row"><input checked="" id="anchor-layer" type="checkbox"/><span>Point anchors</span></label>
 <label class="check-row"><input checked="" id="story-layer" type="checkbox"/><span>Story sites</span></label>
+<label class="check-row"><input checked="" id="npc-layer" type="checkbox"/><span>NPCs</span></label>
+<label class="check-row"><input checked="" id="authoring-layer" type="checkbox"/><span>GM authoring</span></label>
+<label class="check-row"><input id="hidden-payaw-layer" type="checkbox"/><span>Hidden Payaw</span></label>
+<label class="check-row"><input id="live-infrastructure-layer" type="checkbox"/><span>Infrastructure exceptions</span></label>
+<label class="check-row"><input id="venue-status-layer" type="checkbox"/><span>Venue status</span></label>
+<label class="check-row"><input id="settlement-activity-layer" type="checkbox"/><span>Community activity</span></label>
+<label class="check-row"><input id="supernatural-activity-layer" type="checkbox"/><span>Supernatural activity</span></label>
+<label class="check-row"><input checked="" id="travel-path-layer" type="checkbox"/><span>Travel route</span></label>
 <label class="check-row"><input id="grid-layer" type="checkbox"/><span>Tile grid</span></label>
 </div>
 </div>
 </div>
-</details><div class="workspace-section-heading"><span>02</span><div><strong>World structure</strong><small>Anchors, roads, blocks, and zoning</small></div></div><details class="card disclosure island-editor">
-<summary>
-<span><small>Regional system</small>Islands &amp; settlements</span>
-<span class="count-badge" id="island-count">0</span>
-</summary>
-<div class="disclosure-body">
-<p class="helper-text">Every viable landmass is classified as an island with its own role, population budget, and settlement count. Edits are non-destructive and regenerate only the regional pipeline and downstream town systems.</p>
-<div class="regional-summary" id="regional-summary"></div>
-<div class="island-list" id="island-list"></div>
-<div class="button-row"><button id="island-reset-all" type="button">Reset all island overrides</button></div>
+</details><div class="workspace-section-heading"><span>02</span><div><strong>World authoring</strong><small>Move, add, redraw, hide, lock, and restore generated features</small></div></div>
+<details class="card disclosure authoring-card" id="authoring-card">
+<summary><span><small>Milestone 18</small>The GM owns the world</span><span class="summary-caret">⌄</span></summary>
+<div class="disclosure-body authoring-workspace">
+  <div class="authoring-toolbar" role="toolbar" aria-label="World authoring tools">
+    <button type="button" data-authoring-tool="select" class="active">Select / move</button>
+    <button type="button" data-authoring-tool="anchor">Anchor</button>
+    <button type="button" data-authoring-tool="polyline">Path</button>
+    <button type="button" data-authoring-tool="polygon">Area</button>
+    <button type="button" data-authoring-tool="terrain-brush">Terrain brush</button>
+  </div>
+  <div class="authoring-statusbar"><span class="authoring-mode-badge" id="authoring-mode-badge">SELECT</span><p id="authoring-status">Select authored items or drag anchors and authored features on the map.</p></div>
+
+  <section class="authoring-section">
+    <div class="subsection-heading"><strong>Anchor points</strong><span>Every place starts as an anchor. Choose a point of interest or a community type, then place it anywhere on the map.</span></div>
+    <p class="helper-text anchor-authoring-help">Community anchors are authored after generation. Their landmass is resolved automatically from where the GM places them.</p>
+    <div class="authoring-form-grid">
+      <label class="form-field full-width"><span>Anchor name</span><input id="authoring-settlement-name" maxlength="100" value="New Barangay"/></label>
+      <label class="form-field"><span>Anchor type</span><select id="authoring-settlement-kind">
+        <optgroup label="Point anchor"><option value="point">Point of interest</option></optgroup>
+        <optgroup label="Community anchor"><option value="city">City</option><option value="town">Town</option><option selected value="barangay">Barangay</option><option value="subdivision">Subdivision</option><option value="neighborhood">Neighborhood</option><option value="village">Village</option><option value="sitio">Sitio</option><option value="district">District</option><option value="compound">Compound</option><option value="custom">Custom community</option></optgroup>
+      </select></label>
+      <label class="form-field" data-settlement-anchor-only><span>Parent anchor</span><select id="authoring-settlement-parent"><option value="">None</option></select></label>
+      <label class="form-field" data-settlement-anchor-only><span>Influence radius</span><input id="authoring-settlement-radius" type="number" min="2" max="100" step="1" value="10"/></label>
+      <label class="form-field" data-settlement-anchor-only><span>Rotation</span><div class="input-with-unit"><input id="authoring-settlement-rotation" type="number" min="-180" max="180" step="5" value="0"/><span>°</span></div></label>
+      <label class="form-field" data-settlement-anchor-only><span>Population target</span><input id="authoring-settlement-population" type="number" min="0" max="500000" step="50" value="500"/></label>
+      <label class="form-field" data-settlement-anchor-only><span>Density</span><input id="authoring-settlement-density" type="number" min="0" max="1" step="0.05" value="0.55"/></label>
+      <label class="form-field"><span>Visibility</span><select id="authoring-settlement-visibility"><option value="players">Players</option><option value="gm-only">GM only</option><option value="hidden">Hidden</option></select></label>
+      <label class="form-field full-width"><span>Notes</span><input id="authoring-settlement-notes" maxlength="4000" placeholder="Local name, history, campaign purpose…"/></label>
+      <label class="check-row" data-settlement-anchor-only><input id="authoring-settlement-roads" type="checkbox" checked/><span>Generate local roads</span></label>
+      <label class="check-row" data-settlement-anchor-only><input id="authoring-settlement-buildings" type="checkbox" checked/><span>Generate buildings</span></label>
+    </div>
+    <div class="button-row authoring-actions"><button class="primary" id="authoring-place-settlement" type="button">Place anchor</button><button id="authoring-apply-settlement" type="button">Apply anchor</button><button id="authoring-duplicate-settlement" type="button" disabled>Duplicate anchor</button></div>
+    <div class="authoring-list" id="authoring-settlement-list"></div>
+  </section>
+
+  <section class="authoring-section" hidden>
+    <div class="subsection-heading"><strong>Authored map features</strong><span>Use one object model for roads, rivers, buildings, districts, landmarks, infrastructure, natural features, labels, and Hidden Payaw.</span></div>
+    <div class="authoring-form-grid">
+      <label class="form-field full-width"><span>Name</span><input id="authoring-feature-name" maxlength="120" value="Authored feature"/></label>
+      <label class="form-field"><span>Category</span><select id="authoring-feature-category"><option value="terrain">Terrain area</option><option value="river">River / canal / creek</option><option value="road">Road / path / alley</option><option value="building">Building</option><option value="district">District boundary</option><option selected value="landmark">Landmark / story site</option><option value="infrastructure">Infrastructure</option><option value="natural">Natural feature</option><option value="label">Map label</option><option value="hidden-payaw">Hidden Payaw</option></select></label>
+      <label class="form-field"><span>Subtype</span><input id="authoring-feature-subtype" maxlength="80" value="custom" placeholder="footpath, balete, cemetery…"/></label>
+      <label class="form-field"><span>Reality layer</span><select id="authoring-feature-reality"><option value="normal">Normal world</option><option value="hidden-payaw">Hidden Payaw</option></select></label>
+      <label class="form-field"><span>Visibility</span><select id="authoring-feature-visibility"><option value="players">Players</option><option value="gm-only">GM only</option><option value="hidden">Hidden</option></select></label>
+      <label class="form-field"><span>Color</span><input id="authoring-feature-color" type="color" value="#f2c05e"/></label>
+      <label class="form-field"><span>Line width</span><input id="authoring-feature-line-width" type="number" min="0.5" max="16" step="0.5" value="2"/></label>
+      <label class="form-field"><span>Scale</span><input id="authoring-feature-scale" type="number" min="0.25" max="8" step="0.05" value="1"/></label>
+      <label class="form-field"><span>Rotation</span><div class="input-with-unit"><input id="authoring-feature-rotation" type="number" min="-180" max="180" step="5" value="0"/><span>°</span></div></label>
+      <label class="form-field"><span>Opacity</span><input id="authoring-feature-opacity" type="number" min="0.1" max="1" step="0.05" value="0.92"/></label>
+      <label class="form-field"><span>Fill opacity</span><input id="authoring-feature-fill" type="number" min="0" max="0.7" step="0.05" value="0.25"/></label>
+      <label class="form-field full-width"><span>Aliases</span><input id="authoring-feature-aliases" placeholder="Official name, local name, player-facing name"/></label>
+      <label class="form-field full-width"><span>GM notes</span><textarea id="authoring-feature-notes" rows="3" placeholder="History, condition, reveal rules, story hooks…"></textarea></label>
+    </div>
+    <div class="button-row authoring-actions"><button class="primary" id="authoring-start-feature" type="button">Draw with selected tool</button><button id="authoring-finish-feature" type="button" disabled>Finish shape</button><button id="authoring-cancel-feature" type="button" disabled>Cancel</button></div>
+    <div class="authoring-list" id="authoring-feature-list"></div>
+  </section>
+
+  <section class="authoring-section terrain-authoring" hidden>
+    <div class="subsection-heading"><strong>Terrain &amp; water brush</strong><span>Warnings never block placement. Restore removes only your override and reveals the deterministic terrain below.</span></div>
+    <div class="authoring-form-grid">
+      <label class="form-field"><span>Operation</span><select id="authoring-terrain-operation"><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Set elevation</option><option value="smooth">Smooth</option><option value="paint">Paint terrain</option><option value="river">Carve river</option><option value="erase-river">Erase river</option><option value="restore">Restore generated</option></select></label>
+      <label class="form-field"><span>Brush size</span><input id="authoring-terrain-size" type="range" min="1" max="16" step="1" value="4"/></label>
+      <label class="form-field"><span>Strength / elevation</span><input id="authoring-terrain-strength" type="number" min="0.01" max="1" step="0.01" value="0.08"/></label>
+      <label class="form-field"><span>Terrain</span><select id="authoring-terrain-type"><option value="plain">Plain</option><option value="forest">Forest</option><option value="hill">Hill</option><option value="mountain">Mountain</option><option value="beach">Beach</option><option value="floodplain">Floodplain</option><option value="delta">Delta</option><option value="river-channel">River channel</option><option value="lake">Lake</option><option value="shallow-water">Shallow water</option><option value="deep-water">Deep water</option></select></label>
+    </div>
+    <div class="button-row authoring-actions"><button id="authoring-clear-terrain" type="button">Clear terrain overrides</button><button id="authoring-lock-terrain" type="button">Lock / unlock terrain edits</button></div>
+  </section>
+
+  <div class="authoring-global-actions"><button id="authoring-show-all" type="button">Show all authored items</button><button id="authoring-reset-selected" type="button" disabled>Restore selected</button><button class="danger-button" id="authoring-delete-selected" type="button" disabled>Delete / suppress selected</button></div>
+  <p class="helper-text">Generated objects remain underneath. Authored changes are saved in a separate layer, included in project JSON, supported by undo/redo, and safe to reset individually.</p>
 </div>
-</details><details class="card disclosure bridge-editor">
+</details>
+<div class="workspace-section-heading"><span>03</span><div><strong>World structure</strong><small>Generated infrastructure reference</small></div></div><details class="card disclosure bridge-editor" hidden>
 <summary>
 <span><small>Regional transport</small>Bridges</span>
 <span class="count-badge" id="bridge-count">0</span>
@@ -215,48 +278,35 @@
 </form>
 <div class="bridge-list" id="bridge-list"></div>
 </div>
-</details><details class="card disclosure maritime-editor">
+</details><details class="card disclosure maritime-editor" hidden>
 <summary>
-<span><small>Regional transport</small>Ports &amp; water routes</span>
-<span class="count-badge"><span id="port-count">0</span> / <span id="water-route-count">0</span></span>
+<span><small>Coastal anchors</small>Ports</span>
+<span class="count-badge" id="port-count">0</span>
 </summary>
 <div class="disclosure-body maritime-editor-body">
-<p class="helper-text">Ports are scored from coast depth, shelter, approach terrain, settlement demand, and island policy. Water routes navigate ocean tiles, avoid land, estimate travel time, and include DM encounter tables.</p>
+<p class="helper-text">Generated ports remain simple coastal reference points. Route simulation and custom infrastructure authoring are not part of the active workspace.</p>
 <div class="maritime-columns">
 <section class="maritime-panel">
 <div class="subsection-heading"><strong>Ports</strong><span>Generated and custom terminals</span></div>
 <div class="regional-summary" id="port-summary"></div>
 <form class="bridge-create-form" id="port-form">
-<label class="form-field full-width"><span>Custom port name</span><input id="port-name" maxlength="56" placeholder="e.g. Payaw Ferry Terminal" required type="text"/></label>
+<label class="form-field full-width"><span>Custom port name</span><input id="port-name" maxlength="56" placeholder="e.g. Payaw Coastal Port" required type="text"/></label>
 <label class="form-field"><span>Island</span><select id="port-island"></select></label>
-<label class="form-field"><span>Port type</span><select id="port-type"><option value="fishing-dock">Fishing dock</option><option value="barangay-jetty">Barangay jetty</option><option selected value="ferry-terminal">Ferry terminal</option><option value="commercial-port">Commercial port</option><option value="industrial-port">Industrial port</option><option value="marina">Marina</option></select></label>
+<label class="form-field"><span>Port type</span><select id="port-type"><option selected value="fishing-dock">Fishing dock</option><option value="barangay-jetty">Barangay jetty</option><option value="commercial-port">Commercial port</option><option value="industrial-port">Industrial port</option><option value="marina">Marina</option></select></label>
 <label class="form-field"><span>Capacity</span><input id="port-capacity" min="20" max="5000" step="10" type="number" value="300"/></label>
 <div class="button-row full-width"><button class="primary" type="submit">Add custom port</button><button id="port-reset-all" type="button">Reset ports</button></div>
 </form>
 <div class="port-list" id="port-list"></div>
 </section>
-<section class="maritime-panel">
-<div class="subsection-heading"><strong>Water routes</strong><span>Ferries, fishing, and cargo</span></div>
-<div class="regional-summary" id="water-route-summary"></div>
-<form class="bridge-create-form" id="water-route-form">
-<label class="form-field full-width"><span>Custom route name</span><input id="water-route-name" maxlength="64" placeholder="e.g. Dandansoy Night Ferry" required type="text"/></label>
-<label class="form-field"><span>From port</span><select id="water-route-from-port"></select></label>
-<label class="form-field"><span>To port</span><select id="water-route-to-port"></select></label>
-<label class="form-field"><span>Route type</span><select id="water-route-type"><option value="fishing-route">Fishing route</option><option selected value="passenger-ferry">Passenger ferry</option><option value="cargo-route">Cargo route</option><option value="coastal-route">Coastal route</option><option value="open-water-route">Open-water route</option><option value="smuggling-route">Smuggling route</option><option value="story-route">Story route</option></select></label>
-<label class="form-field"><span>Vessel</span><select id="water-route-vessel"><option value="small-boat">Small boat</option><option selected value="ferry">Ferry</option><option value="cargo-vessel">Cargo vessel</option></select></label>
-<div class="button-row full-width"><button class="primary" type="submit">Add custom route</button><button id="water-route-reset-all" type="button">Reset routes</button></div>
-</form>
-<div class="water-route-list" id="water-route-list"></div>
-</section>
 </div>
 </div>
 </details><details class="card disclosure anchor-editor">
 <summary>
-<span><small>Customize</small>Anchor rules</span>
+<span><small>Anchor templates</small>Procedural point rules</span>
 <span class="count-badge" id="anchor-count">9</span>
 </summary>
 <div class="disclosure-body">
-<p class="helper-text">Edit any built-in anchor or add new ones. Edited rules control procedural placement and can establish zoning around the resulting anchor.</p>
+<p class="helper-text">Edit procedural point-of-interest templates such as the plaza, church, school, market, and port. Towns, barangays, subdivisions, and neighborhoods are created and moved as community anchors in the Anchor points panel.</p>
 <form class="anchor-form" id="anchor-form">
 <div class="form-mode full-width">
 <strong id="anchor-form-title">Add custom anchor</strong>
@@ -576,6 +626,10 @@
 </summary>
 <div class="disclosure-body">
 <p class="helper-text">Create and edit procedural story locations, lore, zone rules, artwork targets, and encounter tables. Encounter rolling lives in DM Mode.</p>
+<section class="ms21-world-story-section">
+<div class="subsection-heading"><strong>Generated story points</strong><span>Focus, roll, or remove</span></div>
+<div class="story-list compact-list" id="world-story-list"></div>
+</section>
 <form class="story-rule-form authoring-form" id="custom-story-form">
 <div class="form-mode full-width"><strong id="custom-story-form-title">Add story point</strong><button class="text-button" hidden="" id="custom-story-cancel" type="button">Cancel edit</button></div>
 <input id="custom-story-edit-id" type="hidden"/>
@@ -611,7 +665,121 @@
 </form>
 
 </div>
-</details><div class="workspace-section-heading"><span>05</span><div><strong>Project output</strong><small>Inspect, export, and move overrides</small></div></div><details class="card disclosure">
+</details>
+<details class="card disclosure npc-studio-card">
+<summary>
+<span><small>Campaign authoring</small>NPC Generator</span>
+<span class="count-badge" id="npc-count">0</span>
+</summary>
+<div class="disclosure-body npc-authoring-workspace">
+<p class="helper-text">Generated NPCs are editable suggestions. The GM assigns residential homes, weekly schedules, relationships, portraits, scene placements, and temporary overrides.</p>
+<div class="npc-live-controls">
+<label class="check-row npc-map-toggle"><input checked data-layer-target="npc-layer" type="checkbox"/><span>Show NPCs on map</span></label>
+<span class="npc-clock-note">Scene placement → temporary override → weekly schedule → residential home.</span>
+</div>
+<div class="npc-generator-controls">
+<label class="form-field"><span>Roster size</span><input id="npc-roster-size" min="1" max="200" step="1" type="number" value="36"/></label>
+<label class="form-field"><span>Find NPC</span><input id="npc-search" placeholder="Name, occupation, community…" type="search"/></label>
+<button class="secondary" id="npc-generate-button" type="button">Regenerate suggestions</button>
+<button class="primary" id="npc-create-button" type="button">+ New NPC</button>
+</div>
+<div class="npc-list" id="npc-list"></div>
+
+<section class="authoring-section npc-editor-section">
+<div class="subsection-heading"><strong>NPC editor</strong><span id="npc-editor-heading">Select an NPC or create one.</span></div>
+<div class="authoring-form-grid">
+<label class="form-field full-width"><span>Name</span><input id="npc-edit-name" maxlength="160"/></label>
+<label class="form-field"><span>Age</span><input id="npc-edit-age" type="number" min="0" max="130" value="30"/></label>
+<label class="form-field"><span>Status</span><select id="npc-edit-status"><option value="alive">Alive</option><option value="missing">Missing</option><option value="injured">Injured</option><option value="possessed">Possessed</option><option value="dead">Dead</option></select></label>
+<label class="form-field full-width"><span>Occupation</span><input id="npc-edit-occupation" maxlength="160"/></label>
+<label class="form-field"><span>Community anchor</span><select id="npc-edit-settlement"></select></label>
+<label class="form-field"><span>Residential home</span><select id="npc-edit-home"></select></label>
+<label class="check-row full-width"><input id="npc-edit-unusual-home" type="checkbox"/><span>Allow unusual non-residential residence</span></label>
+<label class="form-field full-width"><span>Workplace</span><select id="npc-edit-workplace"></select></label>
+<label class="form-field full-width"><span>Public description</span><textarea id="npc-edit-public-description" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Personality</span><textarea id="npc-edit-personality" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Wish</span><textarea id="npc-edit-wish" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Fear</span><textarea id="npc-edit-fear" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Secret</span><textarea id="npc-edit-secret" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Rumor</span><textarea id="npc-edit-rumor" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Tags</span><input id="npc-edit-tags" placeholder="student, witness, family"/></label>
+<label class="form-field full-width"><span>GM notes</span><textarea id="npc-edit-notes" rows="3"></textarea></label>
+<label class="file-button full-width">Choose portrait<input accept="image/*" hidden id="npc-edit-portrait" type="file"/></label>
+<div class="npc-portrait-preview full-width" id="npc-portrait-preview">No portrait</div>
+</div>
+<div class="button-row"><button class="primary" id="npc-save-button" type="button">Save NPC</button><button id="npc-reset-button" type="button">Reset generated fields</button><button class="danger-button" id="npc-delete-button" type="button">Delete authored NPC</button></div>
+</section>
+
+<section class="authoring-section npc-schedule-section">
+<div class="subsection-heading"><strong>Weekly schedule</strong><span>Editable continuity, not autonomous AI.</span></div>
+<div class="schedule-day-tabs" id="npc-schedule-day-tabs"></div>
+<div class="authoring-form-grid">
+<label class="form-field"><span>Start</span><input id="npc-schedule-start" type="time" value="08:00"/></label>
+<label class="form-field"><span>End</span><input id="npc-schedule-end" type="time" value="09:00"/></label>
+<label class="form-field full-width"><span>Activity</span><input id="npc-schedule-activity" value="At location"/></label>
+<label class="form-field full-width"><span>Location</span><select id="npc-schedule-location"></select></label>
+<label class="form-field"><span>Travel</span><select id="npc-schedule-travel"><option value="none">None</option><option value="walk">Walk</option><option value="drive">Drive</option><option value="public-transport">Public transport</option></select></label>
+<label class="form-field"><span>Visibility</span><select id="npc-schedule-visibility"><option value="gm-only">GM only</option><option value="revealable">Revealable</option><option value="public">Public</option></select></label>
+</div>
+<div class="button-row"><button class="primary" id="npc-schedule-add" type="button">Add block</button><button id="npc-schedule-copy-weekdays" type="button">Copy day to weekdays</button><button id="npc-schedule-clear-day" type="button">Clear day</button></div>
+<div class="schedule-entry-list" id="npc-schedule-list"></div>
+<div class="schedule-validation" id="npc-schedule-validation"></div>
+</section>
+
+<section class="authoring-section npc-relationship-section">
+<div class="subsection-heading"><strong>Relationships</strong><span>Authored links stay attached to the NPC.</span></div>
+<div class="authoring-form-grid">
+<label class="form-field full-width"><span>Related NPC</span><select id="npc-relationship-target"></select></label>
+<label class="form-field"><span>Kind</span><select id="npc-relationship-kind"><option value="family">Family</option><option value="friend">Friend</option><option value="rival">Rival</option><option value="coworker">Coworker</option><option value="neighbor">Neighbor</option><option value="contact">Contact</option><option value="romantic">Romantic</option><option value="custom">Custom</option></select></label>
+<label class="check-row"><input id="npc-relationship-hidden" type="checkbox"/><span>GM-only relationship</span></label>
+<label class="form-field full-width"><span>Label / notes</span><input id="npc-relationship-label" placeholder="Older sister, owes money, trusted contact…"/></label>
+</div>
+<div class="button-row"><button id="npc-relationship-add" type="button">Add relationship</button></div>
+<div class="relationship-list" id="npc-relationship-list"></div>
+</section>
+
+<section class="authoring-section npc-override-section">
+<div class="subsection-heading"><strong>Live placement</strong><span>Temporary and scene placements override the weekly schedule.</span></div>
+<div class="authoring-form-grid">
+<label class="form-field full-width"><span>Location</span><select id="npc-override-location"></select></label>
+<label class="form-field full-width"><span>Activity</span><input id="npc-override-activity" value="Present here"/></label>
+<label class="form-field"><span>Duration</span><select id="npc-override-duration"><option value="60">1 hour</option><option value="240">4 hours</option><option value="720">12 hours</option><option value="1440">1 day</option></select></label>
+<label class="form-field"><span>Scene ID</span><input id="npc-scene-id" placeholder="scene-1"/></label>
+<label class="form-field full-width"><span>Reason</span><input id="npc-override-reason" placeholder="Sick, questioned by players, fiesta duty…"/></label>
+<label class="check-row"><input id="npc-scene-visible" type="checkbox" checked/><span>Visible to players in scene</span></label>
+</div>
+<div class="button-row"><button class="primary" id="npc-override-add" type="button">Place temporarily</button><button id="npc-scene-place" type="button">Place in active scene</button><button id="npc-placement-clear" type="button">Clear placements</button></div>
+<div class="placement-list" id="npc-placement-list"></div>
+</section>
+
+<section class="authoring-section location-editor-section">
+<div class="subsection-heading"><strong>Location authoring</strong><span>Name venues, assign owners, set player visibility, and author weekly hours.</span></div>
+<div class="authoring-form-grid">
+<label class="form-field full-width"><span>Map source</span><select id="location-source"></select></label>
+<label class="form-field full-width"><span>Name</span><input id="location-name" maxlength="200"/></label>
+<label class="form-field"><span>Type</span><input id="location-type" value="location"/></label>
+<label class="form-field"><span>Owner</span><select id="location-owner"></select></label>
+<label class="form-field"><span>Visibility</span><select id="location-visibility"><option value="gm-only">GM only</option><option value="players">Players</option><option value="hidden">Hidden</option></select></label>
+<label class="form-field"><span>Manual status</span><select id="location-status"><option value="">Use venue hours</option><option value="open">Open</option><option value="closed">Closed</option><option value="closing-soon">Closing soon</option><option value="emergency-only">Emergency only</option><option value="evacuated">Evacuated</option><option value="abandoned">Abandoned</option></select></label>
+<label class="form-field full-width"><span>Tags</span><input id="location-tags" placeholder="bakery, safe house, clue source"/></label>
+<label class="form-field full-width"><span>GM description</span><textarea id="location-description" rows="2"></textarea></label>
+<label class="form-field full-width"><span>Player description</span><textarea id="location-player-description" rows="2"></textarea></label>
+<label class="form-field full-width"><span>GM notes</span><textarea id="location-notes" rows="3"></textarea></label>
+</div>
+<div class="button-row"><button class="primary" id="location-save" type="button">Save location</button><button id="location-delete" type="button">Remove authored record</button></div>
+<div class="venue-hours-editor">
+<label class="form-field"><span>Day</span><select id="location-hours-day"><option value="monday">Monday</option><option value="tuesday">Tuesday</option><option value="wednesday">Wednesday</option><option value="thursday">Thursday</option><option value="friday">Friday</option><option value="saturday">Saturday</option><option value="sunday">Sunday</option></select></label>
+<label class="form-field"><span>Open</span><input id="location-hours-open" type="time" value="08:00"/></label>
+<label class="form-field"><span>Close</span><input id="location-hours-close" type="time" value="17:00"/></label>
+<label class="check-row"><input id="location-hours-closed" type="checkbox"/><span>Closed all day</span></label>
+<button id="location-hours-save" type="button">Save day hours</button>
+</div>
+<div class="venue-hours-list" id="location-hours-list"></div>
+<div class="location-list" id="location-list"></div>
+</section>
+</div>
+</details>
+<div class="workspace-section-heading"><span>05</span><div><strong>Project output</strong><small>Inspect, export, and move overrides</small></div></div><details class="card disclosure">
 <summary>
 <span><small>Inspect</small>World statistics</span>
 <span class="summary-caret">⌄</span>
@@ -636,6 +804,225 @@
 <div class="button-row"><button id="export-customization-button" type="button">Export overrides</button><label class="file-button">Import overrides<input accept=".json,application/json" hidden="" id="customization-import-file" type="file"/></label></div>
 </div>
 </details></div><div class="workspace-panel workspace-panel-dm" data-workspace-panel="dm" hidden="" id="dm-workspace">
+<section class="card campaign-dashboard" id="campaign-dashboard">
+  <div class="campaign-dashboard-header">
+    <div><p class="section-kicker">Campaign workspace</p><h2>Campaign dashboard</h2><p>Prepare and run scenes, timeline events, reveals, messages, notes, and sessions without changing the authored world underneath.</p></div>
+    <span class="campaign-save-state" id="campaign-save-state">LOCAL · SAVED</span>
+  </div>
+  <div class="campaign-identity-row">
+    <label class="form-field"><span>Campaign name</span><input id="campaign-name" maxlength="120" value="Hidden Payaw"/></label>
+    <label class="form-field"><span>Status</span><select id="campaign-status"><option value="draft">Draft</option><option value="active">Active</option><option value="archived">Archived</option></select></label>
+    <div class="button-row campaign-session-actions"><button class="primary" id="campaign-start-session" type="button">Start session</button><button id="campaign-end-session" type="button">End session</button></div>
+  </div>
+  <div class="campaign-summary-grid">
+    <div><small>Current session</small><strong id="campaign-current-session">Not started</strong></div>
+    <div><small>Active scene</small><strong id="campaign-current-scene">None</strong></div>
+    <div><small>Campaign time</small><strong id="campaign-current-time">—</strong></div>
+    <div><small>Upcoming events</small><strong id="campaign-upcoming-count">0</strong></div>
+    <div><small>Reveals</small><strong id="campaign-reveal-count">0</strong></div>
+    <div><small>Revision</small><strong id="campaign-revision">0</strong></div>
+    <div><small>World</small><strong id="campaign-current-world">—</strong></div>
+    <div><small>Weather</small><strong id="campaign-current-weather">Automatic</strong></div>
+  </div>
+  <div class="campaign-quick-actions"><button id="campaign-new-scene" type="button">+ Scene</button><button id="campaign-new-event" type="button">+ Event</button><button id="campaign-new-clue" type="button">+ Clue</button><button id="campaign-new-thread" type="button">+ Message thread</button><button id="campaign-add-live-note" type="button">+ Live note</button><button id="campaign-export" type="button">Export campaign</button><label class="file-button campaign-import-button">Import campaign<input accept=".json,application/json" hidden id="campaign-import-file" type="file"/></label></div>
+  <div class="campaign-checklist"><div class="subsection-heading"><strong>Preparation checklist</strong><span>GM-only tasks for the next session.</span></div><div class="campaign-inline-create"><input id="campaign-checklist-title" placeholder="Prepare the cinema handout"/><button id="campaign-add-checklist" type="button">Add task</button></div><div class="campaign-checklist-list" id="campaign-checklist-list"><span>No preparation tasks.</span></div></div>
+  <div class="campaign-recent-activity" id="campaign-recent-activity"><span>No campaign actions yet.</span></div>
+</section>
+
+<section class="card campaign-scene-director" id="campaign-scene-director">
+  <div class="dm-section-title"><div><p class="section-kicker">Primary live surface</p><h2>Scene Director</h2></div><span class="live-dot" id="campaign-director-state">IDLE</span></div>
+  <div class="campaign-director-now">
+    <div><small>ACTIVE SCENE</small><strong id="campaign-active-scene-title">No active scene</strong><span id="campaign-active-scene-location">Choose a prepared scene below.</span></div>
+    <div><small>WORLD STATE</small><strong id="campaign-director-time">—</strong><span id="campaign-director-weather">Automatic weather</span></div>
+  </div>
+  <div class="campaign-live-controls">
+    <div class="campaign-live-control-block">
+      <strong>Scene</strong>
+      <select id="campaign-scene-select"><option value="">No prepared scenes</option></select>
+      <div class="button-row"><button class="primary" id="campaign-activate-scene" type="button">Activate</button><button id="campaign-pause-scene" type="button">Pause</button><button id="campaign-complete-scene" type="button">Complete</button></div>
+    </div>
+    <div class="campaign-live-control-block">
+      <strong>Advance campaign time</strong>
+      <div class="campaign-time-buttons"><button data-campaign-minutes="5" type="button">+5m</button><button data-campaign-minutes="15" type="button">+15m</button><button data-campaign-minutes="30" type="button">+30m</button><button data-campaign-minutes="60" type="button">+1h</button><button data-campaign-semantic="morning" type="button">Next morning</button><button data-campaign-semantic="evening" type="button">Next evening</button><button data-campaign-semantic="tomorrow" type="button">Tomorrow</button></div>
+      <div class="campaign-exact-time"><input id="campaign-exact-time" type="datetime-local"/><button id="campaign-apply-exact-time" type="button">Set time</button></div>
+      <div class="campaign-time-metadata"><input id="campaign-timezone" value="Asia/Manila" aria-label="Campaign timezone" placeholder="Asia/Manila"/><input id="campaign-time-reason" aria-label="Reason for time change" placeholder="Optional reason note"/><button id="campaign-apply-timezone" type="button">Apply timezone</button></div>
+      <div class="campaign-time-preview" id="campaign-time-preview">No scheduled events crossed.</div>
+    </div>
+    <div class="campaign-live-control-block">
+      <strong>Weather</strong>
+      <select id="campaign-weather"><option value="auto">Automatic</option><option value="clear">Clear</option><option value="cloudy">Cloudy</option><option value="rain">Rain</option><option value="heavy-rain">Heavy rain</option><option value="thunderstorm">Thunderstorm</option><option value="typhoon">Typhoon</option></select>
+      <button id="campaign-apply-weather" type="button">Apply weather</button>
+    </div>
+  </div>
+  <div class="campaign-director-columns">
+    <section><div class="subsection-heading"><strong>Present participants</strong><span>Scene placement is temporary and never overwrites homes or schedules.</span></div><div class="campaign-participant-controls"><select id="campaign-participant-type"><option value="npc">NPC</option><option value="character">Character</option><option value="group">Group</option></select><select id="campaign-participant-ref"></select><button id="campaign-stage-participant" type="button">Stage</button></div><div class="campaign-chip-list" id="campaign-participant-list"><span>No one staged.</span></div></section>
+    <section><div class="subsection-heading"><strong>Immediate GM actions</strong><span>Manual-first; every action enters the session history.</span></div><div class="campaign-action-grid"><button id="campaign-reveal-clue" type="button">Reveal clue</button><button id="campaign-show-handout" type="button">Show handout</button><button id="campaign-send-message" type="button">Send message</button><button id="campaign-start-encounter" type="button">Start encounter</button></div><div class="campaign-action-feedback" id="campaign-action-feedback">Ready.</div></section>
+  </div>
+  <div class="campaign-live-note-row"><input id="campaign-live-note-title" placeholder="Live note title"/><textarea id="campaign-live-note-body" rows="2" placeholder="What changed, what the players noticed, what to prep next…"></textarea><button class="primary" id="campaign-save-live-note" type="button">Record note</button></div>
+</section>
+
+<section class="card player-preview-panel" id="player-preview-panel" hidden>
+  <div class="player-preview-heading">
+    <div><p class="section-kicker">Player access &amp; knowledge</p><h2>View as Player</h2><p>Generate a versioned, safe-to-send projection. The player route never loads the GM project or hides secrets with CSS.</p></div>
+    <span class="campaign-save-state" id="player-projection-safety">SAFE · NOT GENERATED</span>
+  </div>
+  <div class="player-preview-grid">
+    <section class="player-preview-block">
+      <div class="subsection-heading"><strong>Player identity</strong><span>Choose the table size, then configure each player and character profile.</span></div>
+      <div class="campaign-form-grid">
+        <label class="form-field"><span>Player slots</span><input id="player-slot-count" type="number" min="1" max="32" step="1" value="6"/></label>
+        <div class="form-field"><span>Table size</span><button id="player-slot-count-apply" type="button">Apply player count</button></div>
+        <label class="form-field full-width"><span>Preview as</span><select id="player-preview-viewer"></select></label>
+        <label class="form-field"><span>Player name</span><input id="player-preview-display-name" maxlength="80"/></label>
+        <label class="form-field"><span>Character name</span><input id="player-preview-character-name" maxlength="120"/></label>
+      </div>
+      <button id="player-preview-save-identity" type="button">Save identity</button>
+    </section>
+    <section class="player-preview-block">
+      <div class="subsection-heading"><strong>Permitted actions</strong><span>Denied by default unless the projection includes a capability.</span></div>
+      <div class="player-capability-grid" id="player-capability-grid">
+        <label class="check-row"><input data-player-capability="character.edit.self" type="checkbox"/><span>Edit approved character fields</span></label>
+        <label class="check-row"><input data-player-capability="journal.write.private" type="checkbox"/><span>Write private journal</span></label>
+        <label class="check-row"><input data-player-capability="journal.share.party" type="checkbox"/><span>Share journal entries</span></label>
+        <label class="check-row"><input data-player-capability="message.send.party" type="checkbox"/><span>Send party messages</span></label>
+        <label class="check-row"><input data-player-capability="message.send.private" type="checkbox"/><span>Send private messages</span></label>
+        <label class="check-row"><input data-player-capability="dice.roll" type="checkbox"/><span>Use dice tray</span></label>
+        <label class="check-row"><input data-player-capability="map.ping" type="checkbox"/><span>Place map pings</span></label>
+        <label class="check-row"><input data-player-capability="objective.propose" type="checkbox"/><span>Propose objectives</span></label>
+      </div>
+      <button id="player-preview-save-capabilities" type="button">Save capabilities</button>
+    </section>
+    <section class="player-preview-block">
+      <div class="subsection-heading"><strong>Player map</strong><span>Geography is optional; roads remain hidden until you explicitly share them.</span></div>
+      <div class="player-capability-grid">
+        <label class="check-row"><input id="player-map-base-geography" type="checkbox"/><span>Show neutral terrain and coastline</span></label>
+        <label class="check-row"><input id="player-map-public-roads" type="checkbox"/><span>Show the generated main-road network</span></label>
+      </div>
+      <button id="player-map-save" type="button">Save map visibility</button>
+    </section>
+  </div>
+  <section class="player-preview-block player-knowledge-editor">
+    <div class="subsection-heading"><strong>Knowledge grants</strong><span>Unknown is the default. Party and individual grants remain independent.</span></div>
+    <div class="campaign-form-grid">
+      <label class="form-field"><span>Entity type</span><select id="player-grant-type"><option value="location">Location / community</option><option value="npc">NPC</option><option value="scene">Scene</option><option value="clue">Clue</option><option value="handout">Handout</option><option value="objective">Objective</option><option value="message-thread">Message thread</option></select></label>
+      <label class="form-field"><span>Find record</span><input id="player-grant-entity-search" type="search" placeholder="Search names…"/></label>
+      <label class="form-field"><span>Entity</span><select id="player-grant-entity"></select></label>
+      <label class="form-field"><span>Knowledge level</span><select id="player-grant-level"><option value="rumored">Rumored</option><option value="discovered" selected>Discovered</option><option value="visited">Visited</option><option value="investigated">Investigated</option></select></label>
+      <label class="form-field"><span>Audience</span><select id="player-grant-audience"><option value="party">Whole party</option><option value="player">Selected player only</option></select></label>
+      <label class="form-field"><span>Player-visible alias</span><input id="player-grant-alias" maxlength="160" placeholder="Optional rumor or public name"/></label>
+      <label class="form-field"><span>Source</span><input id="player-grant-source" maxlength="240" value="GM reveal"/></label>
+    </div>
+    <div class="button-row"><button class="primary" id="player-grant-save" type="button">Grant knowledge</button><button id="player-grant-public-basics" type="button">Reveal public campaign basics</button></div>
+    <div class="player-grant-list" id="player-grant-list"><span>No explicit grants yet.</span></div>
+  </section>
+  <section class="player-preview-block">
+    <div class="subsection-heading"><strong>Safe projection</strong><span>Only this payload is made available to the separate player application.</span></div>
+    <div class="player-projection-summary" id="player-projection-summary"><span>Select a player and generate a preview.</span></div>
+    <div class="button-row"><button class="primary" id="player-preview-open" type="button">Open Player Preview</button><button id="player-preview-refresh" type="button">Refresh safety check</button><button id="player-preview-download" type="button">Download projection JSON</button></div>
+  </section>
+  <section class="player-preview-block netcode-panel" id="netcode-panel">
+    <div class="subsection-heading"><strong>Private campaign room</strong><span>Supabase authority, per-player projections, realtime presence, and reconnect-safe commands.</span></div>
+    <div class="netcode-status-row"><span class="campaign-save-state" id="netcode-status">LOCAL ONLY</span><span id="netcode-status-detail">Add the public Supabase environment values to enable hosting.</span></div>
+    <div class="netcode-grid">
+      <section>
+        <strong>GM identity</strong>
+        <label class="form-field"><span>Email</span><input id="netcode-gm-email" type="email" autocomplete="email" placeholder="gm@example.com"/></label>
+        <div class="button-row"><button id="netcode-sign-in" type="button">Send sign-in link</button><button id="netcode-sign-out" type="button">Sign out</button></div>
+      </section>
+      <section>
+        <strong>Room authority</strong>
+        <div class="netcode-room-name" id="netcode-room-name">No hosted room linked</div>
+        <div class="button-row"><button class="primary" id="netcode-create-room" type="button">Create / link room</button><button id="netcode-publish-all" type="button">Sync player views now</button></div>
+      </section>
+      <section>
+        <strong>Invite a player</strong>
+        <label class="form-field"><span>Player slot</span><select id="netcode-invite-player"></select></label>
+        <div class="button-row"><button id="netcode-create-invite" type="button">Create single-use link</button><button id="netcode-copy-invite" type="button">Copy link</button></div>
+        <input id="netcode-invite-link" class="netcode-invite-link" readonly aria-label="Player invitation link" placeholder="Publish the safe views, then create an invite."/>
+      </section>
+    </div>
+    <div class="netcode-room-grid">
+      <section><strong>Connected table</strong><div id="netcode-roster" class="netcode-roster"><span>No hosted room.</span></div></section>
+      <section><strong>Recent player commands</strong><div id="netcode-commands" class="netcode-roster"><span>No commands received.</span></div></section>
+    </div>
+  </section>
+</section>
+
+<details class="card disclosure campaign-prep-card" open>
+  <summary><span><small>Campaign preparation</small>Scenes, timeline, information, messages, sessions, assets, and search</span><span class="summary-caret">⌄</span></summary>
+  <div class="disclosure-body campaign-prep-body">
+    <section class="campaign-prep-section" id="campaign-scenes-section">
+      <div class="subsection-heading"><strong>Scene library</strong><span>Prepared units of play linked to authored locations, map regions, dreams, or message threads.</span></div>
+      <div class="campaign-form-grid">
+        <label class="form-field"><span>Name</span><input id="campaign-scene-name" placeholder="Old Internet Cafe"/></label>
+        <label class="form-field"><span>Type</span><select id="campaign-scene-type"><option value="location">Location</option><option value="travel">Travel</option><option value="messenger">Messenger</option><option value="dream">Dream</option><option value="encounter">Encounter</option><option value="freeform">Freeform</option></select></label>
+        <label class="form-field"><span>Status</span><select id="campaign-scene-status"><option value="draft">Draft</option><option value="ready">Ready</option><option value="paused">Paused</option><option value="completed">Completed</option></select></label>
+        <label class="form-field"><span>Find place</span><input id="campaign-scene-location-search" type="search" placeholder="Search authored places…"/></label>
+        <label class="form-field"><span>Location</span><select id="campaign-scene-location"><option value="">No map location</option></select></label>
+        <label class="form-field full-width"><span>GM description</span><textarea id="campaign-scene-gm-description" rows="3"></textarea></label>
+        <label class="form-field full-width"><span>Player-facing placeholder</span><textarea id="campaign-scene-player-description" rows="2"></textarea></label>
+        <label class="form-field full-width"><span>Read aloud</span><textarea id="campaign-scene-read-aloud" rows="2"></textarea></label>
+      </div>
+      <div class="button-row"><button class="primary" id="campaign-save-scene" type="button">Create scene</button><button id="campaign-update-scene" type="button">Update selected</button><button id="campaign-clear-scene-form" type="button">Clear</button></div>
+      <div class="campaign-record-list" id="campaign-scene-list"></div>
+    </section>
+
+    <section class="campaign-prep-section" id="campaign-timeline-section">
+      <div class="subsection-heading"><strong>Campaign timeline</strong><span>Authored prompts and changes. Anything destructive or secret-revealing requires confirmation.</span></div>
+      <div class="campaign-form-grid">
+        <label class="form-field"><span>Event name</span><input id="campaign-event-name" placeholder="Power outage"/></label>
+        <label class="form-field"><span>Trigger</span><select id="campaign-event-trigger-kind"><option value="manual">Manual</option><option value="time">Fixed date/time</option><option value="scene-activation">Scene activation</option><option value="window">Time window</option><option value="condition">Condition</option></select></label>
+        <label class="form-field"><span>At / starts</span><input id="campaign-event-time" type="datetime-local"/></label>
+        <label class="form-field"><span>Target scene</span><select id="campaign-event-scene"><option value="">None</option></select></label>
+        <label class="form-field full-width"><span>Description</span><input id="campaign-event-description" placeholder="The cafe loses power; ask before activating the next scene."/></label>
+        <label class="check-row"><input id="campaign-event-confirmation" type="checkbox" checked/><span>Require GM confirmation</span></label>
+      </div>
+      <div class="button-row"><button class="primary" id="campaign-save-event" type="button">Add event</button></div>
+      <div class="campaign-record-list" id="campaign-event-list"></div>
+    </section>
+
+    <section class="campaign-prep-section" id="campaign-information-section">
+      <div class="subsection-heading"><strong>Clues, handouts, and objectives</strong><span>Authoritative revealable records for the future Player View.</span></div>
+      <div class="campaign-inline-create"><select id="campaign-information-type"><option value="clue">Clue</option><option value="handout">Handout</option><option value="objective">Objective</option></select><input id="campaign-information-title" placeholder="Title or GM intent"/><textarea id="campaign-information-description" rows="2" placeholder="Description, player-safe wording, or caption"></textarea><button id="campaign-save-information" type="button">Add</button></div>
+      <div class="campaign-record-list" id="campaign-information-list"></div>
+    </section>
+
+    <section class="campaign-prep-section" id="campaign-messages-section">
+      <div class="subsection-heading"><strong>In-world messaging</strong><span>SMS, messenger, email, letters, radio logs, or supernatural communication.</span></div>
+      <div class="campaign-inline-create"><input id="campaign-thread-name" placeholder="Angelica messenger thread"/><select id="campaign-thread-medium"><option>Messenger</option><option>SMS</option><option>Email</option><option>Letter</option><option>Radio log</option><option>Supernatural</option></select><button id="campaign-create-thread" type="button">Create thread</button></div>
+      <div class="campaign-message-composer"><select id="campaign-thread-select"><option value="">No threads</option></select><input id="campaign-message-sender" placeholder="Sender identity"/><textarea id="campaign-message-body" rows="2" placeholder="Message body"></textarea><input id="campaign-message-schedule" type="datetime-local" aria-label="Optional message delivery time"/><label class="check-row"><input id="campaign-message-glitch" type="checkbox"/><span>Glitch presentation</span></label><button id="campaign-save-message" type="button">Save draft / queue</button></div>
+      <div class="campaign-record-list" id="campaign-message-list"></div>
+    </section>
+
+    <section class="campaign-prep-section" id="campaign-assets-section">
+      <div class="subsection-heading"><strong>Campaign asset registry</strong><span>Reference reusable media without duplicating its binary data.</span></div>
+      <div class="campaign-form-grid">
+        <label class="form-field full-width"><span>Existing PAYAW asset</span><select id="campaign-external-asset"><option value="">Create metadata-only asset</option></select></label>
+        <label class="form-field"><span>Name</span><input id="campaign-asset-name" placeholder="Dandansoy reveal cue"/></label>
+        <label class="form-field"><span>Type</span><select id="campaign-asset-type"><option value="image">Image</option><option value="audio">Audio</option><option value="document">Document</option><option value="video">Video</option><option value="external-link">External link</option></select></label>
+        <label class="form-field full-width"><span>URI or reference</span><input id="campaign-asset-uri" placeholder="payaw-asset:… or https://…"/></label>
+        <label class="form-field full-width"><span>Alternate text / caption</span><input id="campaign-asset-alt" placeholder="Accessible description or usage note"/></label>
+        <label class="form-field full-width"><span>Rights note</span><input id="campaign-asset-rights" placeholder="Personal campaign use / licensed / original"/></label>
+      </div>
+      <div class="button-row"><button class="primary" id="campaign-register-asset" type="button">Register asset</button></div>
+      <div class="campaign-record-list" id="campaign-asset-list"></div>
+    </section>
+
+    <section class="campaign-prep-section campaign-session-history-section">
+      <div class="subsection-heading"><strong>Sessions, checkpoints, and run history</strong><span>Start creates a checkpoint; end records a recap and unused prepared content.</span></div>
+      <div class="campaign-session-end-form"><textarea id="campaign-session-recap" rows="3" placeholder="Session recap and unresolved threads…"></textarea><button id="campaign-confirm-end-session" type="button">Complete active session</button></div>
+      <div class="campaign-record-list" id="campaign-session-list"></div>
+      <div class="campaign-record-list compact" id="campaign-checkpoint-list"></div>
+    </section>
+
+    <section class="campaign-prep-section" id="campaign-search-section">
+      <div class="subsection-heading"><strong>Global campaign search</strong><span>Scenes, events, clues, messages, notes, sessions, objectives, and assets.</span></div>
+      <input id="campaign-search" type="search" placeholder="Search the campaign…"/>
+      <div class="campaign-record-list" id="campaign-search-results"><span>Type to search.</span></div>
+      <div class="campaign-reference-health" id="campaign-reference-health">References not checked yet.</div>
+    </section>
+  </div>
+</details>
 <section class="dm-hero card">
 <div class="dm-hero-copy">
 <p class="section-kicker">Session workspace</p>
@@ -653,36 +1040,158 @@
 <label class="form-field"><span>Map view</span><select id="dm-view-preset"><option selected="" value="story">Horror layer</option><option value="town">Town overview</option><option value="terrain">Physical terrain</option><option value="hydrology">Hydrology</option><option value="planning">Urban planning</option></select></label>
 <label class="form-field"><span>Find story site</span><input id="dm-story-search" placeholder="Search name, wish, zone…" type="search"/></label>
 </div>
-<button class="primary dm-roll-button" id="dm-random-encounter-button" type="button">Roll a random story encounter</button>
-<div aria-live="polite" class="dm-random-result" id="dm-random-encounter-result"><span>Select a site below or roll across the whole town.</span></div>
+<div hidden><button id="dm-random-encounter-button" type="button"></button><div id="dm-random-encounter-result"></div></div>
 </section>
 <section class="card dm-sites-card">
-<div class="dm-section-title"><div><p class="section-kicker">Story sites</p><h2>Encounter deck</h2></div><span class="live-dot">LIVE</span></div>
+<div class="dm-section-title"><div><p class="section-kicker">Story sites</p><h2>Location reference</h2></div><span class="live-dot">MAP</span></div>
 <div class="story-list dm-story-list" id="story-list"></div>
 </section>
-<section class="card dm-maritime-card">
-<div class="dm-section-title"><div><p class="section-kicker">Regional travel</p><h2>Maritime routes</h2></div><span class="live-dot">SAILING</span></div>
-<div class="dm-random-result" id="dm-maritime-result"><span>Select a ferry or water route to inspect travel time and roll a maritime encounter.</span></div>
-<div class="dm-maritime-list" id="dm-maritime-list"></div>
+<section class="card dm-simulation-card">
+<div class="dm-section-title simulation-title-row"><div><p class="section-kicker">Living world</p><h2>Simulation control</h2></div><span class="live-dot" id="simulation-live-badge">LIVE</span></div>
+<div class="simulation-now-panel">
+<div><span>WORLD CLOCK · <b id="simulation-timezone-summary">ASIA/MANILA</b></span><strong id="simulation-now-summary">—</strong><small id="simulation-period-summary">Campaign state initializing…</small></div>
+<div class="simulation-pulse" aria-hidden="true"><i></i><i></i><i></i></div>
+</div>
+<p class="helper-text">Run campaign time, weather, venue hours, authored NPC placement, infrastructure restrictions, and optional atmosphere. Live travel estimates use the same world state.</p>
+<div class="simulation-preset-row" aria-label="Simulation presets">
+<button data-simulation-preset="morning" type="button"><span>☀</span> Morning</button>
+<button data-simulation-preset="rush" type="button"><span>◫</span> Evening rush</button>
+<button data-simulation-preset="witching" type="button"><span>◉</span> 3 AM</button>
+<button data-simulation-preset="typhoon" type="button"><span>≋</span> Typhoon</button>
+</div>
+<div class="simulation-control-grid">
+<label class="form-field"><span>Clock mode</span><select id="simulation-clock-mode"><option selected value="realtime">Real time</option><option value="campaign">Campaign time</option><option value="manual">Paused manual time</option></select></label>
+<label class="form-field"><span>Speed</span><select id="simulation-speed"><option value="0">Paused</option><option selected value="1">1×</option><option value="5">5×</option><option value="15">15×</option><option value="60">60×</option></select></label>
+<label class="form-field simulation-datetime-field"><span>World date and time</span><input id="simulation-datetime" type="datetime-local"/></label>
+<label class="form-field"><span>Weather</span><select id="simulation-weather"><option selected value="auto">Deterministic auto</option><option value="clear">Clear</option><option value="cloudy">Cloudy</option><option value="rain">Rain</option><option value="heavy-rain">Heavy rain</option><option value="thunderstorm">Thunderstorm</option><option value="typhoon">Typhoon</option></select></label>
+</div>
+<div class="button-row simulation-time-actions"><button class="primary" id="simulation-apply-time" type="button">Apply world time</button><button id="simulation-advance-15" type="button">+15m</button><button id="simulation-advance-hour" type="button">+1h</button><button id="simulation-advance-day" type="button">+1d</button></div>
+<div class="simulation-summary-grid">
+<div data-simulation-health="weather"><small>Weather</small><strong id="simulation-weather-summary">—</strong></div>
+<div data-simulation-health="traffic"><small>Traffic</small><strong id="simulation-traffic-summary">—</strong></div>
+<div data-simulation-health="infrastructure"><small>Infrastructure</small><strong id="simulation-infrastructure-summary">—</strong></div>
+<div data-simulation-health="venues"><small>Venues</small><strong id="simulation-venue-summary">—</strong></div>
+<div data-simulation-health="npcs"><small>NPC placement</small><strong id="simulation-npc-summary">—</strong></div>
+<div data-simulation-health="supernatural"><small>Supernatural</small><strong id="simulation-supernatural-summary">—</strong></div>
+</div>
+<div class="simulation-overlay-strip">
+<div><strong>Live map overlays</strong><small>Operational state rendered on the world</small></div>
+<div class="simulation-overlay-toggles">
+<label><input data-layer-target="live-infrastructure-layer" type="checkbox"/><span>Infrastructure exceptions</span></label>
+<label><input data-layer-target="venue-status-layer" type="checkbox"/><span>Venues</span></label>
+<label><input data-layer-target="settlement-activity-layer" type="checkbox"/><span>Community activity</span></label>
+<label><input data-layer-target="supernatural-activity-layer" type="checkbox"/><span>Malas</span></label>
+</div>
+</div>
+<details class="simulation-infrastructure-editor">
+<summary><span><strong>Infrastructure override</strong><small>Author closures, restrictions, and repairs</small></span><span class="summary-caret">⌄</span></summary>
+<div class="simulation-infrastructure-body">
+<div class="simulation-control-grid compact">
+<label class="form-field"><span>Category</span><select id="simulation-infrastructure-kind"><option value="road">Road</option><option value="bridge">Bridge</option><option value="port">Port</option></select></label>
+<label class="form-field"><span>Target</span><select id="simulation-infrastructure-target"></select></label>
+<label class="form-field"><span>Status</span><select id="simulation-infrastructure-status"><option value="open">Open</option><option value="restricted">Restricted</option><option value="closed">Closed</option><option value="flooded">Flooded</option><option value="damaged">Damaged</option><option value="under-repair">Under repair</option></select></label>
+</div>
+<div class="button-row"><button class="primary" id="simulation-infrastructure-apply" type="button">Apply override</button><button id="simulation-infrastructure-clear" type="button">Return to simulated</button></div>
+</div>
+</details>
+<div class="simulation-log-header"><div><strong>Event timeline</strong><small>Persistent in project saves</small></div><div><select aria-label="Filter event timeline" id="simulation-event-filter"><option value="all">All events</option><option value="critical">Critical only</option><option value="weather">Weather</option><option value="infrastructure">Infrastructure</option><option value="venue">Venues</option><option value="npc">NPCs</option><option value="supernatural">Supernatural</option><option value="time">Time</option></select><button id="simulation-event-clear" type="button">Clear</button></div></div>
+<div class="simulation-event-log" id="simulation-event-log"><span>No simulation events yet.</span></div>
 </section>
-<section class="card dm-log-card">
-<div class="dm-section-title"><div><p class="section-kicker">Session memory</p><h2>Recent rolls</h2></div><button class="text-button" id="dm-clear-log" type="button">Clear</button></div>
-<div class="dm-session-log" id="dm-session-log"><p class="helper-text">Encounter rolls will appear here.</p></div>
+<section class="card dm-travel-card">
+<div class="dm-section-title"><div><p class="section-kicker">Journey planner</p><h2>Travel between locations</h2></div><span class="live-dot">ROUTING</span></div>
+<p class="helper-text">Estimate point-to-point travel across terrain, roads, and bridges. One tile represents 125 meters.</p>
+<div class="travel-planner-grid">
+<label class="form-field"><span>From</span><select id="travel-from-location"></select></label>
+<label class="form-field"><span>To</span><select id="travel-to-location"></select></label>
+<label class="form-field"><span>Mode</span><select id="travel-mode"><option value="walk">Walking</option><option selected value="drive">Driving</option><option value="public-transport">Jeepney / tricycle</option></select></label>
+<label class="form-field"><span>Conditions</span><select id="travel-traffic"><option selected value="live">Live world conditions</option><option value="quiet">Quiet roads</option><option value="normal">Normal</option><option value="rush-hour">Rush hour</option><option value="storm">Storm / disruption</option></select></label>
+</div>
+<div class="button-row"><button id="travel-pick-from" type="button">Pick Point A</button><button id="travel-pick-to" type="button">Pick Point B</button></div>
+<div class="button-row"><button class="primary" id="travel-calculate" type="button">Calculate travel</button><button id="travel-reverse" type="button">Reverse</button><button id="travel-clear" type="button">Clear route</button></div>
+<div class="travel-alternatives" id="travel-alternatives"></div>
+<div aria-live="polite" class="travel-result" id="travel-result"><span>Select two locations and calculate a journey.</span></div>
 </section>
-</div><footer><span>Editor:</span> pan, paint, drag, and author · <span>DM:</span> focus sites and roll encounters · Wheel to zoom</footer></aside>
+<section hidden><button id="dm-clear-log" type="button"></button><div id="dm-session-log"></div></section>
+</div><footer><span>WORLD</span> builds the map · <span>CAMPAIGN</span> prepares and runs sessions</footer></aside>
 <main class="viewport-shell">
 <div class="map-toolbar"><span class="map-workspace-badge" id="map-workspace-badge">EDITOR</span>
 <div>
 <strong id="map-title">PAYAW</strong>
 <span id="map-subtitle">Generated town</span>
 </div>
-<div class="toolbar-actions"><button disabled="" id="undo-button" title="Undo (Ctrl/Cmd+Z)" type="button">Undo</button><button disabled="" id="redo-button" title="Redo (Ctrl/Cmd+Shift+Z)" type="button">Redo</button><button id="toolbar-edit-button" type="button">Edit: off</button><button id="fit-map-button" type="button">Fit map</button></div>
+<div class="toolbar-actions">
+<button aria-label="Toggle left panel" id="toggle-left-panel-button" title="Toggle left panel (Ctrl/Cmd+[)" type="button">☰</button>
+<button disabled="" id="undo-button" title="Undo (Ctrl/Cmd+Z)" type="button">Undo</button>
+<button disabled="" id="redo-button" title="Redo (Ctrl/Cmd+Shift+Z)" type="button">Redo</button>
+<button id="toolbar-edit-button" type="button">Edit: off</button>
+<button data-open-authoring type="button">Author world</button>
+<button id="fit-map-button" type="button">Fit map</button>
+<button aria-pressed="true" id="npc-view-toggle-button" title="Toggle NPC markers (N)" type="button">NPCs: shown</button>
+<div aria-label="World simulation time" class="realtime-clock" id="realtime-clock" role="timer">
+<span id="realtime-clock-time">--:--:--</span>
+<small><span id="realtime-clock-date">—</span> · <span id="realtime-clock-period">DAY</span> · <span id="realtime-clock-mode">REAL</span></small>
 </div>
+<button id="command-palette-button" title="Command palette (Ctrl/Cmd+P)" type="button">Commands</button>
+<button aria-label="Toggle studio dock" id="toggle-studio-dock-button" title="Toggle inspector dock (Ctrl/Cmd+])" type="button">Inspector</button>
+</div>
+</div>
+<nav class="category-toolbar" aria-label="Map category menus">
+<details class="category-menu"><summary>Terrain</summary><div><label><input checked data-layer-target="terrain-layer" type="checkbox"/> Terrain</label><label><input checked data-layer-target="river-layer" type="checkbox"/> Rivers</label><label><input checked data-layer-target="floodplain-layer" type="checkbox"/> Flood risk</label><label><input checked data-layer-target="island-label-layer" type="checkbox"/> Island labels</label></div></details>
+<details class="category-menu"><summary>Roads</summary><div><label><input checked data-layer-target="road-layer" type="checkbox"/> Roads</label><label><input checked data-layer-target="bridge-layer" type="checkbox"/> Bridges</label><label><input checked data-layer-target="road-label-layer" type="checkbox"/> Road labels</label></div></details>
+<details class="category-menu"><summary>Buildings</summary><div><label><input checked data-layer-target="building-layer" type="checkbox"/> Buildings</label><label><input checked data-layer-target="block-layer" type="checkbox"/> Blocks</label><label><input checked data-layer-target="vegetation-layer" type="checkbox"/> Vegetation</label><label><input checked data-layer-target="zone-layer" type="checkbox"/> Zones</label></div></details>
+<details class="category-menu"><summary>Anchors</summary><div><label><input checked data-layer-target="settlement-layer" type="checkbox"/> Community anchors</label><label><input checked data-layer-target="anchor-layer" type="checkbox"/> Point anchors</label><label><input checked data-layer-target="port-layer" type="checkbox"/> Ports</label><label><input checked data-layer-target="port-label-layer" type="checkbox"/> Port labels</label></div></details>
+<details class="category-menu"><summary>Story</summary><div><label><input checked data-layer-target="story-layer" type="checkbox"/> Story sites</label><label><input checked data-layer-target="custom-image-layer" type="checkbox"/> Custom images</label></div></details>
+<details class="category-menu"><summary>Authoring</summary><div><label><input checked data-layer-target="authoring-layer" type="checkbox"/> GM authoring</label><label><input data-layer-target="hidden-payaw-layer" type="checkbox"/> Hidden Payaw</label><button data-open-authoring type="button">Open authoring panel</button></div></details>
+<details class="category-menu"><summary>Live world</summary><div><label><input data-layer-target="live-infrastructure-layer" type="checkbox"/> Infrastructure status</label><label><input data-layer-target="venue-status-layer" type="checkbox"/> Venue hours</label><label><input data-layer-target="settlement-activity-layer" type="checkbox"/> Settlement activity</label><label><input data-layer-target="supernatural-activity-layer" type="checkbox"/> Supernatural activity</label></div></details><details class="category-menu"><summary>NPCs</summary><div><label><input checked data-layer-target="npc-layer" type="checkbox"/> NPC markers</label><button data-open-panel="npc" type="button">Open NPC menu</button></div></details>
+<details class="category-menu"><summary>Travel</summary><div><label><input checked data-layer-target="travel-path-layer" type="checkbox"/> Route overlay</label><button data-open-workspace="dm" type="button">Open calculator</button></div></details>
+<details class="category-menu"><summary>Labels</summary><div><label><input checked data-layer-target="road-label-layer" type="checkbox"/> Roads</label><label><input checked data-layer-target="block-label-layer" type="checkbox"/> Blocks</label><label><input checked data-layer-target="bridge-label-layer" type="checkbox"/> Bridges</label></div></details>
+</nav>
 <canvas aria-label="Generated PAYAW town" id="world-canvas"></canvas>
 <div class="drop-indicator" id="drop-indicator">Drop image to place</div>
+<section aria-label="Map minimap" class="minimap-panel" id="minimap-panel">
+<header><strong>Region</strong><button id="minimap-collapse-button" title="Collapse minimap" type="button">−</button></header>
+<canvas aria-label="World minimap" id="minimap-canvas" width="240" height="160"></canvas>
+</section>
 <div class="cursor-readout" id="cursor-readout">x — · y —</div>
-</main>
+<div class="studio-statusbar" id="studio-statusbar">
+<span id="status-seed">Seed: —</span><span id="status-layout">Layout: —</span><span id="status-zoom">Zoom: —</span><span id="status-selection">Selected: none</span><span id="status-generation">Generation: —</span>
 </div>
-<script src="/src/main.ts" type="module"></script>
+</main>
+<aside aria-label="PAYAW Studio dock" class="studio-dock" id="studio-dock">
+<header class="studio-dock-header"><div><p class="section-kicker">Milestone 18</p><h2>Studio Dock</h2></div><button id="close-studio-dock-button" title="Close dock" type="button">×</button></header>
+<nav aria-label="Studio panels" class="studio-dock-tabs">
+<button aria-selected="true" data-studio-tab="inspector" id="studio-tab-inspector" type="button">Inspector</button>
+<button aria-selected="false" data-studio-tab="layers" id="studio-tab-layers" type="button">Layers</button>
+<button aria-selected="false" data-studio-tab="project" id="studio-tab-project" type="button">Project</button>
+</nav>
+<section class="studio-dock-panel" data-studio-panel="inspector" id="studio-inspector-panel">
+<div class="studio-panel-heading"><div><p class="section-kicker">Selection</p><h3>Inspector</h3></div><button id="focus-selection-button" disabled type="button">Focus</button></div>
+<div class="inspector-empty" id="inspector-content"><strong>Nothing selected</strong><p>Click the map to inspect terrain, roads, districts, community anchors, point anchors, and story sites.</p></div>
+</section>
+<section class="studio-dock-panel" data-studio-panel="layers" hidden id="studio-layers-panel">
+<div class="studio-panel-heading"><div><p class="section-kicker">Visibility</p><h3>Layer Manager</h3></div><div class="compact-actions"><button id="layers-all-button" type="button">All</button><button id="layers-none-button" type="button">None</button></div></div>
+<input aria-label="Search layers" id="layer-search-input" placeholder="Search layers…" type="search"/>
+<div class="studio-layer-list" id="studio-layer-list"></div>
+</section>
+<section class="studio-dock-panel" data-studio-panel="project" hidden id="studio-project-panel">
+<div class="studio-panel-heading"><div><p class="section-kicker">Workspace</p><h3>Project & recovery</h3></div><span class="autosave-indicator" id="autosave-indicator">Autosave ready</span></div>
+<label class="form-field"><span>Appearance</span><select id="studio-theme-select"><option value="dark">Dark</option><option value="light">Light</option><option value="contrast">High contrast</option></select></label>
+<div class="project-action-grid"><button id="studio-save-button" type="button">Save JSON</button><button id="studio-open-button" type="button">Open JSON</button><button id="studio-export-image-button" type="button">Export PNG</button><button id="restore-session-button" type="button">Restore autosave</button></div>
+<div class="project-recovery-copy" id="session-recovery-copy">No recoverable session yet.</div>
+<div class="studio-subsection"><div class="studio-panel-heading compact"><h3>Recent worlds</h3><button id="clear-recent-projects-button" type="button">Clear</button></div><div class="recent-project-list" id="recent-project-list"></div></div>
+<div class="shortcut-reference"><strong>Shortcuts</strong><span><kbd>Ctrl</kbd>+<kbd>P</kbd> Commands</span><span><kbd>Ctrl</kbd>+<kbd>S</kbd> Save JSON</span><span><kbd>Ctrl</kbd>+<kbd>O</kbd> Open JSON</span><span><kbd>F</kbd> Fit or focus</span><span><kbd>[</kbd>/<kbd>]</kbd> Panels</span></div>
+</section>
+</aside>
+</div>
+<div aria-live="polite" aria-atomic="true" class="toast-stack" id="toast-stack"></div>
+<div aria-hidden="true" class="command-palette-backdrop" id="command-palette-backdrop">
+<section aria-label="Command palette" aria-modal="true" class="command-palette" role="dialog">
+<header><div><p class="section-kicker">Quick action</p><h2>Command Palette</h2></div><kbd>Esc</kbd></header>
+<input autocomplete="off" id="command-palette-input" placeholder="Type a command…" type="search"/>
+<div class="command-palette-results" id="command-palette-results"></div>
+<footer><span>↑ ↓ navigate</span><span>Enter run</span></footer>
+</section>
+</div>
+<script src="/src/bootstrap.ts" type="module"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 {
   "name": "payaw-procgen",
   "private": true,
-  "version": "0.14.0",
+  "version": "0.23.2",
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "engines": {
@@ -22,10 +22,27 @@
     "test:ms111": "node scripts/run-ms111-tests.mjs",
     "test:ms12": "node scripts/run-ms12-tests.mjs",
     "test:ms13": "node scripts/run-ms13-tests.mjs",
-    "test:ms14": "node scripts/run-ms14-tests.mjs"
+    "test:ms14": "node scripts/run-ms14-tests.mjs",
+    "test:ms15": "node scripts/run-ms15-tests.mjs",
+    "test:ms16": "node scripts/run-ms16-tests.mjs",
+    "test:ms162": "node scripts/run-ms162-tests.mjs",
+    "test:ms163": "node scripts/run-ms163-tests.mjs",
+    "test:ms164": "node scripts/run-ms164-tests.mjs",
+    "test:ms17": "node scripts/run-ms17-tests.mjs",
+    "test:ms171": "node scripts/run-ms171-tests.mjs",
+    "test:ms18": "node scripts/run-ms18-tests.mjs",
+    "test:ms19": "node scripts/run-ms19-tests.mjs",
+    "test:ms20": "node scripts/run-ms20-tests.mjs",
+    "test:ms21": "node scripts/run-ms21-tests.mjs",
+    "test:ms211": "node scripts/run-ms211-tests.mjs",
+    "test:ms22": "node scripts/run-ms22-tests.mjs",
+    "test:ms23": "node scripts/run-ms23-tests.mjs"
   },
   "devDependencies": {
     "typescript": "5.8.3",
     "vite": "8.1.5"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.8"
   }
 }

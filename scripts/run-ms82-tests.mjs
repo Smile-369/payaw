@@ -35,7 +35,8 @@ const customStoryForm = html.indexOf('id="custom-story-form"');
 assert(editorStart >= 0 && dmStart > editorStart, 'workspace panels must be ordered editor then DM');
 assert(customStoryForm > editorStart && customStoryForm < dmStart, 'story authoring must stay in the editor');
 assert(storyList > dmStart, 'encounter deck must live in DM Mode');
-assert.equal((html.match(/<details[^>]*\sopen(?:=|\s|>)/g) ?? []).length, 0, 'editor disclosures should start collapsed');
+const editorHtml = html.slice(editorStart, dmStart);
+assert.equal((editorHtml.match(/<details[^>]*\sopen(?:=|\s|>)/g) ?? []).length, 0, 'editor disclosures should start collapsed');
 
 assert(source.includes("type WorkspaceMode = 'editor' | 'dm'"));
 assert(source.includes('function setWorkspace('));

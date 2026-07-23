@@ -1,0 +1,20 @@
+{
+  "release": "0.23.2",
+  "hostedAuthority": true,
+  "rowLevelSecurity": true,
+  "privateRealtime": true,
+  "hashedInvitations": true,
+  "protectedAssets": true,
+  "serverCommands": true,
+  "reconnectQueue": true,
+  "behavior": {
+    "projectionMerge": true,
+    "staleKnowledgeRemoved": true,
+    "playerOwnedDataPreserved": true,
+    "monotonicRevision": true,
+    "offlineQueueAllowlist": true,
+    "configurablePlayerCount": true,
+    "denyByDefault": true,
+    "gmControlledMap": true
+  }
+}

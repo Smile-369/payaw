@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 15,
+  "generationVersion": "payaw-m15-studio-ui-v1",
+  "layout": "single-large-island",
+  "satelliteSettlements": 0,
+  "settlementCount": 1,
+  "ui": {
+    "studioDock": true,
+    "inspector": true,
+    "layerManager": true,
+    "minimap": true,
+    "statusBar": true,
+    "commandPalette": true,
+    "toastNotifications": true,
+    "autosaveRecovery": true,
+    "recentWorlds": true,
+    "themes": ["dark", "light", "contrast"]
+  },
+  "build": {
+    "viteVersion": "8.1.5",
+    "modulesTransformed": 106,
+    "workerBundle": true
+  },
+  "regressionsPassed": [8, 8.1, 8.2, 9, 10, 11, 11.1, 12, 13, 14]
+}

@@ -1,0 +1,5 @@
+$ npm run check
+
+> payaw-procgen@0.20.0 check
+> tsc --noEmit
+

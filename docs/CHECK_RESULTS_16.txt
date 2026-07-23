@@ -1,0 +1,3 @@
+PAYAW Milestone 16.1 strict TypeScript check
+Command: npm run check
+Result: PASS

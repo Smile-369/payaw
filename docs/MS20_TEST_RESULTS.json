@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 20,
+  "worldSchemaVersion": 20,
+  "scenes": 2,
+  "events": 1,
+  "sessions": 1,
+  "checkpoints": 2,
+  "assets": 1,
+  "checklistItems": 1,
+  "reveals": 1,
+  "activityRecords": 28,
+  "eventIdempotency": true,
+  "referenceHealth": 0
+}

@@ -1,0 +1,19 @@
+{
+  "release": "0.23.2",
+  "typecheck": "passed",
+  "playerProjection": {
+    "projectionVersion": 1,
+    "playerIsolation": true,
+    "hiddenParticipantOmitted": true,
+    "futureMessageOmitted": true,
+    "safeMapMarkers": 2,
+    "knownPeople": 2,
+    "privateKnowledgeIsolated": true,
+    "capabilityBoundary": true,
+    "parserFailClosed": true
+  },
+  "separatePlayerEntry": true,
+  "responsivePlayerUi": true,
+  "persistence": true,
+  "waterRoutes": "removed"
+}

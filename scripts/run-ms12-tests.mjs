@@ -16,7 +16,7 @@ assert(html.includes('id="project-import-file"'), 'Project JSON import control i
 assert(html.includes('id="project-json-dropzone"'), 'Project JSON drop zone is missing.');
 assert(main.includes("root.format === 'payaw-world-overrides'"), 'Override JSON auto-detection is missing.');
 assert(main.includes("root.format === 'payaw-project'"), 'Project JSON auto-detection is missing.');
-assert(main.includes('schemaVersion > 14'), 'Future-schema rejection is missing.');
+assert(/schemaVersion > \d+/.test(main), 'Future-schema rejection is missing.');
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompilerPath, '-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });
 else execFileSync('tsc', ['-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });

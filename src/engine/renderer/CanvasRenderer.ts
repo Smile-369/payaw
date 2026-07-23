@@ -1,14 +1,17 @@
 import type { GridPoint } from '../blocks/Block';
+import type { AuthoredMapFeature, AuthoringFeatureCategory, AuthoringRealityLayer } from '../../authoring/AuthoringLayer';
+import { transformAuthoringGeometry } from '../../authoring/AuthoringGeometry';
 import { AssetTargetCategory, EMPTY_RENDER_CUSTOMIZATION, type RenderCustomization, type RuntimeImageAsset } from '../../customization/Customization';
 import { AnchorSource, AnchorType } from '../settlement/Anchor';
 import { BuildingCondition, BuildingType } from '../buildings/Building';
 import { RoadType } from '../infrastructure/Road';
 import { PortType } from '../infrastructure/Port';
-import { WaterRouteType } from '../infrastructure/WaterRoute';
 import { RiverCourse, WaterType } from '../world/Tile';
 import { VegetationType } from '../vegetation/Vegetation';
 import type { World } from '../world/World';
 import { StoryObjectType } from '../../story/StoryObject';
+import { NPCStatus } from '../npc/NPC';
+import type { InfrastructureOperationalState, VenueOperationalState, WorldSimulationState } from '../simulation/SimulationTypes';
 import { Camera } from './Camera';
 import { LayerVisibility, RenderLayer } from './Layers';
 import { SpatialGridIndex } from './SpatialGridIndex';
@@ -57,7 +60,6 @@ export function rasterCacheLayersForStage(stageId: string): readonly RasterCache
     case 'blocks':
       return ['landValueCanvas', 'zonesCanvas', 'generatedZonesCanvas', 'zoneOverridesCanvas'];
     case 'accessibility':
-    case 'water-routes':
     case 'ports':
     case 'bridges':
     case 'road-network':
@@ -194,6 +196,7 @@ export class CanvasRenderer {
   private readonly context: CanvasRenderingContext2D;
   private cache?: CachedWorldLayers;
   private customization: RenderCustomization = EMPTY_RENDER_CUSTOMIZATION;
+  private simulationState: WorldSimulationState | null = null;
   private assetDefinitionsReference: readonly RuntimeImageAsset[] = [];
   private readonly assetLookup = new Map<string, RuntimeImageAsset[]>();
   private readonly buildingIndex = new SpatialGridIndex(24);
@@ -210,6 +213,10 @@ export class CanvasRenderer {
     }
 
     this.context = context;
+  }
+
+  public setSimulationState(state: WorldSimulationState | null): void {
+    this.simulationState = state;
   }
 
   public setCustomization(customization: RenderCustomization): void {
@@ -349,7 +356,7 @@ export class CanvasRenderer {
     const viewportHeight = viewport?.height ?? this.canvas.height / devicePixelRatio;
 
     this.context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-    this.context.fillStyle = '#070a08';
+    this.context.fillStyle = '#31566f';
     this.context.fillRect(0, 0, viewportWidth, viewportHeight);
     this.context.imageSmoothingEnabled = false;
 
@@ -380,19 +387,23 @@ export class CanvasRenderer {
     }
     if (this.layers.isVisible(RenderLayer.Floodplains)) this.drawRaster(cache.floodplainCanvas, 1);
     if (this.layers.isVisible(RenderLayer.Rivers)) this.drawRivers(world);
-    if (this.layers.isVisible(RenderLayer.WaterRoutes)) this.drawWaterRoutes(world);
     if (this.layers.isVisible(RenderLayer.Islands)) this.drawIslandBoundaries(world);
     if (this.layers.isVisible(RenderLayer.Blocks)) this.drawBlockGeometry(world, camera.zoom);
     if (this.layers.isVisible(RenderLayer.Roads)) this.drawRoadGeometry(world);
     if (this.layers.isVisible(RenderLayer.Bridges)) this.drawBridgeGeometry(world);
     if (this.layers.isVisible(RenderLayer.Ports)) this.drawPorts(world, camera.zoom, visibleBounds);
-    if (this.layers.isVisible(RenderLayer.Bridges) || this.layers.isVisible(RenderLayer.Ports) || this.layers.isVisible(RenderLayer.WaterRoutes)) this.drawInfrastructureAssets(world);
+    if (this.layers.isVisible(RenderLayer.Bridges) || this.layers.isVisible(RenderLayer.Ports)) this.drawInfrastructureAssets(world);
     if (this.layers.isVisible(RenderLayer.Buildings)) this.drawBuildings(world, camera.zoom, visibleBounds);
     if (this.layers.isVisible(RenderLayer.Vegetation)) this.drawVegetation(world, camera.zoom, visibleBounds);
     if (this.layers.isVisible(RenderLayer.CustomImages)) this.drawPlacedImages(visibleBounds);
+    if (this.layers.isVisible(RenderLayer.Authoring)) this.drawAuthoringFeatures('normal', camera.zoom, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.HiddenPayaw)) this.drawAuthoringFeatures('hidden-payaw', camera.zoom, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.SettlementActivity)) this.drawSettlementActivity(world, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.LiveInfrastructure)) this.drawLiveInfrastructure(world, camera.zoom, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.VenueStatus)) this.drawVenueStatus(world, camera.zoom, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.SupernaturalActivity)) this.drawSupernaturalActivity(world, camera.zoom, visibleBounds);
 
     const labelBounds: LabelBounds[] = [];
-    if (this.layers.isVisible(RenderLayer.WaterRouteLabels)) this.drawWaterRouteLabels(world, camera.zoom, labelBounds, visibleBounds);
     if (this.layers.isVisible(RenderLayer.BridgeLabels)) this.drawBridgeLabels(world, camera.zoom, labelBounds, visibleBounds);
     if (this.layers.isVisible(RenderLayer.PortLabels)) this.drawPortLabels(world, camera.zoom, labelBounds, visibleBounds);
     if (this.layers.isVisible(RenderLayer.RoadLabels)) this.drawRoadLabels(world, camera.zoom, labelBounds, visibleBounds);
@@ -402,6 +413,8 @@ export class CanvasRenderer {
 
     if (this.layers.isVisible(RenderLayer.Anchors)) this.drawAnchors(world, camera.zoom, visibleBounds);
     if (this.layers.isVisible(RenderLayer.Story)) this.drawStoryObjects(world, camera.zoom, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.NPCs)) this.drawNPCs(world, camera.zoom, visibleBounds);
+    if (this.layers.isVisible(RenderLayer.Travel)) this.drawTravelPath(world, camera.zoom);
 
     this.context.globalAlpha = 1;
     if (this.layers.isVisible(RenderLayer.Grid) && camera.zoom >= 5) this.drawGrid(world);
@@ -421,6 +434,7 @@ export class CanvasRenderer {
     const target = document.createElement('canvas');
     const targetRenderer = new CanvasRenderer(target);
     targetRenderer.layers.copyFrom(this.layers);
+    targetRenderer.setSimulationState(this.simulationState);
     targetRenderer.setCustomization({
       ...this.customization,
       editMode: options.includeEditorOverlays === true && this.customization.editMode,
@@ -549,21 +563,42 @@ export class CanvasRenderer {
     this.context.textAlign = 'center';
     this.context.textBaseline = 'bottom';
     for (const settlement of world.settlements) {
+      if (settlement.hidden === true) continue;
       const preview = this.customization.dragPreview?.kind === 'settlement' && this.customization.dragPreview.key === settlement.key
         ? this.customization.dragPreview
         : null;
       const settlementX = preview?.x ?? settlement.x;
       const settlementY = preview?.y ?? settlement.y;
-      if (!pointInBounds(settlementX, settlementY, visibleBounds, 12)) continue;
+      if (!pointInBounds(settlementX, settlementY, visibleBounds, Math.max(12, settlement.influenceRadius))) continue;
+      if (settlement.source === 'authored' && zoom >= 1.25) {
+        this.context.save();
+        this.context.beginPath();
+        this.context.fillStyle = 'rgba(80, 184, 160, 0.08)';
+        this.context.strokeStyle = settlement.locked === true ? 'rgba(244, 190, 92, 0.82)' : 'rgba(109, 206, 184, 0.45)';
+        this.context.lineWidth = Math.max(0.2, 0.9 / Math.max(1, zoom));
+        this.context.setLineDash([2 / Math.max(1, zoom), 1.6 / Math.max(1, zoom)]);
+        this.context.arc(settlementX + 0.5, settlementY + 0.5, Math.max(2, settlement.influenceRadius), 0, Math.PI * 2);
+        this.context.fill();
+        this.context.stroke();
+        this.context.restore();
+      }
       this.context.beginPath();
-      this.context.fillStyle = settlement.isPrimary ? 'rgba(255, 199, 92, 0.98)' : 'rgba(109, 206, 184, 0.96)';
+      this.context.fillStyle = settlement.isPrimary
+        ? 'rgba(255, 199, 92, 0.98)'
+        : settlement.source === 'authored'
+          ? 'rgba(118, 225, 190, 0.98)'
+          : 'rgba(109, 206, 184, 0.96)';
       this.context.strokeStyle = preview === null ? 'rgba(248, 250, 239, 0.94)' : 'rgba(255, 222, 128, 1)';
       this.context.lineWidth = Math.max(0.25, (preview === null ? 0.9 : 1.6) / Math.max(1, zoom));
-      this.context.arc(settlementX + 0.5, settlementY + 0.5, radius, 0, Math.PI * 2);
+      if (settlement.locked === true) this.context.setLineDash([1.2 / Math.max(1, zoom), 0.8 / Math.max(1, zoom)]);
+      this.context.arc(settlementX + 0.5, settlementY + 0.5, settlement.source === 'authored' ? radius * 1.25 : radius, 0, Math.PI * 2);
       this.context.fill();
       this.context.stroke();
+      this.context.setLineDash([]);
       if (zoom < 2) continue;
-      const width = this.context.measureText(settlement.name).width + fontSize;
+      const typeLabel = settlement.kind?.replaceAll('-', ' ') ?? settlement.type.replaceAll('-', ' ');
+      const displayName = settlement.source === 'authored' ? `${settlement.name} · ${typeLabel}` : settlement.name;
+      const width = this.context.measureText(displayName).width + fontSize;
       const bounds: LabelBounds = {
         left: settlementX + 0.5 - width * 0.5,
         right: settlementX + 0.5 + width * 0.5,
@@ -574,8 +609,8 @@ export class CanvasRenderer {
       this.context.lineWidth = Math.max(0.16, 1.5 / Math.max(1, zoom));
       this.context.strokeStyle = 'rgba(10, 13, 11, 0.82)';
       this.context.fillStyle = 'rgba(236, 255, 248, 0.96)';
-      this.context.strokeText(settlement.name, settlementX + 0.5, settlementY - radius - 0.4);
-      this.context.fillText(settlement.name, settlementX + 0.5, settlementY - radius - 0.4);
+      this.context.strokeText(displayName, settlementX + 0.5, settlementY - radius - 0.4);
+      this.context.fillText(displayName, settlementX + 0.5, settlementY - radius - 0.4);
       occupied.push(bounds);
     }
   }
@@ -629,41 +664,7 @@ export class CanvasRenderer {
     }
   }
 
-  private drawWaterRoutes(world: World): void {
-    this.context.save();
-    this.context.lineCap = 'round';
-    this.context.lineJoin = 'round';
-    for (const route of world.waterRoutes) {
-      if (!route.enabled || route.centerline.length < 2) continue;
-      const first = route.centerline[0];
-      if (first === undefined) continue;
-      this.context.beginPath();
-      this.context.moveTo(first.x, first.y);
-      for (let index = 1; index < route.centerline.length; index += 1) {
-        const point = route.centerline[index];
-        if (point !== undefined) this.context.lineTo(point.x, point.y);
-      }
-      const color = route.type === WaterRouteType.CargoRoute
-        ? 'rgba(226, 174, 86, 0.88)'
-        : route.type === WaterRouteType.FishingRoute
-          ? 'rgba(127, 222, 193, 0.82)'
-          : route.type === WaterRouteType.StoryRoute || route.type === WaterRouteType.SmugglingRoute
-            ? 'rgba(196, 135, 229, 0.90)'
-            : 'rgba(116, 205, 245, 0.90)';
-      this.context.strokeStyle = 'rgba(7, 31, 44, 0.66)';
-      this.context.lineWidth = 1.02;
-      this.context.setLineDash([]);
-      this.context.stroke();
-      this.context.strokeStyle = color;
-      this.context.lineWidth = 0.46;
-      this.context.setLineDash(route.type === WaterRouteType.PassengerFerry ? [2.4, 1.4] : [1.2, 1.1]);
-      this.context.stroke();
-    }
-    this.context.setLineDash([]);
-    this.context.restore();
-  }
-
-  private drawPorts(world: World, zoom: number, visibleBounds: WorldBounds): void {
+    private drawPorts(world: World, zoom: number, visibleBounds: WorldBounds): void {
     for (const port of world.ports) {
       if (!pointInBounds(port.position.x, port.position.y, visibleBounds, 8)) continue;
       const radius = Math.max(0.38, 1.5 / Math.max(1, zoom));
@@ -713,37 +714,7 @@ export class CanvasRenderer {
     }
   }
 
-  private drawWaterRouteLabels(world: World, zoom: number, occupied: LabelBounds[], visibleBounds: WorldBounds): void {
-    if (zoom < 1.65) return;
-    const fontSize = Math.max(2.2, 7.2 / Math.max(1, zoom));
-    this.context.font = `650 ${fontSize}px ui-sans-serif`;
-    this.context.textAlign = 'center';
-    this.context.textBaseline = 'middle';
-    for (const route of world.waterRoutes) {
-      if (!route.enabled || route.centerline.length === 0) continue;
-      const middleIndex = Math.floor(route.centerline.length * 0.5);
-      const point = route.centerline[middleIndex];
-      if (point === undefined || !pointInBounds(point.x, point.y, visibleBounds, 16)) continue;
-      const before = route.centerline[Math.max(0, middleIndex - 3)] ?? point;
-      const after = route.centerline[Math.min(route.centerline.length - 1, middleIndex + 3)] ?? point;
-      const angle = normalizeReadableAngle(Math.atan2(after.y - before.y, after.x - before.x));
-      const width = this.context.measureText(route.name).width + fontSize;
-      const bounds: LabelBounds = { left: point.x - width * 0.5, right: point.x + width * 0.5, top: point.y - fontSize, bottom: point.y + fontSize };
-      if (this.customization.labels.avoidCollisions && occupied.some((item) => boundsOverlap(item, bounds))) continue;
-      this.context.save();
-      this.context.translate(point.x, point.y);
-      this.context.rotate(angle);
-      this.context.lineWidth = Math.max(0.13, 1.6 / Math.max(1, zoom));
-      this.context.strokeStyle = 'rgba(5, 24, 39, 0.86)';
-      this.context.fillStyle = 'rgba(191, 237, 255, 0.96)';
-      this.context.strokeText(route.name, 0, 0);
-      this.context.fillText(route.name, 0, 0);
-      this.context.restore();
-      occupied.push(bounds);
-    }
-  }
-
-  private drawBridgeGeometry(world: World): void {
+    private drawBridgeGeometry(world: World): void {
     this.context.lineCap = 'round';
     this.context.lineJoin = 'round';
     for (const bridge of world.bridges) {
@@ -1058,13 +1029,6 @@ export class CanvasRenderer {
       if (asset !== undefined) this.drawTargetAsset(asset, port.position.x, port.position.y, 2.8, 2.8, 0.96);
     }
 
-    const routeAssets = this.assetsFor(AssetTargetCategory.Infrastructure, 'water-route');
-    for (const route of world.waterRoutes) {
-      const asset = routeAssets[route.id % Math.max(1, routeAssets.length)];
-      const midpoint = route.centerline[Math.floor(route.centerline.length * 0.5)];
-      if (asset !== undefined && midpoint !== undefined) this.drawTargetAsset(asset, midpoint.x, midpoint.y, 2.1, 2.1, 0.92);
-    }
-
     const benchAssets = this.assetsFor(AssetTargetCategory.Infrastructure, 'bench');
     const plaza = world.anchors.find((anchor) => anchor.type === AnchorType.TownPlaza);
     if (plaza !== undefined) {
@@ -1261,6 +1225,371 @@ export class CanvasRenderer {
         this.context.fillText(item.name, itemX + 0.5, itemY - radius - 0.75);
       }
     }
+  }
+
+
+  private authoringColor(category: AuthoringFeatureCategory, requested: string | null): string {
+    if (requested !== null) return requested;
+    const colors: Readonly<Record<AuthoringFeatureCategory, string>> = {
+      terrain: '#b5b06a',
+      river: '#4ba4cf',
+      road: '#d1aa72',
+      building: '#e5d8bc',
+      district: '#73c7b0',
+      landmark: '#f2c05e',
+      infrastructure: '#df855f',
+      natural: '#6cb778',
+      label: '#f2efe4',
+      'hidden-payaw': '#bb79dd',
+    };
+    return colors[category];
+  }
+
+  private featureVisible(feature: AuthoredMapFeature, bounds: WorldBounds): boolean {
+    const geometry = transformAuthoringGeometry(feature.geometry, feature.rotation, feature.scale);
+    if (geometry.kind === 'point') return pointInBounds(geometry.point.x, geometry.point.y, bounds, 8);
+    if (geometry.kind === 'circle') return !(
+      geometry.center.x + geometry.radius < bounds.left
+      || geometry.center.x - geometry.radius > bounds.right
+      || geometry.center.y + geometry.radius < bounds.top
+      || geometry.center.y - geometry.radius > bounds.bottom
+    );
+    return geometry.points.some((point) => pointInBounds(point.x, point.y, bounds, 12));
+  }
+
+  private drawAuthoredFeature(feature: AuthoredMapFeature, zoom: number, selected: boolean): void {
+    const color = this.authoringColor(feature.category, feature.color);
+    const lineWidth = Math.max(0.25, feature.lineWidth / Math.max(1, zoom));
+    const geometry = transformAuthoringGeometry(feature.geometry, feature.rotation, feature.scale);
+    this.context.save();
+    this.context.globalAlpha = clamp(feature.opacity, 0.08, 1);
+    this.context.strokeStyle = color;
+    this.context.fillStyle = color;
+    this.context.lineWidth = selected ? lineWidth * 1.8 : lineWidth;
+    this.context.lineCap = 'round';
+    this.context.lineJoin = 'round';
+    this.context.setLineDash(feature.realityLayer === 'hidden-payaw' ? [2.4 / Math.max(1, zoom), 1.5 / Math.max(1, zoom)] : []);
+    if (selected) {
+      this.context.shadowColor = 'rgba(255,255,255,0.85)';
+      this.context.shadowBlur = 5 / Math.max(1, zoom);
+    }
+
+    if (geometry.kind === 'point') {
+      const radius = Math.max(0.9, 3.4 * feature.scale / Math.sqrt(Math.max(1, zoom)));
+      this.context.translate(geometry.point.x + 0.5, geometry.point.y + 0.5);
+      this.context.rotate(feature.rotation);
+      this.context.beginPath();
+      if (feature.category === 'building' || feature.category === 'landmark' || feature.category === 'infrastructure') {
+        this.context.rect(-radius, -radius, radius * 2, radius * 2);
+      } else {
+        this.context.arc(0, 0, radius, 0, Math.PI * 2);
+      }
+      this.context.globalAlpha = clamp(feature.fillOpacity, 0.08, 1);
+      this.context.fill();
+      this.context.globalAlpha = clamp(feature.opacity, 0.08, 1);
+      this.context.stroke();
+    } else if (geometry.kind === 'circle') {
+      this.context.beginPath();
+      this.context.arc(geometry.center.x + 0.5, geometry.center.y + 0.5, Math.max(0.5, geometry.radius), 0, Math.PI * 2);
+      this.context.globalAlpha = clamp(feature.fillOpacity, 0, 0.7);
+      this.context.fill();
+      this.context.globalAlpha = clamp(feature.opacity, 0.08, 1);
+      this.context.stroke();
+    } else if (geometry.points.length > 0) {
+      const first = geometry.points[0];
+      if (first !== undefined) {
+        this.context.beginPath();
+        this.context.moveTo(first.x + 0.5, first.y + 0.5);
+        for (let index = 1; index < geometry.points.length; index += 1) {
+          const point = geometry.points[index];
+          if (point !== undefined) this.context.lineTo(point.x + 0.5, point.y + 0.5);
+        }
+        if (geometry.kind === 'polygon') this.context.closePath();
+        if (geometry.kind === 'polygon') {
+          this.context.globalAlpha = clamp(feature.fillOpacity, 0, 0.65);
+          this.context.fill();
+          this.context.globalAlpha = clamp(feature.opacity, 0.08, 1);
+        }
+        this.context.stroke();
+      }
+    }
+    this.context.restore();
+
+    if (zoom >= 2.3 && feature.name.trim().length > 0) {
+      let x = 0;
+      let y = 0;
+      if (geometry.kind === 'point') { x = geometry.point.x; y = geometry.point.y; }
+      else if (geometry.kind === 'circle') { x = geometry.center.x; y = geometry.center.y - geometry.radius; }
+      else {
+        const first = geometry.points[0];
+        if (first === undefined) return;
+        x = geometry.points.reduce((sum, point) => sum + point.x, 0) / geometry.points.length;
+        y = geometry.points.reduce((sum, point) => sum + point.y, 0) / geometry.points.length;
+      }
+      const fontSize = Math.max(2.3, 8 / Math.max(1, zoom));
+      this.context.save();
+      this.context.font = `700 ${fontSize}px ui-sans-serif`;
+      this.context.textAlign = 'center';
+      this.context.textBaseline = 'bottom';
+      this.context.lineWidth = Math.max(0.18, 1.5 / Math.max(1, zoom));
+      this.context.strokeStyle = 'rgba(10,13,11,0.82)';
+      this.context.fillStyle = color;
+      this.context.strokeText(feature.name, x + 0.5, y - 0.8);
+      this.context.fillText(feature.name, x + 0.5, y - 0.8);
+      this.context.restore();
+    }
+  }
+
+  private drawAuthoringFeatures(layer: AuthoringRealityLayer, zoom: number, visibleBounds: WorldBounds): void {
+    for (const feature of this.customization.authoringLayer.features) {
+      if (feature.realityLayer !== layer || feature.hidden || !this.featureVisible(feature, visibleBounds)) continue;
+      this.drawAuthoredFeature(feature, zoom, feature.id === this.customization.activeAuthoringFeatureId);
+    }
+    if (layer !== 'normal' || this.customization.authoringDraftPoints.length === 0) return;
+    const points = this.customization.authoringDraftPoints;
+    const first = points[0];
+    if (first === undefined) return;
+    this.context.save();
+    this.context.beginPath();
+    this.context.moveTo(first.x + 0.5, first.y + 0.5);
+    for (let index = 1; index < points.length; index += 1) {
+      const point = points[index];
+      if (point !== undefined) this.context.lineTo(point.x + 0.5, point.y + 0.5);
+    }
+    this.context.strokeStyle = 'rgba(255, 220, 112, 0.98)';
+    this.context.lineWidth = Math.max(0.4, 2.2 / Math.max(1, zoom));
+    this.context.setLineDash([2 / Math.max(1, zoom), 1.1 / Math.max(1, zoom)]);
+    this.context.stroke();
+    for (const point of points) {
+      this.context.beginPath();
+      this.context.fillStyle = 'rgba(255, 220, 112, 1)';
+      this.context.arc(point.x + 0.5, point.y + 0.5, Math.max(0.55, 2.2 / Math.sqrt(Math.max(1, zoom))), 0, Math.PI * 2);
+      this.context.fill();
+    }
+    this.context.restore();
+  }
+
+
+  private operationalColor(status: InfrastructureOperationalState): string {
+    if (status === 'restricted' || status === 'under-repair') return 'rgba(244, 180, 73, 0.96)';
+    if (status === 'flooded') return 'rgba(76, 177, 229, 0.98)';
+    if (status === 'damaged') return 'rgba(225, 89, 78, 0.98)';
+    if (status === 'closed') return 'rgba(240, 82, 82, 0.98)';
+    return 'rgba(101, 205, 147, 0.9)';
+  }
+
+  private venueColor(status: VenueOperationalState): string {
+    if (status === 'open') return 'rgba(101, 205, 147, 0.92)';
+    if (status === 'closing-soon') return 'rgba(244, 180, 73, 0.96)';
+    if (status === 'emergency-only') return 'rgba(229, 122, 75, 0.98)';
+    if (status === 'evacuated') return 'rgba(225, 89, 78, 0.98)';
+    if (status === 'abandoned') return 'rgba(174, 112, 196, 0.98)';
+    return 'rgba(143, 151, 151, 0.95)';
+  }
+
+  private traceTilePath(world: World, indices: readonly number[]): boolean {
+    const firstIndex = indices[0];
+    const first = firstIndex === undefined ? undefined : world.tiles[firstIndex];
+    if (first === undefined) return false;
+    this.context.beginPath();
+    this.context.moveTo(first.x + 0.5, first.y + 0.5);
+    for (let index = 1; index < indices.length; index += 1) {
+      const tileIndex = indices[index];
+      const tile = tileIndex === undefined ? undefined : world.tiles[tileIndex];
+      if (tile !== undefined) this.context.lineTo(tile.x + 0.5, tile.y + 0.5);
+    }
+    return true;
+  }
+
+  private drawLiveInfrastructure(world: World, zoom: number, visibleBounds: WorldBounds): void {
+    const state = this.simulationState?.infrastructure;
+    if (state === undefined) return;
+
+    // The regional view is an exception map, not a network-wide warning carpet.
+    // Manual GM statuses are always authoritative. Weather-derived exceptions
+    // only appear as the camera moves closer to the affected infrastructure.
+    const manualRoadStatusById = state.manualRoadStatusById;
+    const manualBridgeStatusById = state.manualBridgeStatusById;
+    const manualPortStatusById = state.manualPortStatusById;
+    const regionalOverview = zoom < 2.25;
+    const localOverview = zoom < 3.2;
+
+    this.context.save();
+    this.context.lineCap = 'round';
+    this.context.lineJoin = 'round';
+
+    if (!regionalOverview) {
+      for (const road of world.roads) {
+        const manual = manualRoadStatusById[road.id];
+        const status = manual ?? state.roadStatusById[road.id] ?? 'open';
+        const derivedVisible = !localOverview && status !== 'open' && (road.type !== RoadType.Local || zoom >= 4.5);
+        if (status === 'open' || (manual === undefined && !derivedVisible)) continue;
+        if (!this.traceTilePath(world, [...road.path, ...road.bridgeTiles])) continue;
+        this.context.globalAlpha = manual === undefined ? 0.46 : 0.98;
+        this.context.strokeStyle = this.operationalColor(status);
+        this.context.lineWidth = Math.max(0.65, (manual === undefined ? 2.6 : 3.8) / Math.max(1, zoom));
+        this.context.setLineDash(status === 'restricted' || status === 'under-repair' ? [1.8, 1.15] : []);
+        this.context.stroke();
+      }
+    }
+
+    for (const bridge of world.bridges) {
+      const manual = manualBridgeStatusById[bridge.id];
+      const status = manual ?? state.bridgeStatusById[bridge.id] ?? 'open';
+      if (status === 'open' || (manual === undefined && regionalOverview)) continue;
+      if (!this.traceTilePath(world, bridge.deckTileIndices)) continue;
+      this.context.globalAlpha = manual === undefined ? 0.56 : 1;
+      this.context.strokeStyle = this.operationalColor(status);
+      this.context.lineWidth = Math.max(0.95, (manual === undefined ? 3.4 : 4.7) / Math.max(1, zoom));
+      this.context.setLineDash(status === 'restricted' || status === 'under-repair' ? [2.2, 1.25] : []);
+      this.context.stroke();
+    }
+
+    this.context.setLineDash([]);
+    for (const port of world.ports) {
+      if (!pointInBounds(port.position.x, port.position.y, visibleBounds, 5)) continue;
+      const manual = manualPortStatusById[port.id];
+      const status = manual ?? state.portStatusById[port.id] ?? 'open';
+      if (status === 'open' || (manual === undefined && regionalOverview)) continue;
+      this.context.globalAlpha = manual === undefined ? 0.58 : 1;
+      this.context.beginPath();
+      this.context.strokeStyle = this.operationalColor(status);
+      this.context.lineWidth = Math.max(0.7, (manual === undefined ? 2.2 : 3) / Math.max(1, zoom));
+      this.context.arc(port.position.x + 0.5, port.position.y + 0.5, Math.max(1, 4.6 / Math.sqrt(Math.max(1, zoom))), 0, Math.PI * 2);
+      this.context.stroke();
+    }
+    this.context.restore();
+  }
+
+  private drawVenueStatus(world: World, zoom: number, visibleBounds: WorldBounds): void {
+    const state = this.simulationState?.venues;
+    if (state === undefined) return;
+    const radius = Math.max(0.7, 2.8 / Math.sqrt(Math.max(1, zoom)));
+    this.context.save();
+    this.context.textAlign = 'center';
+    this.context.textBaseline = 'top';
+    this.context.font = `700 ${Math.max(2.2, 8 / Math.max(1, zoom))}px ui-sans-serif`;
+    for (const anchor of world.anchors) {
+      if (!pointInBounds(anchor.x, anchor.y, visibleBounds, 5)) continue;
+      const status = state.anchorStatusById[anchor.id] ?? 'open';
+      this.context.beginPath();
+      this.context.fillStyle = this.venueColor(status);
+      this.context.strokeStyle = 'rgba(12, 16, 13, 0.88)';
+      this.context.lineWidth = Math.max(0.2, 0.8 / Math.max(1, zoom));
+      this.context.arc(anchor.x + 0.5 + radius * 0.85, anchor.y + 0.5 - radius * 0.85, radius * 0.62, 0, Math.PI * 2);
+      this.context.fill();
+      this.context.stroke();
+      if (status !== 'open' && zoom >= 3.5) {
+        this.context.fillStyle = this.venueColor(status);
+        this.context.fillText(status.replace('-', ' '), anchor.x + 0.5, anchor.y + radius + 0.7);
+      }
+    }
+    this.context.restore();
+  }
+
+  private drawSettlementActivity(world: World, visibleBounds: WorldBounds): void {
+    const state = this.simulationState?.settlements;
+    if (state === undefined) return;
+    const alphaByLevel = { asleep: 0.06, quiet: 0.09, normal: 0.12, busy: 0.17, rush: 0.23 } as const;
+    this.context.save();
+    for (const settlement of world.settlements) {
+      if (!pointInBounds(settlement.x, settlement.y, visibleBounds, settlement.influenceRadius)) continue;
+      const level = state.levelBySettlementId[settlement.id] ?? 'normal';
+      const alpha = alphaByLevel[level];
+      const radius = Math.max(2, settlement.influenceRadius * (level === 'rush' ? 0.7 : 0.55));
+      const gradient = this.context.createRadialGradient(settlement.x + 0.5, settlement.y + 0.5, 0, settlement.x + 0.5, settlement.y + 0.5, radius);
+      gradient.addColorStop(0, `rgba(246, 190, 90, ${alpha})`);
+      gradient.addColorStop(1, 'rgba(246, 190, 90, 0)');
+      this.context.fillStyle = gradient;
+      this.context.beginPath();
+      this.context.arc(settlement.x + 0.5, settlement.y + 0.5, radius, 0, Math.PI * 2);
+      this.context.fill();
+    }
+    this.context.restore();
+  }
+
+  private drawSupernaturalActivity(world: World, zoom: number, visibleBounds: WorldBounds): void {
+    const state = this.simulationState?.supernatural;
+    if (state === undefined || !state.active) return;
+    const intensity = state.level === 'peak' ? 1 : state.level === 'manifesting' ? 0.72 : 0.42;
+    this.context.save();
+    this.context.setLineDash([1.5, 1.3]);
+    for (const story of world.storyObjects) {
+      if (!pointInBounds(story.x, story.y, visibleBounds, 12)) continue;
+      const radius = Math.max(2, story.influenceRadius * (0.35 + intensity * 0.25));
+      this.context.beginPath();
+      this.context.strokeStyle = `rgba(181, 103, 211, ${0.25 + intensity * 0.45})`;
+      this.context.lineWidth = Math.max(0.35, 1.5 / Math.max(1, zoom));
+      this.context.arc(story.x + 0.5, story.y + 0.5, radius, 0, Math.PI * 2);
+      this.context.stroke();
+    }
+    this.context.setLineDash([]);
+    this.context.restore();
+  }
+
+
+  private drawNPCs(world: World, zoom: number, visibleBounds: WorldBounds): void {
+    if (zoom < 1.7) return;
+    const radius = Math.max(0.65, 2.5 / Math.sqrt(Math.max(1, zoom)));
+    this.context.textAlign = 'center';
+    this.context.textBaseline = 'bottom';
+    this.context.font = `600 ${Math.max(2.2, 8 / Math.max(1, zoom))}px ui-sans-serif`;
+    const colors: Readonly<Record<NPCStatus, string>> = {
+      [NPCStatus.Alive]: 'rgba(117, 214, 171, 0.98)',
+      [NPCStatus.Missing]: 'rgba(247, 195, 92, 0.98)',
+      [NPCStatus.Injured]: 'rgba(238, 126, 100, 0.98)',
+      [NPCStatus.Possessed]: 'rgba(191, 115, 221, 0.98)',
+      [NPCStatus.Dead]: 'rgba(157, 165, 165, 0.98)',
+    };
+    for (const npc of world.npcs) {
+      if (!pointInBounds(npc.x, npc.y, visibleBounds, 4)) continue;
+      this.context.beginPath();
+      this.context.fillStyle = colors[npc.status];
+      this.context.strokeStyle = 'rgba(247, 249, 238, 0.95)';
+      this.context.lineWidth = Math.max(0.2, 0.8 / Math.max(1, zoom));
+      this.context.arc(npc.x + 0.5, npc.y + 0.5, radius, 0, Math.PI * 2);
+      this.context.fill();
+      this.context.stroke();
+      if (zoom >= 4.2) {
+        this.context.fillStyle = 'rgba(238, 255, 247, 0.96)';
+        this.context.fillText(npc.name, npc.x + 0.5, npc.y - radius - 0.35);
+      }
+    }
+  }
+
+
+  private drawTravelPath(world: World, zoom: number): void {
+    const overlay = this.customization.travelPath;
+    if (overlay === null || overlay.segments.length === 0) return;
+    this.context.save();
+    this.context.lineCap = 'round';
+    this.context.lineJoin = 'round';
+    for (const segment of overlay.segments) {
+      const firstIndex = segment.tileIndices[0];
+      const first = firstIndex === undefined ? undefined : world.tiles[firstIndex];
+      if (first === undefined) continue;
+      this.context.beginPath();
+      this.context.moveTo(first.x + 0.5, first.y + 0.5);
+      for (let index = 1; index < segment.tileIndices.length; index += 1) {
+        const tileIndex = segment.tileIndices[index];
+        const tile = tileIndex === undefined ? undefined : world.tiles[tileIndex];
+        if (tile !== undefined) this.context.lineTo(tile.x + 0.5, tile.y + 0.5);
+      }
+      this.context.lineWidth = Math.max(0.85, 3.2 / Math.max(1, zoom));
+      if (segment.mode === 'walk') {
+        this.context.strokeStyle = 'rgba(255, 247, 173, 0.96)';
+        this.context.setLineDash([1.1, 1.1]);
+      } else if (segment.mode === 'public-transport') {
+        this.context.strokeStyle = 'rgba(191, 255, 173, 0.98)';
+        this.context.setLineDash([3.4, 1.1]);
+      } else {
+        this.context.strokeStyle = 'rgba(255, 173, 104, 0.98)';
+        this.context.setLineDash([]);
+      }
+      this.context.stroke();
+    }
+    this.context.setLineDash([]);
+    this.context.restore();
   }
 
   private drawGrid(world: World): void {

@@ -14,21 +14,21 @@ const html = readFileSync(join(projectPath, 'index.html'), 'utf8');
 const source = readFileSync(join(projectPath, 'src', 'main.ts'), 'utf8');
 const css = readFileSync(join(projectPath, 'src', 'styles.css'), 'utf8');
 for (const id of [
-  'island-count',
-  'regional-summary',
-  'island-list',
-  'island-reset-all',
+  'island-count-input',
+  'island-spacing-input',
   'island-layer',
   'island-label-layer',
   'settlement-layer',
+  'authoring-settlement-kind',
 ]) {
   const matches = html.match(new RegExp(`id=["']${id}["']`, 'g')) ?? [];
   assert.equal(matches.length, 1, `${id} must exist exactly once`);
 }
-assert(source.includes('function renderIslandList()'), 'Island editor renderer is missing.');
-assert(source.includes("regenerateFrom('islands'"), 'Island edits must use stage-level regeneration.');
-assert(source.includes('islandOverrides'), 'Island overrides are missing from editor state.');
-assert(css.includes('.island-item'), 'Island editor styling is missing.');
+assert(!html.includes('id="island-list"'), 'The retired Island Editor list is still present.');
+assert(!html.includes('id="island-reset-all"'), 'The retired Island Editor reset control is still present.');
+assert(source.includes('islandOverrides'), 'Legacy island overrides must remain import-compatible.');
+assert(source.includes('authoring-settlement-kind'), 'Community anchors are not wired into the unified anchor editor.');
+assert(css.includes('.authoring-card'), 'Unified anchor authoring styling is missing.');
 
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) {

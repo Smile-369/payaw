@@ -9,11 +9,11 @@ import type { River } from '../hydrology/River';
 import type { Road } from '../infrastructure/Road';
 import type { Bridge } from '../infrastructure/Bridge';
 import type { Port } from '../infrastructure/Port';
-import type { WaterRoute } from '../infrastructure/WaterRoute';
 import type { Anchor } from '../settlement/Anchor';
 import type { VegetationInstance } from '../vegetation/Vegetation';
 import type { Zone } from '../zoning/Zone';
 import type { StoryObject } from '../../story/StoryObject';
+import type { NPC } from '../npc/NPC';
 import { createTile, type Tile } from './Tile';
 
 export interface WorldMetadata {
@@ -49,12 +49,12 @@ export interface SerializedWorld {
   readonly roads: readonly Road[];
   readonly bridges: readonly Bridge[];
   readonly ports: readonly Port[];
-  readonly waterRoutes: readonly WaterRoute[];
   readonly blocks: readonly Block[];
   readonly zones: readonly Zone[];
   readonly buildings: readonly Building[];
   readonly vegetation: readonly VegetationInstance[];
   readonly storyObjects: readonly StoryObject[];
+  readonly npcs: readonly NPC[];
   readonly tiles: readonly Tile[];
 }
 
@@ -75,12 +75,12 @@ export class World {
       roads: [...serialized.roads],
       bridges: [...serialized.bridges],
       ports: [...serialized.ports],
-      waterRoutes: [...serialized.waterRoutes],
       blocks: [...serialized.blocks],
       zones: [...serialized.zones],
       buildings: [...serialized.buildings],
       vegetation: [...serialized.vegetation],
       storyObjects: [...serialized.storyObjects],
+      npcs: [...(serialized.npcs ?? [])],
       metadata: serialized.metadata,
       diagnostics,
     });
@@ -99,12 +99,12 @@ export class World {
   public roads: Road[];
   public bridges: Bridge[];
   public ports: Port[];
-  public waterRoutes: WaterRoute[];
   public blocks: Block[];
   public zones: Zone[];
   public buildings: Building[];
   public vegetation: VegetationInstance[];
   public storyObjects: StoryObject[];
+  public npcs: NPC[];
   public readonly metadata: WorldMetadata;
   public diagnostics: WorldDiagnostics;
 
@@ -125,12 +125,12 @@ export class World {
     this.roads = [];
     this.bridges = [];
     this.ports = [];
-    this.waterRoutes = [];
     this.blocks = [];
     this.zones = [];
     this.buildings = [];
     this.vegetation = [];
     this.storyObjects = [];
+    this.npcs = [];
 
     for (let y = 0; y < this.height; y += 1) {
       for (let x = 0; x < this.width; x += 1) {
@@ -139,7 +139,7 @@ export class World {
     }
 
     this.metadata = {
-      schemaVersion: 14,
+      schemaVersion: 20,
       generationVersion: config.version,
       terrainSize: profile.terrainSize,
       townScale: profile.townScale,
@@ -201,12 +201,12 @@ export class World {
       roads: this.roads,
       bridges: this.bridges,
       ports: this.ports,
-      waterRoutes: this.waterRoutes,
       blocks: this.blocks,
       zones: this.zones,
       buildings: this.buildings,
       vegetation: this.vegetation,
       storyObjects: this.storyObjects,
+      npcs: this.npcs,
       tiles: this.tiles,
     };
   }

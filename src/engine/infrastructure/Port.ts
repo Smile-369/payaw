@@ -3,7 +3,6 @@ import type { GridPoint } from '../geography/Landmass';
 export enum PortType {
   FishingDock = 'fishing-dock',
   BarangayJetty = 'barangay-jetty',
-  FerryTerminal = 'ferry-terminal',
   CommercialPort = 'commercial-port',
   IndustrialPort = 'industrial-port',
   Marina = 'marina',
@@ -25,7 +24,6 @@ export interface Port {
   readonly shelteredScore: number;
   readonly roadAccessDistance: number;
   accessRoadId: number | null;
-  routeIds: number[];
   readonly generated: boolean;
   locked: boolean;
 }
@@ -53,7 +51,6 @@ export interface CustomPortDefinition {
 export const PORT_TYPE_LABELS: Readonly<Record<PortType, string>> = {
   [PortType.FishingDock]: 'Fishing dock',
   [PortType.BarangayJetty]: 'Barangay jetty',
-  [PortType.FerryTerminal]: 'Ferry terminal',
   [PortType.CommercialPort]: 'Commercial port',
   [PortType.IndustrialPort]: 'Industrial port',
   [PortType.Marina]: 'Marina',

@@ -1,0 +1,19 @@
+
+> payaw-procgen@0.17.0 test:ms164
+> node scripts/run-ms164-tests.mjs
+
+{
+  "settlement": "Barangay Poblacion",
+  "sourceIsland": "Payaw Island",
+  "destinationIsland": "Tinagong Isle",
+  "destination": {
+    "x": 149,
+    "y": 21,
+    "islandId": 1,
+    "islandKey": "island:landmass-49a-l8"
+  },
+  "destinationRoadsEnabled": true,
+  "sourceOwnsSettlement": false,
+  "destinationOwnsSettlement": true,
+  "legacyOverrideAccepted": true
+}

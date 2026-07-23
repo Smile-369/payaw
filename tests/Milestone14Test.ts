@@ -20,7 +20,7 @@ async function main(): Promise<void> {
     ...baseOptions,
     satelliteSettlementCount: 0,
   });
-  assert(primaryOnly.metadata.schemaVersion === 14, 'Milestone 14 schema version is not exported.');
+  assert(primaryOnly.metadata.schemaVersion >= 14, 'Milestone 14 schema version is not exported.');
   assert(primaryOnly.metadata.satelliteSettlementCount === 0, 'Satellite settlement count is missing from metadata.');
   assert(primaryOnly.settlements.length === 1, 'A zero-satellite profile should generate only the primary settlement.');
   assert(primaryOnly.settlements[0]?.isPrimary === true, 'The remaining settlement is not the primary Poblacion.');

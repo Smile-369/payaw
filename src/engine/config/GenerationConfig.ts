@@ -206,7 +206,6 @@ export interface MaritimeConfig {
   readonly maximumPathVisits: number;
   readonly tileSizeKilometers: number;
   readonly smallBoatSpeedKph: number;
-  readonly ferrySpeedKph: number;
   readonly cargoSpeedKph: number;
   readonly boardingMinutes: number;
 }
@@ -335,7 +334,7 @@ export interface GenerationConfig {
 }
 
 export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
-  version: 'payaw-m14-performance-v1',
+  version: 'payaw-m20-campaign-system-v1',
   world: {
     width: 256,
     height: 192,
@@ -528,7 +527,6 @@ export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
     maximumPathVisits: 180000,
     tileSizeKilometers: 0.125,
     smallBoatSpeedKph: 18,
-    ferrySpeedKph: 26,
     cargoSpeedKph: 20,
     boardingMinutes: 8,
   },

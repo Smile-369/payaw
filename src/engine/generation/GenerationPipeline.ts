@@ -27,11 +27,14 @@ import { LandValueStage } from './stages/LandValueStage';
 import { NamingStage } from './stages/NamingStage';
 import { MountainStage } from './stages/MountainStage';
 import { RoadStage } from './stages/RoadStage';
+import { AuthoringRoadStage } from './stages/AuthoringRoadStage';
+import { GeneratedRoadOverrideStage } from './stages/GeneratedRoadOverrideStage';
 import { BridgeStage } from './stages/BridgeStage';
 import { PortStage } from './stages/PortStage';
-import { WaterRouteStage } from './stages/WaterRouteStage';
 import { SlopeStage } from './stages/SlopeStage';
 import { TerrainStage } from './stages/TerrainStage';
+import { AuthoringTerrainStage } from './stages/AuthoringTerrainStage';
+import { GeneratedBuildingOverrideStage } from './stages/GeneratedBuildingOverrideStage';
 import { ThermalErosionStage } from './stages/ThermalErosionStage';
 import { VegetationStage } from './stages/VegetationStage';
 import { ZoneStage } from './stages/ZoneStage';
@@ -40,6 +43,7 @@ import { StoryStage } from './stages/StoryStage';
 import { LandmassStage } from './stages/LandmassStage';
 import { IslandStage } from './stages/IslandStage';
 import { SettlementStage } from './stages/SettlementStage';
+import { NPCStage } from './stages/NPCStage';
 
 const DEFAULT_STAGES: readonly GenerationStage[] = [
   new ElevationStage(),
@@ -56,14 +60,16 @@ const DEFAULT_STAGES: readonly GenerationStage[] = [
   new DrainageRepairStage(),
   new FinalSlopeStage(),
   new TerrainStage(),
+  new AuthoringTerrainStage(),
   new LandmassStage(),
   new IslandStage(),
   new SettlementStage(),
   new AnchorStage(),
   new RoadStage(),
+  new GeneratedRoadOverrideStage(),
+  new AuthoringRoadStage(),
   new BridgeStage(),
   new PortStage(),
-  new WaterRouteStage(),
   new AccessibilityStage(),
   new BlockStage(),
   new LandValueStage(),
@@ -71,8 +77,10 @@ const DEFAULT_STAGES: readonly GenerationStage[] = [
   new ZoneOverrideStage(),
   new NamingStage(),
   new BuildingStage(),
+  new GeneratedBuildingOverrideStage(),
   new VegetationStage(),
   new StoryStage(),
+  new NPCStage(),
 ];
 
 interface PreparedRun {

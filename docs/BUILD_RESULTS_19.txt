@@ -1,0 +1,13 @@
+PAYAW Milestone 19 production build
+
+Command: npm run build
+Result: PASS
+TypeScript: PASS (tsc --noEmit)
+Bundler: Vite 8.1.5
+Modules transformed: 126
+
+Output:
+- dist/index.html: 82.08 kB (gzip 16.54 kB)
+- dist/assets/generation.worker-D6vcGaii.js: 177.04 kB
+- dist/assets/index-CcSamswX.css: 70.55 kB (gzip 14.61 kB)
+- dist/assets/index-ioVKkB5m.js: 473.91 kB (gzip 135.35 kB)

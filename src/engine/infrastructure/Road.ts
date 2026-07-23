@@ -17,4 +17,8 @@ export interface Road {
   readonly bridgeId: number | null;
   /** null unless this is an approach road created for a maritime port. */
   readonly portId: number | null;
+  /** Stable identity before authoring suppression and runtime reindexing. */
+  readonly generatedId?: number;
+  readonly source?: 'generated' | 'authored';
+  readonly authoringFeatureId?: string;
 }

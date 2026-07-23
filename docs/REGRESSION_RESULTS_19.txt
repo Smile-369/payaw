@@ -1,0 +1,19 @@
+PAYAW Milestone 19 targeted release validation
+
+PASS npm run check
+PASS npm run test:ms19
+PASS npm run test:ms18
+PASS npm run test:ms171
+PASS npm run test:ms164
+PASS npm run test:ms162
+PASS npm run test:ms82
+PASS npm run test:ms9
+PASS npm run build
+PASS DOM audit (430 unique IDs; 424 required selectors resolved)
+
+Confirmed absent:
+- Satellite settlement count in Generation
+- Separate Settlements toolbar category
+- Island Editor UI/runtime copy
+
+npm run test:engine was intentionally not run and is not a release gate.

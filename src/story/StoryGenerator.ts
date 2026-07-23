@@ -451,5 +451,5 @@ export function generateStoryObjects(
     ));
   }
 
-  world.storyObjects = selected;
+  world.storyObjects = selected.filter((item) => matchingRule(item.id, item.key, ruleOverrides)?.suppressed !== true);
 }

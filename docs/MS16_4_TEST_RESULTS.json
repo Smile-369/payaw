@@ -1,0 +1,23 @@
+{
+  "milestone": "16.4",
+  "feature": "cross-island settlement reassignment",
+  "passed": true,
+  "settlement": "Barangay Poblacion",
+  "sourceIsland": "Payaw Island",
+  "destinationIsland": "Tinagong Isle",
+  "destination": {
+    "x": 149,
+    "y": 21,
+    "islandId": 1,
+    "islandKey": "island:landmass-49a-l8"
+  },
+  "destinationRoadsEnabled": true,
+  "sourceOwnsSettlement": false,
+  "destinationOwnsSettlement": true,
+  "legacyOverrideAccepted": true,
+  "productionBuild": {
+    "passed": true,
+    "viteVersion": "8.1.5",
+    "modulesTransformed": 111
+  }
+}

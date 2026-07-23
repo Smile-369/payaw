@@ -1,0 +1,16 @@
+{
+  "milestone": "16.1",
+  "elementIdCount": 283,
+  "duplicateIds": [],
+  "categoryMenuCount": 9,
+  "requiredControls": {
+    "npc-generate-button": true,
+    "npc-list": true,
+    "travel-from-location": true,
+    "travel-to-location": true,
+    "travel-pick-from": true,
+    "travel-pick-to": true,
+    "travel-alternatives": true
+  },
+  "legacyStoryFlowControlsPresent": false
+}

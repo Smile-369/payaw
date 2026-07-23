@@ -1,3 +1,8 @@
+import type {
+  AuthoredSettlementDefinition,
+  SettlementAuthoringOverride,
+  SettlementKind,
+} from '../../authoring/AuthoringLayer';
 import type { SettlementPositionOverride } from '../generation/GenerationOptions';
 import { InvalidPositionOverrideError } from '../generation/InvalidPositionOverrideError';
 import type { Random } from '../rng/Random';
@@ -5,6 +10,66 @@ import { TerrainType, WaterType } from '../world/Tile';
 import type { World } from '../world/World';
 import { DevelopmentLevel, IslandRole, type Island } from './Island';
 import { SettlementType, type Settlement } from './Settlement';
+
+export interface SettlementPlacementCandidate {
+  readonly x: number;
+  readonly y: number;
+  readonly islandId: number;
+  readonly islandKey: string;
+  readonly warning?: string | undefined;
+}
+
+function nearestIsland(world: World, x: number, y: number, fallback: Island): Island {
+  const exact = world.getTile(x, y)?.islandId;
+  if (exact !== null && exact !== undefined) return world.islands[exact] ?? fallback;
+  let best = fallback;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const island of world.islands) {
+    const landmass = world.landmasses[island.landmassId];
+    if (landmass === undefined) continue;
+    const distance = Math.hypot(landmass.centroid.x - x, landmass.centroid.y - y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = island;
+    }
+  }
+  return best;
+}
+
+/**
+ * Returns the exact in-bounds authored destination for a generated settlement.
+ * Milestone 18 deliberately treats terrain rules as warnings rather than hard
+ * blockers: a GM may place a community on a floodplain, reclaimed coast, or an
+ * impossible Hidden Payaw location. Generation systems that require dry land
+ * simply skip their optional output at that destination.
+ */
+export function findNearestValidSettlementTile(
+  world: World,
+  settlementKey: string,
+  x: number,
+  y: number,
+  _maximumRadius = 18,
+): SettlementPlacementCandidate | undefined {
+  const settlement = world.settlements.find((item) => item.key === settlementKey);
+  if (settlement === undefined || settlement.isPrimary || settlement.locked === true) return undefined;
+  const tile = world.getTile(Math.round(x), Math.round(y));
+  if (tile === undefined) return undefined;
+  const fallback = world.islands[settlement.islandId] ?? world.islands[0];
+  if (fallback === undefined) return undefined;
+  const island = nearestIsland(world, tile.x, tile.y, fallback);
+  const warnings: string[] = [];
+  if (tile.water !== WaterType.Land) warnings.push('water');
+  if (tile.river) warnings.push('river channel');
+  if (tile.terrain === TerrainType.Mountain || tile.slope > 0.38) warnings.push('steep terrain');
+  if (tile.floodRisk > 0.82) warnings.push('flood risk');
+  return {
+    x: tile.x,
+    y: tile.y,
+    islandId: island.id,
+    islandKey: island.key,
+    warning: warnings.length === 0 ? undefined : warnings.join(', '),
+  };
+}
 
 const BARANGAY_ROOTS = [
   'Balete', 'Baybay', 'Bagong Silang', 'Malipayon', 'San Roque', 'San Isidro', 'Mabini', 'Himaya',
@@ -21,6 +86,21 @@ function settlementType(island: Island, index: number): SettlementType {
   if (island.role === IslandRole.Industrial) return SettlementType.IndustrialDistrict;
   if (island.role === IslandRole.RuralVillage) return SettlementType.Village;
   return SettlementType.Hamlet;
+}
+
+function typeFromKind(kind: SettlementKind): SettlementType {
+  if (kind === 'city') return SettlementType.City;
+  if (kind === 'town' || kind === 'barangay' || kind === 'subdivision' || kind === 'district') return SettlementType.Town;
+  if (kind === 'village' || kind === 'neighborhood') return SettlementType.Village;
+  return SettlementType.Hamlet;
+}
+
+function kindFromType(type: SettlementType): SettlementKind {
+  if (type === SettlementType.City) return 'city';
+  if (type === SettlementType.Town) return 'town';
+  if (type === SettlementType.Village) return 'village';
+  if (type === SettlementType.IndustrialDistrict) return 'district';
+  return 'barangay';
 }
 
 function influenceRadius(type: SettlementType, population: number): number {
@@ -71,49 +151,113 @@ function settlementName(island: Island, ordinal: number, random: Random, primary
 
 function manualCenterIndex(
   world: World,
-  island: Island,
+  sourceIsland: Island,
   key: string,
   name: string,
   override: SettlementPositionOverride | undefined,
-  placed: readonly Settlement[],
-): number | undefined {
+): { readonly centerIndex: number; readonly targetIsland: Island } | undefined {
   if (override === undefined) return undefined;
   const x = Math.round(override.x);
   const y = Math.round(override.y);
   const tile = world.getTile(x, y);
   if (tile === undefined) throw new InvalidPositionOverrideError('settlement', key, name, 'is outside the current map.');
-  if (tile.islandId !== island.id || tile.landmassId !== island.landmassId) {
-    throw new InvalidPositionOverrideError('settlement', key, name, 'must remain on its assigned island.');
+  const targetIsland = nearestIsland(world, x, y, sourceIsland);
+  return { centerIndex: tile.y * world.width + tile.x, targetIsland };
+}
+
+function applyGeneratedOverride(
+  base: Settlement,
+  override: SettlementAuthoringOverride | undefined,
+): Settlement | null {
+  if (override?.suppressed === true) return null;
+  const kind = override?.kind ?? base.kind ?? kindFromType(base.type);
+  return {
+    ...base,
+    name: override?.name?.trim() || base.name,
+    type: override?.kind === undefined ? base.type : typeFromKind(kind),
+    x: override?.x ?? base.x,
+    y: override?.y ?? base.y,
+    tileIndex: base.tileIndex,
+    influenceRadius: Math.max(2, override?.radius ?? base.influenceRadius),
+    source: 'generated',
+    kind,
+    parentKey: override?.parentKey ?? base.parentKey ?? null,
+    rotation: override?.rotation ?? base.rotation ?? 0,
+    populationTarget: Math.max(0, Math.round(override?.populationTarget ?? base.populationTarget)),
+    density: Math.max(0, Math.min(1, override?.density ?? base.density ?? 0.65)),
+    generateRoads: override?.generateRoads ?? base.generateRoads ?? true,
+    generateBuildings: override?.generateBuildings ?? base.generateBuildings ?? true,
+    locked: override?.locked ?? base.locked ?? false,
+    hidden: override?.hidden ?? base.hidden ?? false,
+    visibility: override?.visibility ?? base.visibility ?? 'players',
+    notes: override?.notes ?? base.notes ?? '',
+  };
+}
+
+function appendAuthoredSettlements(
+  world: World,
+  definitions: readonly AuthoredSettlementDefinition[],
+  overrides: ReadonlyMap<string, SettlementAuthoringOverride>,
+): void {
+  const fallbackIsland = world.islands[0];
+  if (fallbackIsland === undefined) return;
+  for (const definition of definitions) {
+    const override = overrides.get(definition.key);
+    if (override?.suppressed === true) continue;
+    const x = Math.max(0, Math.min(world.width - 1, Math.round(override?.x ?? definition.x)));
+    const y = Math.max(0, Math.min(world.height - 1, Math.round(override?.y ?? definition.y)));
+    const tile = world.getTileOrThrow(x, y);
+    const island = nearestIsland(world, x, y, fallbackIsland);
+    const kind = override?.kind ?? definition.kind;
+    const settlement: Settlement = {
+      id: world.settlements.length,
+      key: definition.key,
+      islandId: island.id,
+      name: override?.name?.trim() || definition.name,
+      type: typeFromKind(kind),
+      x,
+      y,
+      tileIndex: world.indexOf(x, y),
+      influenceRadius: Math.max(2, override?.radius ?? definition.radius),
+      populationTarget: Math.max(0, Math.round(override?.populationTarget ?? definition.populationTarget)),
+      isPrimary: false,
+      source: 'authored',
+      kind,
+      parentKey: override?.parentKey ?? definition.parentKey,
+      rotation: override?.rotation ?? definition.rotation,
+      density: Math.max(0, Math.min(1, override?.density ?? definition.density)),
+      locked: override?.locked ?? definition.locked,
+      hidden: override?.hidden ?? definition.hidden,
+      visibility: override?.visibility ?? definition.visibility,
+      notes: override?.notes ?? definition.notes,
+      generateRoads: override?.generateRoads ?? definition.generateRoads,
+      generateBuildings: override?.generateBuildings ?? definition.generateBuildings,
+      roadIds: [],
+    };
+    world.settlements.push(settlement);
+    island.settlementIds.push(settlement.id);
+    if (tile.water === WaterType.Land && tile.islandId === island.id && island.developmentLevel === DevelopmentLevel.Undeveloped) {
+      island.developmentLevel = DevelopmentLevel.Village;
+    }
+    if (settlement.generateRoads !== false) island.allowRoads = true;
   }
-  if (tile.water !== WaterType.Land || tile.river) {
-    throw new InvalidPositionOverrideError('settlement', key, name, 'must be on dry land.');
-  }
-  if (tile.terrain === TerrainType.Mountain || tile.slope > 0.38) {
-    throw new InvalidPositionOverrideError('settlement', key, name, 'is too steep for a settlement center.');
-  }
-  if (tile.floodRisk > 0.92) {
-    throw new InvalidPositionOverrideError('settlement', key, name, 'is too flood-prone for a settlement center.');
-  }
-  const nearest = placed.length === 0
-    ? Number.POSITIVE_INFINITY
-    : Math.min(...placed.map((settlement) => Math.hypot(tile.x - settlement.x, tile.y - settlement.y)));
-  if (nearest < 6) {
-    throw new InvalidPositionOverrideError('settlement', key, name, 'is too close to another settlement center.');
-  }
-  return tile.y * world.width + tile.x;
 }
 
 export function generateSettlements(
   world: World,
   random: Random,
   positionOverrides: readonly SettlementPositionOverride[] = [],
+  authoredDefinitions: readonly AuthoredSettlementDefinition[] = [],
+  authoringOverrides: readonly SettlementAuthoringOverride[] = [],
 ): void {
   world.settlements = [];
   for (const island of world.islands) island.settlementIds = [];
   for (const tile of world.tiles) tile.settlementId = null;
 
   const overrideByKey = new Map(positionOverrides.map((override) => [override.key, override]));
+  const authoringByKey = new Map(authoringOverrides.map((override) => [override.key, override]));
   const primaryIsland = world.islands.find((island) => island.role === IslandRole.PrimarySettlement) ?? world.islands[0];
+  const placedSettlements: Settlement[] = [];
   for (const island of world.islands) {
     if (!island.allowRoads || island.settlementCountTarget <= 0 || island.allocatedPopulation <= 0) continue;
     const count = Math.max(1, island.settlementCountTarget);
@@ -125,21 +269,23 @@ export function generateSettlements(
       const isPrimary = island === primaryIsland && ordinal === 0;
       const key = `settlement:${island.key}:${ordinal}`;
       const name = settlementName(island, ordinal, random.fork(`${island.key}:settlement-name`), isPrimary);
-      // The main Poblacion remains governed by the Town Plaza anchor. All other
-      // settlement centers can be moved non-destructively through overrides.
-      const manual = isPrimary
-        ? undefined
-        : manualCenterIndex(world, island, key, name, overrideByKey.get(key), islandSettlements);
-      const centerIndex = manual ?? selectCenter(world, island, islandSettlements, random.fork(`${island.key}:${ordinal}`), ordinal);
+      const authored = authoringByKey.get(key);
+      if (authored?.suppressed === true) continue;
+      const manualPosition: SettlementPositionOverride | undefined = authored?.x !== undefined && authored.y !== undefined
+        ? { key, x: authored.x, y: authored.y }
+        : overrideByKey.get(key);
+      const manual = isPrimary ? undefined : manualCenterIndex(world, island, key, name, manualPosition);
+      const centerIndex = manual?.centerIndex ?? selectCenter(world, island, islandSettlements, random.fork(`${island.key}:${ordinal}`), ordinal);
+      const targetIsland = manual?.targetIsland ?? island;
       if (centerIndex === undefined) continue;
       const tile = world.tiles[centerIndex];
       if (tile === undefined) continue;
       const population = Math.max(80, Math.round(island.allocatedPopulation * (populationWeights[ordinal] ?? 0) / totalWeight));
       const type = settlementType(island, ordinal);
-      const settlement: Settlement = {
+      const base: Settlement = {
         id: world.settlements.length,
         key,
-        islandId: island.id,
+        islandId: targetIsland.id,
         name,
         type,
         x: tile.x,
@@ -148,16 +294,38 @@ export function generateSettlements(
         influenceRadius: influenceRadius(type, population),
         populationTarget: population,
         isPrimary,
+        source: 'generated',
+        kind: kindFromType(type),
+        parentKey: null,
+        rotation: 0,
+        density: 0.65,
+        locked: false,
+        hidden: false,
+        visibility: 'players',
+        notes: '',
+        generateRoads: true,
+        generateBuildings: true,
         roadIds: [],
       };
+      const settlement = applyGeneratedOverride(base, authored);
+      if (settlement === null) continue;
+      settlement.tileIndex = world.indexOf(Math.max(0, Math.min(world.width - 1, Math.round(settlement.x))), Math.max(0, Math.min(world.height - 1, Math.round(settlement.y))));
       world.settlements.push(settlement);
-      islandSettlements.push(settlement);
-      island.settlementIds.push(settlement.id);
+      placedSettlements.push(settlement);
+      if (targetIsland === island) islandSettlements.push(settlement);
+      targetIsland.settlementIds.push(settlement.id);
+      if (settlement.generateRoads !== false) targetIsland.allowRoads = true;
     }
   }
 
+  appendAuthoredSettlements(world, authoredDefinitions, authoringByKey);
+
   for (const island of world.islands) {
-    const settlements = island.settlementIds.map((id) => world.settlements[id]).filter((value): value is Settlement => value !== undefined);
+    island.allocatedPopulation = island.settlementIds.reduce((sum, id) => sum + (world.settlements[id]?.populationTarget ?? 0), 0);
+  }
+
+  for (const island of world.islands) {
+    const settlements = island.settlementIds.map((id) => world.settlements[id]).filter((value): value is Settlement => value !== undefined && value.hidden !== true);
     if (settlements.length === 0) continue;
     const landmass = world.landmasses[island.landmassId];
     if (landmass === undefined) continue;

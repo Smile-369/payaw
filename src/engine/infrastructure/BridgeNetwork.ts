@@ -479,7 +479,6 @@ function resetBridgeInfrastructure(world: World): void {
   world.roads = baseRoads;
   world.bridges = [];
   world.ports = [];
-  world.waterRoutes = [];
   for (const island of world.islands) { island.bridgeIds = []; island.portIds = []; }
   const retainedRoadIds = new Set(baseRoads.map((road) => road.id));
   for (const settlement of world.settlements) settlement.roadIds = settlement.roadIds.filter((id) => retainedRoadIds.has(id));

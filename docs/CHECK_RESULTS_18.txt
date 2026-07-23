@@ -1,0 +1,2 @@
+PASS — npm run check
+TypeScript 5.8.3 strict no-emit compilation completed successfully.

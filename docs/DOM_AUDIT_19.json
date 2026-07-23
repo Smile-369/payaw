@@ -1,0 +1,15 @@
+{
+  "html_id_count": 430,
+  "unique_html_id_count": 430,
+  "duplicate_ids": {},
+  "require_element_selector_count": 424,
+  "missing_required_selectors": [],
+  "invalid_required_selectors": [],
+  "island_editor_copy_present": false,
+  "island_editor_list_present": false,
+  "island_editor_reset_present": false,
+  "satellite_count_input_present": false,
+  "separate_settlements_menu_present": false,
+  "community_anchor_label_present": true,
+  "point_anchor_label_present": true
+}
