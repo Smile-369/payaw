@@ -33,7 +33,9 @@ export class GmNetcodePanel {
   private readonly status = element<HTMLElement>('#netcode-status');
   private readonly statusDetail = element<HTMLElement>('#netcode-status-detail');
   private readonly email = element<HTMLInputElement>('#netcode-gm-email');
+  private readonly password = element<HTMLInputElement>('#netcode-gm-password');
   private readonly signIn = element<HTMLButtonElement>('#netcode-sign-in');
+  private readonly createAccount = element<HTMLButtonElement>('#netcode-create-account');
   private readonly signOut = element<HTMLButtonElement>('#netcode-sign-out');
   private readonly roomName = element<HTMLElement>('#netcode-room-name');
   private readonly createRoomButton = element<HTMLButtonElement>('#netcode-create-room');
@@ -59,7 +61,11 @@ export class GmNetcodePanel {
   private readonly uploadedAssetUrls = new Map<string, string>();
 
   public constructor(private readonly options: GmNetcodePanelOptions) {
-    this.signIn.addEventListener('click', () => void this.sendMagicLink());
+    this.signIn.addEventListener('click', () => void this.signInWithPassword());
+    this.createAccount.addEventListener('click', () => void this.createPasswordAccount());
+    this.password.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') void this.signInWithPassword();
+    });
     this.signOut.addEventListener('click', () => void this.doSignOut());
     this.createRoomButton.addEventListener('click', () => void this.createOrLinkRoom());
     this.publishAllButton.addEventListener('click', () => void this.publishAll(true));
@@ -106,7 +112,7 @@ export class GmNetcodePanel {
 
   private setEnabled(enabled: boolean): void {
     for (const control of [
-      this.email, this.signIn, this.signOut, this.createRoomButton, this.publishAllButton,
+      this.email, this.password, this.signIn, this.createAccount, this.signOut, this.createRoomButton, this.publishAllButton,
       this.invitePlayer, this.createInviteButton, this.copyInviteButton,
     ]) control.disabled = !enabled;
   }
@@ -121,7 +127,7 @@ export class GmNetcodePanel {
     try {
       const session = await this.gateway?.session();
       if (session === undefined || session === null) {
-        this.setStatus('SIGN IN REQUIRED', 'Use an email magic link for the GM account. Players use single-use invitations.');
+        this.setStatus('SIGN IN REQUIRED', 'Sign in with the GM email and password. Players still use single-use invitation links.');
         this.signOut.disabled = true;
         this.createRoomButton.disabled = true;
         this.publishAllButton.disabled = true;
@@ -130,7 +136,11 @@ export class GmNetcodePanel {
       }
       this.userId = session.user.id;
       this.email.value = session.user.email ?? '';
+      this.email.disabled = true;
+      this.password.value = '';
+      this.password.disabled = true;
       this.signIn.disabled = true;
+      this.createAccount.disabled = true;
       this.signOut.disabled = false;
       this.createRoomButton.disabled = false;
       const stored = localStorage.getItem(this.roomStorageKey());
@@ -152,14 +162,46 @@ export class GmNetcodePanel {
     } catch (error) { this.fail(error); }
   }
 
-  private async sendMagicLink(): Promise<void> {
+  private validatePasswordCredentials(): { readonly email: string; readonly password: string } {
+    const email = this.email.value.trim();
+    const password = this.password.value;
+    if (!this.email.validity.valid || email.length === 0) throw new Error('Enter a valid GM email address.');
+    if (password.length < 8) throw new Error('Enter a password with at least 8 characters.');
+    return { email, password };
+  }
+
+  private async signInWithPassword(): Promise<void> {
     if (this.gateway === null) return;
     try {
-      if (!this.email.validity.valid || this.email.value.trim().length === 0) throw new Error('Enter the GM email address first.');
-      await this.gateway.sendMagicLink(this.email.value, `${location.origin}${location.pathname}`);
-      this.setStatus('CHECK EMAIL', 'Open the sign-in link on this device, then return to PAYAW.');
-      this.options.notify('GM sign-in link sent.', 'success');
-    } catch (error) { this.fail(error); }
+      const credentials = this.validatePasswordCredentials();
+      this.signIn.disabled = true;
+      this.createAccount.disabled = true;
+      this.setStatus('SIGNING IN', 'Checking the GM email and password.');
+      await this.gateway.signInWithPassword(credentials.email, credentials.password);
+      this.options.notify('GM signed in.', 'success');
+      location.reload();
+    } catch (error) {
+      this.signIn.disabled = false;
+      this.createAccount.disabled = false;
+      this.fail(error);
+    }
+  }
+
+  private async createPasswordAccount(): Promise<void> {
+    if (this.gateway === null) return;
+    try {
+      const credentials = this.validatePasswordCredentials();
+      this.signIn.disabled = true;
+      this.createAccount.disabled = true;
+      this.setStatus('CREATING ACCOUNT', 'Creating the password-protected GM identity.');
+      await this.gateway.createPasswordAccount(credentials.email, credentials.password);
+      this.options.notify('GM account created and signed in.', 'success');
+      location.reload();
+    } catch (error) {
+      this.signIn.disabled = false;
+      this.createAccount.disabled = false;
+      this.fail(error);
+    }
   }
 
   private async doSignOut(): Promise<void> {

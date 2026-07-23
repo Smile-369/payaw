@@ -54,9 +54,25 @@ export class SupabaseGateway {
     return data.user;
   }
 
-  public async sendMagicLink(email: string, redirectTo: string): Promise<void> {
-    const { error } = await this.client.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: redirectTo, shouldCreateUser: true } });
-    if (error !== null) throw failure(error, 'Could not send the sign-in link.');
+  public async signInWithPassword(email: string, password: string): Promise<Session> {
+    const { data, error } = await this.client.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error !== null || data.session === null) throw failure(error, 'Could not sign in with that email and password.');
+    return data.session;
+  }
+
+  public async createPasswordAccount(email: string, password: string): Promise<Session> {
+    const { data, error } = await this.client.auth.signUp({
+      email: email.trim(),
+      password,
+    });
+    if (error !== null) throw failure(error, 'Could not create the GM account.');
+    if (data.session === null) {
+      throw new Error('GM account created, but Supabase email confirmation is still enabled. Disable Confirm email in Supabase Auth settings, then sign in with the password.');
+    }
+    return data.session;
   }
 
   public async ensureAnonymousSession(displayName: string, captchaToken?: string): Promise<Session> {

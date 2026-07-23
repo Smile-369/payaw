@@ -15,22 +15,30 @@ const html = read('index.html');
 const bootstrap = read('src', 'bootstrap.ts');
 const playerApp = read('src', 'player', 'PlayerApp.ts');
 const gateway = read('src', 'netcode', 'SupabaseGateway.ts');
+const supabaseClient = read('src', 'netcode', 'SupabaseClient.ts');
+const networkBootstrap = read('src', 'netcode', 'NetworkPlayerBootstrap.ts');
 const session = read('src', 'netcode', 'PlayerNetworkSession.ts');
 const gmPanel = read('src', 'netcode', 'GmNetcodePanel.ts');
 const migration = read('supabase', 'migrations', '202607230001_milestone_23_netcode.sql');
 const atomicMigration = read('supabase', 'migrations', '202607230003_atomic_campaign_publish.sql');
+const invitationFixMigration = read('supabase', 'migrations', '202607230004_fix_invitation_identity_and_ambiguity.sql');
 const edgeFunction = read('supabase', 'functions', 'campaign-command', 'index.ts');
 const envExample = read('.env.example');
 
 assert(packageJson.version === '0.23.2', 'Package version is not PAYAW 0.23.2.');
 assert(packageJson.dependencies?.['@supabase/supabase-js'], 'Supabase JavaScript client dependency is missing.');
-for (const id of ['player-slot-count', 'player-slot-count-apply', 'netcode-panel', 'netcode-status', 'netcode-gm-email', 'netcode-create-room', 'netcode-publish-all', 'netcode-invite-player', 'netcode-create-invite', 'netcode-invite-link', 'netcode-roster', 'netcode-commands']) {
+for (const id of ['player-slot-count', 'player-slot-count-apply', 'netcode-panel', 'netcode-status', 'netcode-gm-email', 'netcode-gm-password', 'netcode-sign-in', 'netcode-create-account', 'netcode-create-room', 'netcode-publish-all', 'netcode-invite-player', 'netcode-create-invite', 'netcode-invite-link', 'netcode-roster', 'netcode-commands']) {
   assert(html.includes(`id="${id}"`), `Hosted-room control missing: ${id}`);
 }
 assert(bootstrap.includes('installNetworkedPlayerApp') && bootstrap.includes('readNetcodeConfig'), 'Network Player View bootstrap is missing.');
 assert(playerApp.includes('PlayerAppSession') && playerApp.includes('Private campaign room'), 'Player App is not transport-aware.');
 assert(gateway.includes('assigned_user_id=eq.') && gateway.includes('parsePlayerProjection'), 'Recipient-filtered projection subscription is missing.');
+assert(gateway.includes('signInWithPassword') && gateway.includes('createPasswordAccount') && gateway.includes('auth.signUp'), 'GM email/password authentication is missing.');
+assert(!gateway.includes('signInWithOtp'), 'GM OTP authentication is still present.');
+assert(gmPanel.includes('validatePasswordCredentials') && gmPanel.includes('createPasswordAccount'), 'GM password controls are not wired.');
 assert(gateway.includes("config: { private: true"), 'Realtime channel is not private.');
+assert(supabaseClient.includes('storageKey: `payaw-player-auth-${deviceId}`') && supabaseClient.includes("get('view') === 'player'") && supabaseClient.includes("has('invite')"), 'Player auth sessions are not isolated per invitation device.');
+assert(networkBootstrap.includes('claimed.campaignId !== campaignId') && networkBootstrap.includes('openRoom(app, claimed.campaignId'), 'Invitation claims do not bind the player to the RPC-resolved campaign room.');
 assert(session.includes('QUEUE_LIMIT') && session.includes('isOfflineSafeCommand') && session.includes('idempotencyKey'), 'Bounded offline-safe command queue is missing.');
 assert(session.includes('projection.revision > this.projectionValue.revision + 1'), 'Revision gap recovery is missing.');
 assert(session.includes('cachedProjection') && session.includes('connectRealtime'), 'Cold-start offline recovery is missing.');
@@ -48,6 +56,7 @@ assert(migration.includes('payaw-player-assets') && migration.includes('payaw-gm
 assert(read('supabase', 'migrations', '202607230002_configurable_player_slots.sql').includes('prune_campaign_player_slots'), 'Configurable hosted player-slot migration is missing.');
 assert(atomicMigration.includes('publish_campaign_snapshot') && atomicMigration.includes('SNAPSHOT_CONFLICT'), 'Atomic snapshot migration is missing its concurrency gate.');
 assert(atomicMigration.includes('p_authority') && atomicMigration.includes('p_slots') && atomicMigration.includes('campaign.publish-atomic'), 'Atomic snapshot transaction is incomplete.');
+assert(invitationFixMigration.includes('#variable_conflict use_column') && invitationFixMigration.includes('on conflict on constraint campaign_members_pkey'), 'Invitation claim ambiguity hotfix is missing.');
 assert(edgeFunction.includes('SUPABASE_SERVICE_ROLE_KEY') && edgeFunction.includes("status: 'processing'") && edgeFunction.includes('REVISION_CONFLICT'), 'Privileged command processor is incomplete.');
 assert(!read('src', 'netcode', 'SupabaseClient.ts').includes('SERVICE_ROLE'), 'Service-role key leaked into the browser client.');
 assert(!envExample.includes('VITE_SUPABASE_SERVICE'), 'Service-role variable was exposed as VITE configuration.');

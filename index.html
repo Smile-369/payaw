@@ -922,8 +922,9 @@
     <div class="netcode-grid">
       <section>
         <strong>GM identity</strong>
-        <label class="form-field"><span>Email</span><input id="netcode-gm-email" type="email" autocomplete="email" placeholder="gm@example.com"/></label>
-        <div class="button-row"><button id="netcode-sign-in" type="button">Send sign-in link</button><button id="netcode-sign-out" type="button">Sign out</button></div>
+        <label class="form-field"><span>Email</span><input id="netcode-gm-email" type="email" autocomplete="username" placeholder="gm@example.com"/></label>
+        <label class="form-field"><span>Password</span><input id="netcode-gm-password" type="password" minlength="8" autocomplete="current-password" placeholder="At least 8 characters"/></label>
+        <div class="button-row"><button class="primary" id="netcode-sign-in" type="button">Sign in</button><button id="netcode-create-account" type="button">Create account</button><button id="netcode-sign-out" type="button">Sign out</button></div>
       </section>
       <section>
         <strong>Room authority</strong>

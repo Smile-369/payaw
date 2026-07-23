@@ -42,7 +42,7 @@ Never copy a secret key, legacy service-role key, database password, or JWT secr
 
 In Supabase Auth settings:
 
-1. Enable email authentication. The GM uses a magic link and receives a permanent identity.
+1. Enable email/password authentication. The GM signs in with a password and receives a permanent identity. Disable **Confirm email** if you want account creation to send no email.
 2. Enable anonymous sign-ins. Players receive authenticated anonymous identities only after opening a GM-issued invitation.
 3. Set the temporary Site URL to `http://localhost:5173`.
 4. Add redirect URLs for `http://localhost:5173`, `http://127.0.0.1:5173`, and `http://localhost:4173`.
@@ -178,7 +178,7 @@ After Cloudflare gives you a URL such as `https://payaw.pages.dev`:
 4. Add the production hostname to the Turnstile widget.
 5. Redeploy Cloudflare if a public environment value changed.
 
-Test the GM magic link again. A correct link returns to the deployed GM workspace, not localhost.
+Test GM email/password sign-in again. A successful sign-in returns directly to the hosted GM workspace without an email redirect.
 
 ## 11. Game-night operating procedure
 
@@ -208,7 +208,7 @@ After the session, wait for **ROOM LIVE**, create a campaign checkpoint, and exp
 
 ## 13. Troubleshooting
 
-**GM magic link returns to localhost:** update Supabase Site URL and Redirect URLs to the exact Cloudflare origin, then request a new link.
+**GM cannot create an account without an email:** disable **Confirm email** in Supabase Auth settings, then create the GM account again or sign in with an existing password account.
 
 **Invite is invalid, expired, or claimed:** create a new link. If the player lost the claimed browser, use **Replace device** instead of only creating another invite.
 

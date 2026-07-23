@@ -1,4 +1,5 @@
 # Changelog
+- Replaced GM magic-link/OTP authentication with email/password sign-in and first-time account creation.
 
 ## 0.23.2
 
