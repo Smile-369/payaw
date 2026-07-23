@@ -23,6 +23,7 @@ import {
   type MessageThreadProjection,
   type NpcProjection,
   type ObjectiveProjection,
+  type PlayerBuildingProjection,
   type PlayerMapFeatureProjection,
   type PlayerMapPoint,
   type PlayerProjection,
@@ -45,6 +46,7 @@ export interface PlayerProjectionContext {
   readonly playerView: PlayerViewState;
   readonly viewerId: string;
   readonly now?: string | Date | number;
+  readonly renderPublicMapImage?: (projection: PlayerProjection) => string | null;
 }
 
 interface EffectiveKnowledge {
@@ -127,10 +129,27 @@ function featurePosition(point: PlayerMapPoint | null, knowledge: Exclude<Knowle
 function cellCharacter(tile: Tile | undefined): string {
   if (tile === undefined) return 'W';
   if (tile.water !== WaterType.Land) return tile.terrain === TerrainType.ShallowWater || tile.terrain === TerrainType.Lake ? 'w' : 'W';
+  if (tile.river) return 'R';
   if (tile.terrain === TerrainType.Forest || tile.forestDensity > 0.48) return 'F';
   if (tile.terrain === TerrainType.Hill || tile.terrain === TerrainType.Mountain) return 'H';
   if (tile.terrain === TerrainType.Beach || tile.terrain === TerrainType.Floodplain || tile.terrain === TerrainType.Delta) return 'S';
   return 'L';
+}
+
+function gridCellCharacter(world: World, column: number, row: number, step: number): string {
+  const startX = column * step;
+  const startY = row * step;
+  const endX = Math.min(world.width, startX + step);
+  const endY = Math.min(world.height, startY + step);
+  for (let y = startY; y < endY; y += 1) {
+    for (let x = startX; x < endX; x += 1) {
+      const tile = world.getTile(x, y);
+      if (tile?.river === true && tile.water === WaterType.Land) return 'R';
+    }
+  }
+  const x = Math.min(world.width - 1, startX + Math.floor(step * 0.5));
+  const y = Math.min(world.height - 1, startY + Math.floor(step * 0.5));
+  return cellCharacter(world.getTile(x, y));
 }
 
 function buildBaseGrid(world: World): PlayerProjection['map']['base'] {
@@ -141,9 +160,7 @@ function buildBaseGrid(world: World): PlayerProjection['map']['base'] {
   for (let row = 0; row < rows; row += 1) {
     let encoded = '';
     for (let column = 0; column < columns; column += 1) {
-      const x = Math.min(world.width - 1, column * step + Math.floor(step * 0.5));
-      const y = Math.min(world.height - 1, row * step + Math.floor(step * 0.5));
-      encoded += cellCharacter(world.getTile(x, y));
+      encoded += gridCellCharacter(world, column, row, step);
     }
     terrainRows.push(encoded);
   }
@@ -152,17 +169,36 @@ function buildBaseGrid(world: World): PlayerProjection['map']['base'] {
 
 function publicRoads(world: World, campaignId: string): PlayerRoadProjection[] {
   return world.roads
-    .filter((road) => road.type === RoadType.Main || road.type === RoadType.Secondary)
-    .slice(0, 180)
+    .slice(0, 1000)
     .flatMap((road) => {
       if (road.path.length < 2) return [];
       const step = Math.max(1, Math.ceil(road.path.length / 48));
       const points = road.path.filter((_, index) => index % step === 0 || index === road.path.length - 1).flatMap((tileIndex) => tilePoint(world, tileIndex) ?? []);
       return points.length < 2 ? [] : [{
         id: safeId(campaignId, 'road', `${road.generatedId ?? road.id}`),
-        classification: road.type === RoadType.Main ? 'main' : 'secondary',
+        classification: road.type === RoadType.Main
+          ? 'main'
+          : road.type === RoadType.Secondary
+            ? 'secondary'
+            : 'local',
         points,
       } satisfies PlayerRoadProjection];
+    });
+}
+
+function publicBuildingFootprints(world: World, campaignId: string): PlayerBuildingProjection[] {
+  return world.buildings
+    .slice(0, 2500)
+    .flatMap((building) => {
+      const footprint = building.footprint
+        .slice(0, 16)
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({ x: point.x, y: point.y }));
+      if (footprint.length < 3) return [];
+      return [{
+        id: safeId(campaignId, 'building', `${building.generatedId ?? building.id}`),
+        footprint,
+      } satisfies PlayerBuildingProjection];
     });
 }
 
@@ -214,6 +250,8 @@ function locationProjections(context: PlayerProjectionContext, activeLocationRef
   for (const option of options) {
     const authored = authoredByRef.get(option.ref);
     let knowledge = knowledgeFor(context, 'location', option.ref, now);
+    const ordinaryMapFeature = option.kind === 'settlement' || option.kind === 'anchor' || option.kind === 'authored-feature';
+    if (knowledge === null && ordinaryMapFeature) knowledge = { level: 'discovered', alias: null, source: 'Public town map', timestamp: now };
     if (knowledge === null && authored?.visibility === 'players') knowledge = { level: 'discovered', alias: null, source: 'Public campaign location', timestamp: now };
     if (knowledge === null && option.ref === activeLocationRef) knowledge = { level: 'visited', alias: null, source: 'Current scene', timestamp: now };
     if (knowledge === null) continue;
@@ -244,6 +282,40 @@ function locationProjections(context: PlayerProjectionContext, activeLocationRef
       detail: type,
       linkedEntityId: id,
       color: null,
+      expiresAt: null,
+    });
+  }
+  for (const story of context.world.storyObjects) {
+    const ref = `story:${story.key}`;
+    const authored = authoredByRef.get(ref);
+    let knowledge = knowledgeFor(context, 'location', ref, now);
+    if (knowledge === null && ref === activeLocationRef) knowledge = { level: 'visited', alias: null, source: 'Current scene', timestamp: now };
+    if (knowledge === null) continue;
+    const rawPoint = tilePoint(context.world, story.tileIndex);
+    const visibility = featurePosition(rawPoint, knowledge.level);
+    const id = safeId(context.campaign.id, 'location', ref);
+    const type = authored?.locationType.trim() || story.type.replaceAll('-', ' ');
+    const label = safeName(authored?.name.trim() || story.name, knowledge, knowledge.alias ?? 'A rumored place');
+    records.push({
+      id,
+      name: label,
+      knowledge: knowledge.level,
+      type,
+      description: knowledge.level === 'rumored' ? knowledge.source : authored?.playerDescription.trim() || '',
+      status: authored?.manualStatus ?? null,
+      position: visibility.position,
+      discoveredDetails: knowledge.level === 'investigated' ? authored?.tags ?? [] : [],
+    });
+    features.push({
+      id: safeId(context.campaign.id, 'map-location', ref),
+      kind: 'location',
+      label,
+      knowledge: knowledge.level,
+      position: visibility.position,
+      approximateRadius: visibility.approximateRadius,
+      detail: type,
+      linkedEntityId: id,
+      color: '#b66a8c',
       expiresAt: null,
     });
   }
@@ -472,8 +544,10 @@ export function createPlayerProjection(context: PlayerProjectionContext): Player
     ...(scene === undefined ? {} : { activeScene: scene }),
     map: {
       base: context.playerView.mapPolicy.includeBaseGeography ? buildBaseGrid(context.world) : null,
+      baseImageDataUrl: null,
       unexploredTreatment: context.playerView.mapPolicy.unexploredTreatment,
       roads: context.playerView.mapPolicy.includePublicRoads ? publicRoads(context.world, context.campaign.id) : [],
+      buildings: context.playerView.mapPolicy.includeBuildingFootprints ? publicBuildingFootprints(context.world, context.campaign.id) : [],
       features: [...locations.features, ...sceneFeature],
       partyPosition,
       tileSizeMeters: context.world.metadata.tileSizeMeters,
@@ -490,7 +564,10 @@ export function createPlayerProjection(context: PlayerProjectionContext): Player
     notifications: notifications(context, now),
     revision: context.campaign.runState.revision,
   };
-  return deepFreeze(projection);
+  const baseImageDataUrl = context.renderPublicMapImage?.(projection) ?? null;
+  return deepFreeze(baseImageDataUrl === null
+    ? projection
+    : { ...projection, map: { ...projection.map, baseImageDataUrl } });
 }
 
 export function projectionAudienceForViewer(viewerId: string): readonly PlayerAudience[] {

@@ -37,8 +37,13 @@ export interface PlayerMapPoint {
 
 export interface PlayerRoadProjection {
   readonly id: string;
-  readonly classification: 'main' | 'secondary';
+  readonly classification: 'main' | 'secondary' | 'local';
   readonly points: readonly PlayerMapPoint[];
+}
+
+export interface PlayerBuildingProjection {
+  readonly id: string;
+  readonly footprint: readonly PlayerMapPoint[];
 }
 
 export interface PlayerMapFeatureProjection {
@@ -56,8 +61,10 @@ export interface PlayerMapFeatureProjection {
 
 export interface PlayerMapProjection {
   readonly base: PlayerMapCellGrid | null;
+  readonly baseImageDataUrl: string | null;
   readonly unexploredTreatment: 'paper' | 'fog' | 'blank';
   readonly roads: readonly PlayerRoadProjection[];
+  readonly buildings: readonly PlayerBuildingProjection[];
   readonly features: readonly PlayerMapFeatureProjection[];
   readonly partyPosition: PlayerMapPoint | null;
   readonly tileSizeMeters: number;
@@ -237,6 +244,11 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
+function safeMapImage(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 4_000_000) return null;
+  return /^data:image\/png;base64,[a-z0-9+/=]+$/i.test(value) ? value : null;
+}
+
 function array<T>(value: unknown, normalize: (item: unknown) => T | undefined): T[] {
   return Array.isArray(value) ? value.flatMap((item) => normalize(item) ?? []) : [];
 }
@@ -309,14 +321,26 @@ export function parsePlayerProjection(value: unknown): PlayerProjection {
     capabilities: stringArray(value.capabilities) as Capability[],
     map: {
       base,
+      baseImageDataUrl: safeMapImage(map.baseImageDataUrl),
       unexploredTreatment: map.unexploredTreatment === 'fog' || map.unexploredTreatment === 'blank' ? map.unexploredTreatment : 'paper',
       roads: array(map.roads, (candidate) => {
         if (!isRecord(candidate) || typeof candidate.id !== 'string') return undefined;
         return {
           id: candidate.id,
-          classification: candidate.classification === 'secondary' ? 'secondary' : 'main',
+          classification: candidate.classification === 'secondary' || candidate.classification === 'local'
+            ? candidate.classification
+            : 'main',
           points: array(candidate.points, (entry) => point(entry) ?? undefined),
         } satisfies PlayerRoadProjection;
+      }),
+      buildings: array(map.buildings, (candidate) => {
+        if (!isRecord(candidate) || typeof candidate.id !== 'string') return undefined;
+        const footprint = array(candidate.footprint, (entry) => point(entry) ?? undefined);
+        if (footprint.length < 3) return undefined;
+        return {
+          id: candidate.id,
+          footprint,
+        } satisfies PlayerBuildingProjection;
       }),
       features: array(map.features, (candidate) => {
         if (!isRecord(candidate) || typeof candidate.id !== 'string') return undefined;

@@ -893,18 +893,14 @@
       <button id="player-preview-save-capabilities" type="button">Save capabilities</button>
     </section>
     <section class="player-preview-block">
-      <div class="subsection-heading"><strong>Player map</strong><span>Geography is optional; roads remain hidden until you explicitly share them.</span></div>
-      <div class="player-capability-grid">
-        <label class="check-row"><input id="player-map-base-geography" type="checkbox"/><span>Show neutral terrain and coastline</span></label>
-        <label class="check-row"><input id="player-map-public-roads" type="checkbox"/><span>Show the generated main-road network</span></label>
-      </div>
-      <button id="player-map-save" type="button">Save map visibility</button>
+      <div class="subsection-heading"><strong>Player map baseline</strong><span>The town itself is public; story knowledge is controlled below.</span></div>
+      <p>Player View uses the same rendered terrain, water, rivers, roads, buildings, vegetation, settlements, labels, and ordinary anchors as the GM map. NPCs and story locations remain hidden until you reveal them.</p>
     </section>
   </div>
   <section class="player-preview-block player-knowledge-editor">
-    <div class="subsection-heading"><strong>Knowledge grants</strong><span>Unknown is the default. Party and individual grants remain independent.</span></div>
+    <div class="subsection-heading"><strong>Story and campaign reveals</strong><span>Story locations are hidden by default. Party and individual grants remain independent.</span></div>
     <div class="campaign-form-grid">
-      <label class="form-field"><span>Entity type</span><select id="player-grant-type"><option value="location">Location / community</option><option value="npc">NPC</option><option value="scene">Scene</option><option value="clue">Clue</option><option value="handout">Handout</option><option value="objective">Objective</option><option value="message-thread">Message thread</option></select></label>
+      <label class="form-field"><span>Entity type</span><select id="player-grant-type"><option value="location">Story location</option><option value="npc">NPC</option><option value="scene">Scene</option><option value="clue">Clue</option><option value="handout">Handout</option><option value="objective">Objective</option><option value="message-thread">Message thread</option></select></label>
       <label class="form-field"><span>Find record</span><input id="player-grant-entity-search" type="search" placeholder="Search names…"/></label>
       <label class="form-field"><span>Entity</span><select id="player-grant-entity"></select></label>
       <label class="form-field"><span>Knowledge level</span><select id="player-grant-level"><option value="rumored">Rumored</option><option value="discovered" selected>Discovered</option><option value="visited">Visited</option><option value="investigated">Investigated</option></select></label>
@@ -912,7 +908,7 @@
       <label class="form-field"><span>Player-visible alias</span><input id="player-grant-alias" maxlength="160" placeholder="Optional rumor or public name"/></label>
       <label class="form-field"><span>Source</span><input id="player-grant-source" maxlength="240" value="GM reveal"/></label>
     </div>
-    <div class="button-row"><button class="primary" id="player-grant-save" type="button">Grant knowledge</button><button id="player-grant-public-basics" type="button">Reveal public campaign basics</button></div>
+    <div class="button-row"><button class="primary" id="player-grant-save" type="button">Grant knowledge</button></div>
     <div class="player-grant-list" id="player-grant-list"><span>No explicit grants yet.</span></div>
   </section>
   <section class="player-preview-block">

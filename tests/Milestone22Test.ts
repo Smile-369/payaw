@@ -49,6 +49,8 @@ function main(): void {
   assert(visibleNpc !== undefined && privateNpc !== undefined && hiddenNpc !== undefined, 'Fixture world did not generate enough NPCs.');
   const location = collectCampaignLocations(world, EMPTY_AUTHORING_LAYER)[0];
   assert(location !== undefined, 'Fixture world did not generate a player-map location.');
+  const storyLocation = world.storyObjects[0];
+  assert(storyLocation !== undefined, 'Fixture world did not generate a story location.');
 
   let campaign = createCampaign(`world:${world.seed}`, 'Hidden Payaw', now, 'Asia/Manila');
   campaign = createScene(campaign, {
@@ -97,8 +99,15 @@ function main(): void {
 
   assert(first.projectionVersion === PLAYER_PROJECTION_VERSION, 'Player projection version is incorrect.');
   assert(Object.isFrozen(first) && Object.isFrozen(first.map), 'Projection is not deeply immutable.');
-  assert(first.map.roads.length === 0, 'Generated roads leaked into a new player map without GM approval.');
+  assert(first.map.base !== null, 'Public terrain and water are absent from the default player map.');
+  assert(first.map.base.terrainRows.some((row) => row.includes('W') || row.includes('w')), 'Public water is absent from the default player map.');
+  if (world.tiles.some((tile) => tile.river)) assert(first.map.base.terrainRows.some((row) => row.includes('R')), 'Public rivers are absent from the default player map.');
+  assert(first.map.roads.length > 0, 'Public roads are absent from the default player map.');
+  assert(first.map.roads.some((road) => road.classification === 'local'), 'Local roads are absent from the default player map.');
+  assert(first.map.buildings.length > 0, 'Anonymous building silhouettes are absent from the default player map.');
   assert(first.map.base?.terrainRows.every((row) => !row.includes('B')) !== false, 'Generated building footprints leaked into the player map.');
+  assert(first.map.features.some((feature) => feature.kind === 'community' || feature.kind === 'anchor'), 'Ordinary settlements and anchors are absent from the default player map.');
+  assert(!firstJson.includes(storyLocation.name), 'An unrevealed story location leaked into the player projection.');
   assert(first.knownLocations.length > 0 && second.knownLocations.length > 0, 'Party knowledge was not projected to both players.');
   assert(first.knownNpcs.some((npc) => npc.name === 'A Trusted Friend'), 'Private player knowledge was not projected to its audience.');
   assert(!second.knownNpcs.some((npc) => npc.name === 'A Trusted Friend'), 'Private player knowledge leaked to another player.');
@@ -112,6 +121,28 @@ function main(): void {
   for (const forbiddenKey of ['gmDescription', 'gmTitle', 'gmIntent', 'weeklySchedule', 'triggerConfig', 'rightsNote']) {
     assert(!firstJson.includes(`"${forbiddenKey}"`), `GM-only key leaked into projection: ${forbiddenKey}`);
   }
+
+  assert(first.map.buildings.every((building) => building.footprint.length >= 3), 'A public building silhouette has an invalid footprint.');
+  const buildingJson = JSON.stringify(first.map.buildings);
+  assert(!buildingJson.includes('type') && !buildingJson.includes('name') && !buildingJson.includes('occup'), 'Player building silhouettes leaked private building metadata.');
+  const storyRef = `story:${storyLocation.key}`;
+  const storyState = upsertKnowledgeGrant(playerView, createKnowledgeGrant({
+    subjectType: 'location', subjectId: storyRef, audience: 'party', level: 'discovered',
+    alias: null, source: 'GM story reveal', expiresAt: null, grantedAt: now,
+  }));
+  const storyProjection = createPlayerProjection({ ...context, playerView: storyState, viewerId: 'player-1' });
+  assert(storyProjection.knownLocations.some((item) => item.name === storyLocation.name), 'A GM-revealed story location is absent from Player View.');
+  let renderedProjectionWasSafe = false;
+  const renderedMapProjection = createPlayerProjection({
+    ...context,
+    viewerId: 'player-1',
+    renderPublicMapImage: (safeProjection) => {
+      renderedProjectionWasSafe = !JSON.stringify(safeProjection).includes(storyLocation.name);
+      return 'data:image/png;base64,iVBORw0KGgo=';
+    },
+  });
+  assert(renderedProjectionWasSafe, 'The shared GM renderer received an unrevealed story location.');
+  assert(renderedMapProjection.map.baseImageDataUrl?.startsWith('data:image/png;base64,') === true, 'The shared GM-rendered player map was not projected.');
 
   const noActionsState = setPlayerCapabilities(playerView, 'player-1', []);
   const noActions = createPlayerProjection({ ...context, playerView: noActionsState, viewerId: 'player-1' });
@@ -137,6 +168,10 @@ function main(): void {
     hiddenParticipantOmitted: true,
     futureMessageOmitted: true,
     safeMapMarkers: first.map.features.length,
+    safeBuildingSilhouettes: first.map.buildings.length,
+    publicRivers: first.map.base.terrainRows.some((row) => row.includes('R')),
+    storyLocationsRevealGated: true,
+    sharedGmRendererMap: true,
     knownPeople: first.knownNpcs.length,
     privateKnowledgeIsolated: true,
     capabilityBoundary: true,

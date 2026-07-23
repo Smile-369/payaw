@@ -15,6 +15,6 @@
     "offlineQueueAllowlist": true,
     "configurablePlayerCount": true,
     "denyByDefault": true,
-    "gmControlledMap": true
+    "publicTownMapBaseline": true
   }
 }

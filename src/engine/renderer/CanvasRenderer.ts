@@ -100,6 +100,7 @@ export interface ImageExportOptions {
   readonly pixelsPerTile: number;
   readonly padding: number;
   readonly includeEditorOverlays?: boolean;
+  readonly hiddenLayers?: readonly RenderLayer[];
 }
 
 interface LabelBounds {
@@ -422,7 +423,7 @@ export class CanvasRenderer {
     this.diagnostics = { ...this.diagnostics, lastRenderMs: performance.now() - renderStartedAt };
   }
 
-  public async exportPng(world: World, options: ImageExportOptions): Promise<Blob> {
+  private renderExportCanvas(world: World, options: ImageExportOptions): HTMLCanvasElement {
     const pixelsPerTile = clamp(options.pixelsPerTile, 1, 16);
     const padding = Math.max(0, Math.floor(options.padding));
     const width = Math.ceil(world.width * pixelsPerTile + padding * 2);
@@ -434,6 +435,7 @@ export class CanvasRenderer {
     const target = document.createElement('canvas');
     const targetRenderer = new CanvasRenderer(target);
     targetRenderer.layers.copyFrom(this.layers);
+    for (const layer of options.hiddenLayers ?? []) targetRenderer.layers.setVisible(layer, false);
     targetRenderer.setSimulationState(this.simulationState);
     targetRenderer.setCustomization({
       ...this.customization,
@@ -447,13 +449,21 @@ export class CanvasRenderer {
     exportCamera.x = padding;
     exportCamera.y = padding;
     targetRenderer.render(world, exportCamera, { width, height, pixelRatio: 1 });
+    return target;
+  }
 
+  public async exportPng(world: World, options: ImageExportOptions): Promise<Blob> {
+    const target = this.renderExportCanvas(world, options);
     return await new Promise<Blob>((resolve, reject) => {
       target.toBlob((blob) => {
         if (blob === null) reject(new Error('The browser could not encode the map as PNG.'));
         else resolve(blob);
       }, 'image/png');
     });
+  }
+
+  public exportDataUrl(world: World, options: ImageExportOptions): string {
+    return this.renderExportCanvas(world, options).toDataURL('image/png');
   }
 
   private drawRaster(canvas: HTMLCanvasElement, alpha: number): void {

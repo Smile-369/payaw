@@ -87,6 +87,7 @@ export interface PlayerJournalRecord {
 export interface PlayerMapPolicy {
   readonly includeBaseGeography: boolean;
   readonly includePublicRoads: boolean;
+  readonly includeBuildingFootprints: boolean;
   readonly unexploredTreatment: 'paper' | 'fog' | 'blank';
   readonly publicConditions: readonly string[];
 }
@@ -181,7 +182,8 @@ export function createDefaultPlayerViewState(playerCount = 6): PlayerViewState {
     capabilitiesByPlayer,
     mapPolicy: {
       includeBaseGeography: true,
-      includePublicRoads: false,
+      includePublicRoads: true,
+      includeBuildingFootprints: true,
       unexploredTreatment: 'paper',
       publicConditions: [],
     },
@@ -295,8 +297,11 @@ export function normalizePlayerViewState(value: unknown, playerCount = 6): Playe
     journalEntries,
     capabilitiesByPlayer,
     mapPolicy: {
-      includeBaseGeography: rawMapPolicy.includeBaseGeography !== false,
-      includePublicRoads: rawMapPolicy.includePublicRoads === true,
+      // Ordinary geography is public campaign context. Normalize legacy saves to
+      // the same baseline so only authored story knowledge remains reveal-gated.
+      includeBaseGeography: true,
+      includePublicRoads: true,
+      includeBuildingFootprints: true,
       unexploredTreatment: ['paper', 'fog', 'blank'].includes(unexplored) ? unexplored : 'paper',
       publicConditions: stringArray(rawMapPolicy.publicConditions).slice(0, 40),
     },
@@ -415,6 +420,9 @@ export function setPlayerMapPolicy(state: PlayerViewState, policy: Partial<Playe
     mapPolicy: {
       ...state.mapPolicy,
       ...policy,
+      includeBaseGeography: true,
+      includePublicRoads: true,
+      includeBuildingFootprints: true,
       publicConditions: policy.publicConditions === undefined
         ? state.mapPolicy.publicConditions
         : unique(policy.publicConditions.map((item) => item.trim()).filter(Boolean)).slice(0, 40),

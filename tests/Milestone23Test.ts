@@ -14,7 +14,7 @@ function baseProjection(revision: number): PlayerProjection {
     campaign: { id: 'campaign:safe', name: 'Hidden Payaw', status: 'active', campaignTime: '2026-07-23T00:00:00.000Z', timezone: 'Asia/Manila', weather: 'Rain', publicConditions: [] },
     viewer: { id: 'viewer:safe', displayName: 'Player 1', characterId: 'character:safe', characterName: 'Ana', color: '#73b7a4' },
     capabilities: ['character.edit.self', 'journal.write.private', 'map.ping', 'dice.roll', 'objective.propose', 'message.send.party'],
-    map: { base: { columns: 1, rows: 1, worldWidth: 100, worldHeight: 100, terrainRows: ['L'] }, unexploredTreatment: 'paper', roads: [], features: [], partyPosition: null, tileSizeMeters: 125 },
+    map: { base: { columns: 1, rows: 1, worldWidth: 100, worldHeight: 100, terrainRows: ['L'] }, baseImageDataUrl: null, unexploredTreatment: 'paper', roads: [], buildings: [], features: [], partyPosition: null, tileSizeMeters: 125 },
     knownNpcs: [], knownLocations: [], clues: [], handouts: [], messages: [{ id: 'thread:one', name: 'Friends', medium: 'Messenger', canReply: true, messages: [] }],
     character: { id: 'character:safe', name: 'Ana', pronouns: '', background: '', portraitUri: null, stats: {}, conditions: [], inventory: [], privateNotes: '', editableFields: ['privateNotes'] },
     journal: { personal: [], shared: [] }, objectives: [], diceRolls: [], notifications: [], revision,
@@ -50,9 +50,23 @@ function main(): void {
   const originalTable = createDefaultPlayerViewState(6);
   assert(originalTable.capabilitiesByPlayer['player-1']?.includes('journal.write.private') === true, 'Private journal should be enabled by default.');
   assert(originalTable.capabilitiesByPlayer['player-1']?.includes('message.send.party') === false, 'Shared messages must be denied by default.');
-  assert(originalTable.mapPolicy.includePublicRoads === false, 'Generated roads must be hidden from new player views.');
-  const roadsEnabled = setPlayerMapPolicy(originalTable, { includePublicRoads: true });
-  assert(roadsEnabled.mapPolicy.includePublicRoads, 'The GM cannot explicitly enable player roads.');
+  assert(
+    originalTable.mapPolicy.includeBaseGeography
+      && originalTable.mapPolicy.includePublicRoads
+      && originalTable.mapPolicy.includeBuildingFootprints,
+    'Ordinary town geometry must be public in new player views.',
+  );
+  const attemptedHide = setPlayerMapPolicy(originalTable, {
+    includeBaseGeography: false,
+    includePublicRoads: false,
+    includeBuildingFootprints: false,
+  });
+  assert(
+    attemptedHide.mapPolicy.includeBaseGeography
+      && attemptedHide.mapPolicy.includePublicRoads
+      && attemptedHide.mapPolicy.includeBuildingFootprints,
+    'The public town-map baseline can be accidentally disabled.',
+  );
   const expandedTable = resizePlayerViewState(originalTable, 10);
   assert(expandedTable.players.length === 10 && expandedTable.characters.length === 10, 'The player table did not expand to the GM-configured size.');
   assert(expandedTable.players[0]?.id === originalTable.players[0]?.id, 'Expanding the table replaced an existing player.');
@@ -62,7 +76,7 @@ function main(): void {
   console.log(JSON.stringify({
     projectionMerge: true, staleKnowledgeRemoved: true, playerOwnedDataPreserved: true,
     monotonicRevision: true, offlineQueueAllowlist: true, configurablePlayerCount: true,
-    denyByDefault: true, gmControlledMap: true,
+    denyByDefault: true, publicTownMapBaseline: true,
   }, null, 2));
 }
 

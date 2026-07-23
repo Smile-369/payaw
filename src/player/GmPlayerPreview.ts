@@ -5,7 +5,6 @@ import {
   revokeKnowledgeGrant,
   resizePlayerViewState,
   setPlayerCapabilities,
-  setPlayerMapPolicy,
   updatePlayerIdentity,
   upsertKnowledgeGrant,
   type Capability,
@@ -79,9 +78,6 @@ export class GmPlayerPreview {
   private readonly saveIdentity = element<HTMLButtonElement>('#player-preview-save-identity');
   private readonly capabilityGrid = element<HTMLElement>('#player-capability-grid');
   private readonly saveCapabilities = element<HTMLButtonElement>('#player-preview-save-capabilities');
-  private readonly mapBaseGeography = element<HTMLInputElement>('#player-map-base-geography');
-  private readonly mapPublicRoads = element<HTMLInputElement>('#player-map-public-roads');
-  private readonly saveMapPolicy = element<HTMLButtonElement>('#player-map-save');
   private readonly grantType = element<HTMLSelectElement>('#player-grant-type');
   private readonly grantEntitySearch = element<HTMLInputElement>('#player-grant-entity-search');
   private readonly grantEntity = element<HTMLSelectElement>('#player-grant-entity');
@@ -90,7 +86,6 @@ export class GmPlayerPreview {
   private readonly grantAlias = element<HTMLInputElement>('#player-grant-alias');
   private readonly grantSource = element<HTMLInputElement>('#player-grant-source');
   private readonly saveGrant = element<HTMLButtonElement>('#player-grant-save');
-  private readonly revealPublicBasics = element<HTMLButtonElement>('#player-grant-public-basics');
   private readonly grantList = element<HTMLElement>('#player-grant-list');
   private readonly summary = element<HTMLElement>('#player-projection-summary');
   private readonly safety = element<HTMLElement>('#player-projection-safety');
@@ -105,15 +100,12 @@ export class GmPlayerPreview {
     this.grantEntitySearch.addEventListener('input', () => this.renderCandidates());
     this.saveIdentity.addEventListener('click', () => this.updateIdentity());
     this.saveCapabilities.addEventListener('click', () => this.updateCapabilities());
-    this.saveMapPolicy.addEventListener('click', () => this.updateMapPolicy());
     this.saveGrant.addEventListener('click', () => this.addGrant());
-    this.revealPublicBasics.addEventListener('click', () => this.addPublicBasics());
     this.openPreview.addEventListener('click', () => this.publish(true));
     this.refreshPreview.addEventListener('click', () => this.publish(false));
     this.downloadProjection.addEventListener('click', () => this.download());
     this.grantList.addEventListener('click', (event) => this.handleGrantAction(event));
     this.renderCapabilities();
-    this.renderMapPolicy();
     this.refresh();
   }
 
@@ -131,7 +123,6 @@ export class GmPlayerPreview {
     this.characterName.value = character?.name ?? '';
     this.grantAudience.replaceChildren(option('party', 'Whole party'), option(`player:${selected}`, player === undefined ? 'Selected player' : player.displayName));
     this.renderCapabilities();
-    this.renderMapPolicy();
     this.renderCandidates();
     this.renderGrants();
     this.renderProjectionSummary();
@@ -147,8 +138,12 @@ export class GmPlayerPreview {
     return { ...this.options.getContext(), playerView: this.options.getState(), viewerId: this.selectedPlayerId() };
   }
 
-  private projection(): PlayerProjection {
-    return createPlayerProjection(this.context());
+  private projection(includeRenderedMap = false): PlayerProjection {
+    const context = this.context();
+    if (includeRenderedMap) return createPlayerProjection(context);
+    const { renderPublicMapImage: omittedMapRenderer, ...contextWithoutMapRenderer } = context;
+    void omittedMapRenderer;
+    return createPlayerProjection(contextWithoutMapRenderer);
   }
 
   private commit(state: PlayerViewState, message: string): void {
@@ -203,24 +198,25 @@ export class GmPlayerPreview {
     this.commit(setPlayerCapabilities(this.options.getState(), this.selectedPlayerId(), capabilities), 'Player permissions saved.');
   }
 
-  private renderMapPolicy(): void {
-    const policy = this.options.getState().mapPolicy;
-    this.mapBaseGeography.checked = policy.includeBaseGeography;
-    this.mapPublicRoads.checked = policy.includePublicRoads;
-  }
-
-  private updateMapPolicy(): void {
-    this.commit(setPlayerMapPolicy(this.options.getState(), {
-      includeBaseGeography: this.mapBaseGeography.checked,
-      includePublicRoads: this.mapPublicRoads.checked,
-    }), 'Player map visibility saved.');
-  }
-
   private candidates(type = this.grantType.value as KnowledgeSubjectType): Candidate[] {
     const context = this.options.getContext();
-    if (type === 'location') return collectCampaignLocations(context.world, context.authoringLayer)
-      .filter((item) => item.kind !== 'building')
-      .map((item) => ({ id: item.ref, label: `${item.label} · ${item.kind.replaceAll('-', ' ')}` }));
+    if (type === 'location') {
+      const candidates = new Map<string, Candidate>();
+      for (const story of context.world.storyObjects) {
+        const id = `story:${story.key}`;
+        candidates.set(id, { id, label: `${story.name} · story location` });
+      }
+      const campaignLocations = new Map(collectCampaignLocations(context.world, context.authoringLayer).map((item) => [item.ref, item]));
+      for (const location of context.npcLocationAuthoring.locations) {
+        if (location.visibility === 'players') continue;
+        const source = campaignLocations.get(location.sourceRef);
+        candidates.set(location.sourceRef, {
+          id: location.sourceRef,
+          label: `${location.name || source?.label || 'Campaign location'} · story location`,
+        });
+      }
+      return [...candidates.values()].sort((left, right) => left.label.localeCompare(right.label));
+    }
     if (type === 'npc') return context.world.npcs.map((npc) => ({ id: npc.key, label: npc.name }));
     if (type === 'scene') return context.campaign.scenes.map((item) => ({ id: item.id, label: item.name }));
     if (type === 'clue') return context.campaign.clues.map((item) => ({ id: item.id, label: item.playerTitle || item.gmTitle || 'Untitled clue' }));
@@ -251,23 +247,6 @@ export class GmPlayerPreview {
     }));
     this.grantAlias.value = '';
     this.commit(state, 'Knowledge grant published to the preview.');
-  }
-
-  private addPublicBasics(): void {
-    const context = this.options.getContext();
-    const publicRefs = new Set<string>();
-    for (const location of collectCampaignLocations(context.world, context.authoringLayer)) {
-      if (location.kind === 'settlement' || location.kind === 'anchor') publicRefs.add(location.ref);
-    }
-    for (const location of context.npcLocationAuthoring.locations) if (location.visibility === 'players') publicRefs.add(location.sourceRef);
-    let state = this.options.getState();
-    for (const ref of publicRefs) {
-      state = upsertKnowledgeGrant(state, createKnowledgeGrant({
-        subjectType: 'location', subjectId: ref, audience: 'party', level: 'discovered', alias: null,
-        source: 'Public campaign map', expiresAt: null,
-      }));
-    }
-    this.commit(state, `Revealed ${publicRefs.size} public map location${publicRefs.size === 1 ? '' : 's'}.`);
   }
 
   private renderGrants(): void {
@@ -303,7 +282,8 @@ export class GmPlayerPreview {
     try {
       const projection = this.projection();
       const values: readonly [string, number][] = [
-        ['Map markers', projection.map.features.length], ['People', projection.knownNpcs.length], ['Places', projection.knownLocations.length],
+        ['Map markers', projection.map.features.length], ['Buildings', projection.map.buildings.length],
+        ['People', projection.knownNpcs.length], ['Places', projection.knownLocations.length],
         ['Clues', projection.clues.length], ['Messages', projection.messages.reduce((sum, thread) => sum + thread.messages.length, 0)],
       ];
       this.summary.replaceChildren(...values.map(([label, value]) => {
@@ -326,7 +306,7 @@ export class GmPlayerPreview {
   }
 
   private publish(openWindow: boolean): void {
-    const projection = this.projection();
+    const projection = this.projection(true);
     const errors = structuralSafetyErrors(projection);
     if (errors.length > 0) { this.options.notify('Player preview blocked by the secrecy audit.', 'error'); return; }
     const token = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -338,7 +318,7 @@ export class GmPlayerPreview {
   }
 
   private download(): void {
-    const projection = this.projection();
+    const projection = this.projection(true);
     const blob = new Blob([JSON.stringify(projection, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
     anchor.href = url; anchor.download = `${safeFilename(projection.campaign.name)}-${safeFilename(projection.viewer.displayName)}-player-view.json`; anchor.click();

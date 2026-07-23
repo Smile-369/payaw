@@ -285,7 +285,7 @@ function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection): void 
   if (base !== null && base.columns > 0 && base.rows > 0) {
     const cellWidth = width / base.columns;
     const cellHeight = height / base.rows;
-    const colors: Readonly<Record<string, string>> = { W: '#183443', w: '#285567', L: '#596d4d', F: '#294a35', H: '#665f4d', S: '#877a55', B: '#8b8570' };
+    const colors: Readonly<Record<string, string>> = { W: '#183443', w: '#285567', R: '#3d91b9', L: '#596d4d', F: '#294a35', H: '#665f4d', S: '#877a55', B: '#8b8570' };
     for (let row = 0; row < base.rows; row += 1) {
       const encoded = base.terrainRows[row] ?? '';
       for (let column = 0; column < base.columns; column += 1) {
@@ -299,6 +299,79 @@ function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection): void 
   const mapPoint = (x: number, y: number): readonly [number, number] => [x / worldWidth * width, y / worldHeight * height];
   context.lineJoin = 'round';
   context.lineCap = 'round';
+  if (projection.map.baseImageDataUrl !== null) {
+    const image = new Image();
+    image.addEventListener('load', () => {
+      context.setTransform(density, 0, 0, density, 0, 0);
+      context.fillStyle = '#31566f';
+      context.fillRect(0, 0, width, height);
+      context.imageSmoothingEnabled = false;
+      context.drawImage(image, 0, 0, width, height);
+      for (const feature of projection.map.features) {
+        if (feature.position === null) continue;
+        const bakedStory = feature.kind === 'location' && feature.color === '#b66a8c' && feature.knowledge !== 'rumored';
+        const needsOverlay = feature.kind === 'scene' || feature.kind === 'ping' || feature.knowledge === 'rumored' || (feature.kind === 'location' && !bakedStory);
+        if (!needsOverlay) continue;
+        const [x, y] = mapPoint(feature.position.x, feature.position.y);
+        if (feature.approximateRadius !== null) {
+          context.beginPath();
+          context.fillStyle = 'rgb(231 181 108 / 17%)';
+          context.strokeStyle = 'rgb(231 181 108 / 82%)';
+          context.lineWidth = 1;
+          context.setLineDash([4, 4]);
+          context.arc(x, y, Math.max(12, feature.approximateRadius / worldWidth * width), 0, Math.PI * 2);
+          context.fill();
+          context.stroke();
+          context.setLineDash([]);
+        }
+        context.beginPath();
+        context.fillStyle = feature.color ?? (feature.kind === 'scene' ? '#e7b56c' : feature.kind === 'ping' ? '#e48781' : '#b66a8c');
+        context.strokeStyle = '#fff0e0';
+        context.lineWidth = 1.5;
+        if (feature.kind === 'location') {
+          context.save();
+          context.translate(x, y);
+          context.rotate(Math.PI / 4);
+          context.fillRect(-4, -4, 8, 8);
+          context.strokeRect(-4, -4, 8, 8);
+          context.restore();
+        } else {
+          context.arc(x, y, feature.kind === 'scene' ? 7 : 5, 0, Math.PI * 2);
+          context.fill();
+          context.stroke();
+        }
+        context.font = '600 11px Tahoma, sans-serif';
+        context.textAlign = 'center';
+        context.textBaseline = 'bottom';
+        context.lineWidth = 3;
+        context.strokeStyle = 'rgb(6 10 8 / 88%)';
+        context.fillStyle = '#fff5ea';
+        context.strokeText(feature.label, x, y - 7);
+        context.fillText(feature.label, x, y - 7);
+      }
+    }, { once: true });
+    image.src = projection.map.baseImageDataUrl;
+    return;
+  }
+  for (const building of projection.map.buildings) {
+    const first = building.footprint[0];
+    if (first === undefined) continue;
+    context.beginPath();
+    const [startX, startY] = mapPoint(first.x, first.y);
+    context.moveTo(startX, startY);
+    for (let index = 1; index < building.footprint.length; index += 1) {
+      const point = building.footprint[index];
+      if (point === undefined) continue;
+      const [x, y] = mapPoint(point.x, point.y);
+      context.lineTo(x, y);
+    }
+    context.closePath();
+    context.fillStyle = 'rgb(203 198 181 / 76%)';
+    context.strokeStyle = 'rgb(83 79 68 / 72%)';
+    context.lineWidth = .65;
+    context.fill();
+    context.stroke();
+  }
   for (const road of projection.map.roads) {
     if (road.points.length < 2) continue;
     context.beginPath();
@@ -306,8 +379,12 @@ function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection): void 
       const [x, y] = mapPoint(point.x, point.y);
       if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
     });
-    context.strokeStyle = road.classification === 'main' ? 'rgb(231 218 178 / 74%)' : 'rgb(215 208 177 / 45%)';
-    context.lineWidth = road.classification === 'main' ? 2.1 : 1.1;
+    context.strokeStyle = road.classification === 'main'
+      ? 'rgb(231 218 178 / 86%)'
+      : road.classification === 'secondary'
+        ? 'rgb(215 208 177 / 64%)'
+        : 'rgb(207 201 177 / 46%)';
+    context.lineWidth = road.classification === 'main' ? 2.1 : road.classification === 'secondary' ? 1.25 : .75;
     context.stroke();
   }
   for (const feature of projection.map.features) {
@@ -346,12 +423,12 @@ function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection): void 
 
 function renderMap(projection: PlayerProjection, onCommand: (command: PlayerCommand) => void): HTMLElement {
   const wrapper = create('div');
-  wrapper.append(panelHeader('map', `${projection.knownLocations.length} known places · ${projection.map.roads.length} public roads`));
+  wrapper.append(panelHeader('map', `${projection.knownLocations.length} known places · ${projection.map.roads.length} roads · ${projection.map.buildings.length} buildings`));
   const mapCard = create('section', 'player-card player-map-card');
   const toolbar = create('div', 'player-map-toolbar');
   const copy = create('div');
-  appendText(copy, 'strong', 'Revealed campaign map');
-  appendText(copy, 'small', 'Only GM-enabled geography, roads, and revealed places are present; hidden geometry never reaches this browser.');
+  appendText(copy, 'strong', 'Campaign town map');
+  appendText(copy, 'small', 'This uses the same map renderer and public layers as the GM map. Story locations appear only after a GM reveal.');
   const controls = create('div', 'player-map-toolbar-controls');
   const pingLabel = create('input');
   pingLabel.placeholder = 'Ping label';
@@ -368,7 +445,7 @@ function renderMap(projection: PlayerProjection, onCommand: (command: PlayerComm
   const status = create('div', 'player-map-status', 'Click a revealed marker to inspect it.');
   stage.append(canvas, status);
   const legend = create('div', 'player-map-legend');
-  for (const [label, color] of [['Current scene', '#e7b56c'], ['Community', '#9bd7c6'], ['Known place', '#dce8df'], ['Your ping', '#e48781']] as const) {
+  for (const [label, color] of [['Buildings', '#cbc6b5'], ['Current scene', '#e7b56c'], ['Community', '#9bd7c6'], ['Known place', '#dce8df'], ['Your ping', '#e48781']] as const) {
     const item = create('span', '', label);
     item.style.setProperty('--legend', color);
     legend.append(item);
@@ -400,9 +477,9 @@ function renderMap(projection: PlayerProjection, onCommand: (command: PlayerComm
   requestAnimationFrame(() => drawMap(canvas, projection));
   const observer = new ResizeObserver(() => drawMap(canvas, projection));
   observer.observe(stage);
-  const places = card('Revealed markers', 'Rumors use approximate areas; discovered places use approved positions.');
+  const places = card('Map locations', 'Ordinary communities are public; rumors and story locations appear only after the GM reveals them.');
   const list = create('div', 'player-list');
-  if (projection.map.features.length === 0) list.append(emptyState('Nothing revealed on the map', 'The GM can reveal communities, anchors, and campaign locations independently.'));
+  if (projection.map.features.length === 0) list.append(emptyState('No named locations on the map', 'The town geometry is still visible. Story locations appear when the GM reveals them.'));
   for (const feature of projection.map.features) {
     const row = create('div', 'player-list-item');
     const rowCopy = create('div');
