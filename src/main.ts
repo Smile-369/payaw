@@ -4341,7 +4341,7 @@ async function importPayawJsonFile(file: File): Promise<void> {
   if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json' && file.type !== '') {
     throw new Error('Select a JSON file exported by PAYAW.');
   }
-  if (file.size > 64 * 1024 * 1024) throw new Error('PAYAW JSON is larger than the 64 MB import limit.');
+  if (file.size > 256 * 1024 * 1024) throw new Error('PAYAW JSON is larger than the 256 MB import limit.');
   const parsed: unknown = JSON.parse(await file.text());
   if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
   const root = parsed as Record<string, unknown>;
@@ -4414,7 +4414,7 @@ function normalizeStoredSimulation(value: unknown): Partial<StoredSimulationStat
 }
 
 async function importProjectFile(file: File): Promise<void> {
-  if (file.size > 64 * 1024 * 1024) throw new Error('Project JSON is larger than the 64 MB import limit.');
+  if (file.size > 256 * 1024 * 1024) throw new Error('Project JSON is larger than the 256 MB import limit.');
   const parsed: unknown = JSON.parse(await file.text());
   if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
   const root = parsed as Record<string, unknown>;
