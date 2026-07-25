@@ -12,6 +12,8 @@ export interface GenerationRunOptions {
   readonly onProgress?: (progress: GenerationProgress) => void;
   /** Yield between stages so the browser can paint progress and process input. */
   readonly yieldBetweenStages?: boolean;
+  /** Stop after this deterministic stage. Used by Player View to avoid generating hidden story/NPC data. */
+  readonly stopAfterStageId?: string;
 }
 
 export class GenerationCancelledError extends Error {

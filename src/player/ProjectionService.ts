@@ -12,6 +12,7 @@ import { RoadType } from '../engine/infrastructure/Road';
 import type { NPC } from '../engine/npc/NPC';
 import { TerrainType, WaterType, type Tile } from '../engine/world/Tile';
 import type { World } from '../engine/world/World';
+import type { GenerationOptions } from '../engine/generation/GenerationOptions';
 import {
   PLAYER_PROJECTION_VERSION,
   deepFreeze,
@@ -30,6 +31,7 @@ import {
   type PlayerRoadProjection,
   type SceneProjection,
 } from './PlayerProjection';
+import { createPlayerWorldGenerationRecipe } from './PlayerWorldRecipe';
 import type {
   KnowledgeGrant,
   KnowledgeLevel,
@@ -46,7 +48,7 @@ export interface PlayerProjectionContext {
   readonly playerView: PlayerViewState;
   readonly viewerId: string;
   readonly now?: string | Date | number;
-  readonly renderPublicMapImage?: (projection: PlayerProjection) => string | null;
+  readonly generationOptions?: GenerationOptions;
 }
 
 interface EffectiveKnowledge {
@@ -521,6 +523,20 @@ export function createPlayerProjection(context: PlayerProjectionContext): Player
     expiresAt: null,
   }];
   const projectedCharacter = character === undefined ? undefined : characterProjection(context);
+  const generationOptions: GenerationOptions = context.generationOptions ?? {
+    terrainSize: context.world.metadata.terrainSize,
+    townScale: context.world.metadata.townScale,
+    terrainShape: context.world.metadata.terrainShape,
+    climatePreset: context.world.metadata.climatePreset,
+    islandCount: context.world.metadata.targetIslandCount,
+    islandSpacingKilometers: context.world.metadata.islandSpacingKilometers,
+    satelliteSettlementCount: context.world.metadata.satelliteSettlementCount,
+  };
+  const worldRecipe = createPlayerWorldGenerationRecipe(
+    context.world.seed,
+    context.world.metadata.generationVersion,
+    generationOptions,
+  );
   const projection: PlayerProjection = {
     projectionVersion: PLAYER_PROJECTION_VERSION,
     generatedAt: now,
@@ -544,7 +560,7 @@ export function createPlayerProjection(context: PlayerProjectionContext): Player
     ...(scene === undefined ? {} : { activeScene: scene }),
     map: {
       base: context.playerView.mapPolicy.includeBaseGeography ? buildBaseGrid(context.world) : null,
-      baseImageDataUrl: null,
+      worldRecipe,
       unexploredTreatment: context.playerView.mapPolicy.unexploredTreatment,
       roads: context.playerView.mapPolicy.includePublicRoads ? publicRoads(context.world, context.campaign.id) : [],
       buildings: context.playerView.mapPolicy.includeBuildingFootprints ? publicBuildingFootprints(context.world, context.campaign.id) : [],
@@ -564,10 +580,7 @@ export function createPlayerProjection(context: PlayerProjectionContext): Player
     notifications: notifications(context, now),
     revision: context.campaign.runState.revision,
   };
-  const baseImageDataUrl = context.renderPublicMapImage?.(projection) ?? null;
-  return deepFreeze(baseImageDataUrl === null
-    ? projection
-    : { ...projection, map: { ...projection.map, baseImageDataUrl } });
+  return deepFreeze(projection);
 }
 
 export function projectionAudienceForViewer(viewerId: string): readonly PlayerAudience[] {

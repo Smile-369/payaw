@@ -110,7 +110,13 @@ export class GenerationWorkerClient {
       runOptions.signal?.addEventListener('abort', onAbort, { once: true });
       worker.addEventListener('message', onMessage);
       worker.addEventListener('error', onWorkerError);
-      const request: GenerationWorkerRequest = { type: 'generate', requestId, seed, options };
+      const request: GenerationWorkerRequest = {
+        type: 'generate',
+        requestId,
+        seed,
+        options,
+        ...(runOptions.stopAfterStageId === undefined ? {} : { stopAfterStageId: runOptions.stopAfterStageId }),
+      };
       worker.postMessage(request);
     });
   }

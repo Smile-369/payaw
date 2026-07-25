@@ -30,6 +30,7 @@ scope.addEventListener('message', (event) => {
   try {
     const world = pipeline.generate(request.seed, request.options, {
       onProgress: (progress) => scope.postMessage({ type: 'progress', requestId: request.requestId, progress }),
+      ...(request.stopAfterStageId === undefined ? {} : { stopAfterStageId: request.stopAfterStageId }),
     });
     scope.postMessage({
       type: 'complete',

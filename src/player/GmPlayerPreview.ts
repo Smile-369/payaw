@@ -138,12 +138,8 @@ export class GmPlayerPreview {
     return { ...this.options.getContext(), playerView: this.options.getState(), viewerId: this.selectedPlayerId() };
   }
 
-  private projection(includeRenderedMap = false): PlayerProjection {
-    const context = this.context();
-    if (includeRenderedMap) return createPlayerProjection(context);
-    const { renderPublicMapImage: omittedMapRenderer, ...contextWithoutMapRenderer } = context;
-    void omittedMapRenderer;
-    return createPlayerProjection(contextWithoutMapRenderer);
+  private projection(): PlayerProjection {
+    return createPlayerProjection(this.context());
   }
 
   private commit(state: PlayerViewState, message: string): void {
@@ -306,7 +302,7 @@ export class GmPlayerPreview {
   }
 
   private publish(openWindow: boolean): void {
-    const projection = this.projection(true);
+    const projection = this.projection();
     const errors = structuralSafetyErrors(projection);
     if (errors.length > 0) { this.options.notify('Player preview blocked by the secrecy audit.', 'error'); return; }
     const token = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -318,7 +314,7 @@ export class GmPlayerPreview {
   }
 
   private download(): void {
-    const projection = this.projection(true);
+    const projection = this.projection();
     const blob = new Blob([JSON.stringify(projection, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
     anchor.href = url; anchor.download = `${safeFilename(projection.campaign.name)}-${safeFilename(projection.viewer.displayName)}-player-view.json`; anchor.click();

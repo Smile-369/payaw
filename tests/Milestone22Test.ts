@@ -18,6 +18,7 @@ import { TerrainShape, TerrainSize, TownScale, type GenerationOptions } from '..
 import { applyPlayerCommand, PlayerPermissionError } from '../src/player/PlayerCommands';
 import { PLAYER_PROJECTION_VERSION, ProjectionVersionError, parsePlayerProjection } from '../src/player/PlayerProjection';
 import { createPlayerProjection } from '../src/player/ProjectionService';
+import { hydratePlayerWorldGenerationOptions } from '../src/player/PlayerWorldRecipe';
 import {
   createDefaultPlayerViewState,
   createKnowledgeGrant,
@@ -92,7 +93,7 @@ function main(): void {
   const revoked = createKnowledgeGrant({ subjectType: 'npc', subjectId: hiddenNpc.key, audience: 'party', level: 'discovered', alias: null, source: 'Mistaken reveal', expiresAt: null, grantedAt: now });
   playerView = revokeKnowledgeGrant(upsertKnowledgeGrant(playerView, revoked), revoked.id, now);
 
-  const context = { campaign, world, authoringLayer: EMPTY_AUTHORING_LAYER, npcLocationAuthoring: EMPTY_NPC_LOCATION_AUTHORING, playerView, now };
+  const context = { campaign, world, authoringLayer: EMPTY_AUTHORING_LAYER, npcLocationAuthoring: EMPTY_NPC_LOCATION_AUTHORING, playerView, generationOptions: options, now };
   const first = createPlayerProjection({ ...context, viewerId: 'player-1' });
   const second = createPlayerProjection({ ...context, viewerId: 'player-2' });
   const firstJson = JSON.stringify(first);
@@ -132,17 +133,17 @@ function main(): void {
   }));
   const storyProjection = createPlayerProjection({ ...context, playerView: storyState, viewerId: 'player-1' });
   assert(storyProjection.knownLocations.some((item) => item.name === storyLocation.name), 'A GM-revealed story location is absent from Player View.');
-  let renderedProjectionWasSafe = false;
-  const renderedMapProjection = createPlayerProjection({
-    ...context,
-    viewerId: 'player-1',
-    renderPublicMapImage: (safeProjection) => {
-      renderedProjectionWasSafe = !JSON.stringify(safeProjection).includes(storyLocation.name);
-      return 'data:image/png;base64,iVBORw0KGgo=';
-    },
-  });
-  assert(renderedProjectionWasSafe, 'The shared GM renderer received an unrevealed story location.');
-  assert(renderedMapProjection.map.baseImageDataUrl?.startsWith('data:image/png;base64,') === true, 'The shared GM-rendered player map was not projected.');
+  const recipe = first.map.worldRecipe;
+  assert(recipe !== null && recipe.seed === world.seed, 'Player View did not receive the deterministic world seed.');
+  assert(!firstJson.includes('baseImageDataUrl'), 'Player View still contains a baked PNG map field.');
+  const playerGeneratedWorld = new GenerationPipeline().generate(
+    recipe.seed,
+    hydratePlayerWorldGenerationOptions(recipe),
+    { stopAfterStageId: 'vegetation' },
+  );
+  assert(playerGeneratedWorld.width === world.width && playerGeneratedWorld.height === world.height, 'Client-generated player world dimensions differ from the GM world.');
+  assert(playerGeneratedWorld.roads.length > 0 && playerGeneratedWorld.buildings.length > 0, 'Client-generated player map is missing public town geometry.');
+  assert(playerGeneratedWorld.storyObjects.length === 0 && playerGeneratedWorld.npcs.length === 0, 'Player-side generation ran hidden story or NPC stages.');
 
   const noActionsState = setPlayerCapabilities(playerView, 'player-1', []);
   const noActions = createPlayerProjection({ ...context, playerView: noActionsState, viewerId: 'player-1' });
@@ -171,7 +172,7 @@ function main(): void {
     safeBuildingSilhouettes: first.map.buildings.length,
     publicRivers: first.map.base.terrainRows.some((row) => row.includes('R')),
     storyLocationsRevealGated: true,
-    sharedGmRendererMap: true,
+    clientGeneratedSeedMap: true,
     knownPeople: first.knownNpcs.length,
     privateKnowledgeIsolated: true,
     capabilityBoundary: true,

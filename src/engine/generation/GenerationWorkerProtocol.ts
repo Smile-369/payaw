@@ -8,6 +8,7 @@ export interface GenerationWorkerRequest {
   readonly requestId: number;
   readonly seed: string;
   readonly options: GenerationOptions;
+  readonly stopAfterStageId?: string;
 }
 
 export interface SerializedGenerationError {

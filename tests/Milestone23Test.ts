@@ -14,7 +14,7 @@ function baseProjection(revision: number): PlayerProjection {
     campaign: { id: 'campaign:safe', name: 'Hidden Payaw', status: 'active', campaignTime: '2026-07-23T00:00:00.000Z', timezone: 'Asia/Manila', weather: 'Rain', publicConditions: [] },
     viewer: { id: 'viewer:safe', displayName: 'Player 1', characterId: 'character:safe', characterName: 'Ana', color: '#73b7a4' },
     capabilities: ['character.edit.self', 'journal.write.private', 'map.ping', 'dice.roll', 'objective.propose', 'message.send.party'],
-    map: { base: { columns: 1, rows: 1, worldWidth: 100, worldHeight: 100, terrainRows: ['L'] }, baseImageDataUrl: null, unexploredTreatment: 'paper', roads: [], buildings: [], features: [], partyPosition: null, tileSizeMeters: 125 },
+    map: { base: { columns: 1, rows: 1, worldWidth: 100, worldHeight: 100, terrainRows: ['L'] }, worldRecipe: null, unexploredTreatment: 'paper', roads: [], buildings: [], features: [], partyPosition: null, tileSizeMeters: 125 },
     knownNpcs: [], knownLocations: [], clues: [], handouts: [], messages: [{ id: 'thread:one', name: 'Friends', medium: 'Messenger', canReply: true, messages: [] }],
     character: { id: 'character:safe', name: 'Ana', pronouns: '', background: '', portraitUri: null, stats: {}, conditions: [], inventory: [], privateNotes: '', editableFields: ['privateNotes'] },
     journal: { personal: [], shared: [] }, objectives: [], diceRolls: [], notifications: [], revision,

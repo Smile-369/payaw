@@ -43,7 +43,6 @@ import {
 } from './campaign/CampaignSystem';
 import { CampaignStudio, type CampaignStudioOption } from './campaign/CampaignStudio';
 import { GmPlayerPreview } from './player/GmPlayerPreview';
-import type { PlayerProjection } from './player/PlayerProjection';
 import { readNetcodeConfig } from './netcode/NetcodeConfig';
 import {
   createDefaultPlayerViewState,
@@ -7205,56 +7204,13 @@ function syncSimulationToCampaignClock(): void {
   simulation.setTimezone(campaignState.runState.timezone);
 }
 
-const publicPlayerMapCache = new WeakMap<World, Map<string, string>>();
-
-function renderPublicPlayerMap(projection: PlayerProjection): string {
-  const visibleStories = world.storyObjects.flatMap((story) => {
-    const feature = projection.map.features.find((candidate) => (
-      candidate.kind === 'location'
-      && candidate.position !== null
-      && candidate.knowledge !== 'rumored'
-      && Math.abs(candidate.position.x - (story.x + 0.5)) < 0.01
-      && Math.abs(candidate.position.y - (story.y + 0.5)) < 0.01
-    ));
-    return feature === undefined ? [] : [{ ...story, name: feature.label }];
-  });
-  const cacheKey = JSON.stringify([
-    renderer.layers.visible(),
-    visibleStories.map((story) => [story.key, story.name]),
-  ]);
-  const cachedByProjection = publicPlayerMapCache.get(world);
-  const cached = cachedByProjection?.get(cacheKey);
-  if (cached !== undefined) return cached;
-  const publicWorld = World.fromSerialized({
-    ...world.toJSON(),
-    storyObjects: visibleStories,
-    npcs: [],
-  }, world.diagnostics);
-  const image = renderer.exportDataUrl(publicWorld, {
-    pixelsPerTile: 3,
-    padding: 0,
-    includeEditorOverlays: false,
-    hiddenLayers: [
-      RenderLayer.NPCs,
-      RenderLayer.HiddenPayaw,
-      RenderLayer.SupernaturalActivity,
-      RenderLayer.Travel,
-    ],
-  });
-  const nextCache = cachedByProjection ?? new Map<string, string>();
-  if (nextCache.size >= 16) nextCache.clear();
-  nextCache.set(cacheKey, image);
-  publicPlayerMapCache.set(world, nextCache);
-  return image;
-}
-
 if (!generate(customAnchors, builtInOverrides, true, true)) throw new Error('The initial PAYAW world could not be generated.');
 campaignState = normalizeCampaignState(campaignState, currentCampaignWorldRef());
 campaignStudio = createCampaignStudio();
 campaignStudio.refreshExternalReferences();
 playerViewState = normalizePlayerViewState(playerViewState, playerViewState.players.length || 6);
 playerPreview = new GmPlayerPreview({
-  getContext: () => ({ campaign: campaignState, world, authoringLayer, npcLocationAuthoring, renderPublicMapImage: renderPublicPlayerMap }),
+  getContext: () => ({ campaign: campaignState, world, authoringLayer, npcLocationAuthoring, generationOptions: generationOptions() }),
   getState: () => playerViewState,
   setState: (state) => {
     playerViewState = state;
@@ -7270,7 +7226,7 @@ function loadNetcodePanel(): void {
   netcodePanelLoaded = true;
   void import('./netcode/GmNetcodePanel').then(({ GmNetcodePanel }) => {
     new GmNetcodePanel({
-      getContext: () => ({ campaign: campaignState, world, authoringLayer, npcLocationAuthoring, renderPublicMapImage: renderPublicPlayerMap }),
+      getContext: () => ({ campaign: campaignState, world, authoringLayer, npcLocationAuthoring, generationOptions: generationOptions() }),
       getState: () => playerViewState,
       getAssetData: (assetId) => {
         const asset = importedAssets.find((candidate) => candidate.id === assetId);

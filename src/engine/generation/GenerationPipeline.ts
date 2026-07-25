@@ -104,6 +104,18 @@ export class GenerationPipeline {
     return this.stages.map((stage) => stage.id);
   }
 
+  private stagesForRun(runOptions: GenerationRunOptions, startIndex = 0): readonly GenerationStage[] {
+    const available = this.stages.slice(startIndex);
+    const stopAfterStageId = runOptions.stopAfterStageId;
+    if (stopAfterStageId === undefined) return available;
+    const stopIndex = this.stages.findIndex((stage) => stage.id === stopAfterStageId);
+    if (stopIndex < 0) throw new Error(`Unknown generation stage: ${stopAfterStageId}`);
+    if (stopIndex < startIndex) {
+      throw new Error(`Generation stop stage ${stopAfterStageId} is before the requested start stage.`);
+    }
+    return this.stages.slice(startIndex, stopIndex + 1);
+  }
+
   private prepare(options: GenerationOptions): PreparedRun {
     const resolvedOptions = resolveGenerationOptions(options);
     return {
@@ -153,10 +165,11 @@ export class GenerationPipeline {
     const stageTimings: Record<string, number> = { ...world.diagnostics.stageTimingsMs };
     const startedAt = performance.now();
 
-    for (let index = startIndex; index < this.stages.length; index += 1) {
-      const stage = this.stages[index];
+    const stages = this.stagesForRun(runOptions, startIndex);
+    for (let index = 0; index < stages.length; index += 1) {
+      const stage = stages[index];
       if (stage === undefined) continue;
-      this.runStage(stage, index - startIndex, this.stages.length - startIndex, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
+      this.runStage(stage, index, stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
     }
 
     world.diagnostics = { generatedAt: new Date().toISOString(), stageTimingsMs: stageTimings };
@@ -176,11 +189,12 @@ export class GenerationPipeline {
     const stageTimings: Record<string, number> = { ...world.diagnostics.stageTimingsMs };
     const startedAt = performance.now();
 
-    for (let index = startIndex; index < this.stages.length; index += 1) {
-      const stage = this.stages[index];
+    const stages = this.stagesForRun(runOptions, startIndex);
+    for (let index = 0; index < stages.length; index += 1) {
+      const stage = stages[index];
       if (stage === undefined) continue;
-      this.runStage(stage, index - startIndex, this.stages.length - startIndex, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
-      if (runOptions.yieldBetweenStages !== false && index < this.stages.length - 1) await yieldToBrowser();
+      this.runStage(stage, index, stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
+      if (runOptions.yieldBetweenStages !== false && index < stages.length - 1) await yieldToBrowser();
     }
 
     throwIfGenerationCancelled(runOptions.signal);
@@ -201,10 +215,11 @@ export class GenerationPipeline {
     const stageTimings: Record<string, number> = {};
     const startedAt = performance.now();
 
-    for (let index = 0; index < this.stages.length; index += 1) {
-      const stage = this.stages[index];
+    const stages = this.stagesForRun(runOptions);
+    for (let index = 0; index < stages.length; index += 1) {
+      const stage = stages[index];
       if (stage === undefined) continue;
-      this.runStage(stage, index, this.stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
+      this.runStage(stage, index, stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
     }
 
     world.diagnostics = { generatedAt: new Date().toISOString(), stageTimingsMs: stageTimings };
@@ -224,11 +239,12 @@ export class GenerationPipeline {
     const stageTimings: Record<string, number> = {};
     const startedAt = performance.now();
 
-    for (let index = 0; index < this.stages.length; index += 1) {
-      const stage = this.stages[index];
+    const stages = this.stagesForRun(runOptions);
+    for (let index = 0; index < stages.length; index += 1) {
+      const stage = stages[index];
       if (stage === undefined) continue;
-      this.runStage(stage, index, this.stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
-      if (runOptions.yieldBetweenStages !== false && index < this.stages.length - 1) await yieldToBrowser();
+      this.runStage(stage, index, stages.length, world, runtimeConfig, resolvedOptions, rootRandom, startedAt, stageTimings, runOptions);
+      if (runOptions.yieldBetweenStages !== false && index < stages.length - 1) await yieldToBrowser();
     }
 
     throwIfGenerationCancelled(runOptions.signal);

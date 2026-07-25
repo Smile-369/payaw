@@ -10,6 +10,14 @@ import {
   type PlayerProjection,
 } from './PlayerProjection';
 import type { ConnectionSnapshot } from '../netcode/NetcodeTypes';
+import { GenerationWorkerClient } from '../browser/GenerationWorkerClient';
+import { EMPTY_RENDER_CUSTOMIZATION } from '../customization/Customization';
+import { GenerationPipeline } from '../engine/generation/GenerationPipeline';
+import { Camera } from '../engine/renderer/Camera';
+import { CanvasRenderer } from '../engine/renderer/CanvasRenderer';
+import { RenderLayer } from '../engine/renderer/Layers';
+import type { World } from '../engine/world/World';
+import { hydratePlayerWorldGenerationOptions, type PlayerWorldGenerationRecipe } from './PlayerWorldRecipe';
 
 export interface PlayerAppSession {
   readonly mode: 'network';
@@ -269,16 +277,119 @@ function renderScene(projection: PlayerProjection): HTMLElement {
   return wrapper;
 }
 
-function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection): void {
+const generatedPlayerWorlds = new Map<string, Promise<World>>();
+const playerMapViewports = new WeakMap<HTMLCanvasElement, { readonly camera: Camera; readonly worldWidth: number; readonly worldHeight: number }>();
+
+function playerWorldRecipeKey(recipe: PlayerWorldGenerationRecipe): string {
+  return JSON.stringify([recipe.generationVersion, recipe.seed, recipe.options]);
+}
+
+function generatePlayerWorld(recipe: PlayerWorldGenerationRecipe): Promise<World> {
+  const key = playerWorldRecipeKey(recipe);
+  const cached = generatedPlayerWorlds.get(key);
+  if (cached !== undefined) return cached;
+  const worker = new GenerationWorkerClient(new GenerationPipeline());
+  const generated = worker.generate(
+    recipe.seed,
+    hydratePlayerWorldGenerationOptions(recipe),
+    { stopAfterStageId: 'vegetation' },
+  ).catch((error: unknown) => {
+    generatedPlayerWorlds.delete(key);
+    throw error;
+  });
+  generatedPlayerWorlds.set(key, generated);
+  if (generatedPlayerWorlds.size > 4) {
+    const oldest = generatedPlayerWorlds.keys().next().value as string | undefined;
+    if (oldest !== undefined && oldest !== key) generatedPlayerWorlds.delete(oldest);
+  }
+  return generated;
+}
+
+interface PlayerCanvasFrame {
+  readonly context: CanvasRenderingContext2D;
+  readonly width: number;
+  readonly height: number;
+  readonly density: number;
+}
+
+function preparePlayerCanvas(canvas: HTMLCanvasElement): PlayerCanvasFrame | null {
   const rect = canvas.getBoundingClientRect();
   const density = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = Math.max(1, Math.round(rect.width * density));
   canvas.height = Math.max(1, Math.round(rect.height * density));
   const context = canvas.getContext('2d');
-  if (context === null) return;
+  if (context === null) return null;
   context.setTransform(density, 0, 0, density, 0, 0);
-  const width = rect.width;
-  const height = rect.height;
+  return { context, width: rect.width, height: rect.height, density };
+}
+
+function drawProjectedMapFeatures(
+  frame: PlayerCanvasFrame,
+  projection: PlayerProjection,
+  worldWidth: number,
+  worldHeight: number,
+  camera?: Camera,
+): void {
+  const { context, width, height, density } = frame;
+  context.setTransform(density, 0, 0, density, 0, 0);
+  const mapPoint = (x: number, y: number): readonly [number, number] => {
+    if (camera !== undefined) {
+      const point = camera.worldToScreen(x, y);
+      return [point.x, point.y];
+    }
+    return [x / worldWidth * width, y / worldHeight * height];
+  };
+  for (const feature of projection.map.features) {
+    if (feature.position === null) continue;
+    const [x, y] = mapPoint(feature.position.x, feature.position.y);
+    if (feature.approximateRadius !== null) {
+      context.beginPath();
+      context.fillStyle = 'rgb(231 181 108 / 17%)';
+      context.strokeStyle = 'rgb(231 181 108 / 70%)';
+      context.lineWidth = 1;
+      context.setLineDash([4, 4]);
+      const radius = camera === undefined
+        ? feature.approximateRadius / worldWidth * width
+        : feature.approximateRadius * camera.zoom;
+      context.arc(x, y, Math.max(12, radius), 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      context.setLineDash([]);
+    }
+    context.beginPath();
+    context.fillStyle = feature.color ?? (feature.kind === 'scene' ? '#e7b56c' : feature.kind === 'community' ? '#9bd7c6' : feature.kind === 'ping' ? '#e48781' : '#dce8df');
+    context.strokeStyle = '#0b110e';
+    context.lineWidth = 2;
+    if (feature.kind === 'location') {
+      context.save();
+      context.translate(x, y);
+      context.rotate(Math.PI / 4);
+      context.fillRect(-4, -4, 8, 8);
+      context.strokeRect(-4, -4, 8, 8);
+      context.restore();
+    } else {
+      context.arc(x, y, feature.kind === 'scene' ? 7 : feature.kind === 'community' ? 5 : 4, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+    }
+    if (feature.knowledge !== 'rumored') {
+      context.font = '600 11px Tahoma, sans-serif';
+      context.textAlign = 'center';
+      context.textBaseline = 'bottom';
+      context.lineWidth = 3;
+      context.strokeStyle = 'rgb(6 10 8 / 85%)';
+      context.fillStyle = '#eef4ef';
+      context.strokeText(feature.label, x, y - 7);
+      context.fillText(feature.label, x, y - 7);
+    }
+  }
+}
+
+function drawProjectedMapFallback(canvas: HTMLCanvasElement, projection: PlayerProjection): PlayerCanvasFrame | null {
+  playerMapViewports.delete(canvas);
+  const frame = preparePlayerCanvas(canvas);
+  if (frame === null) return null;
+  const { context, width, height } = frame;
   context.fillStyle = projection.map.unexploredTreatment === 'blank' ? '#0a0e0c' : projection.map.unexploredTreatment === 'fog' ? '#131b17' : '#18221b';
   context.fillRect(0, 0, width, height);
   const base = projection.map.base;
@@ -299,60 +410,6 @@ function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection): void 
   const mapPoint = (x: number, y: number): readonly [number, number] => [x / worldWidth * width, y / worldHeight * height];
   context.lineJoin = 'round';
   context.lineCap = 'round';
-  if (projection.map.baseImageDataUrl !== null) {
-    const image = new Image();
-    image.addEventListener('load', () => {
-      context.setTransform(density, 0, 0, density, 0, 0);
-      context.fillStyle = '#31566f';
-      context.fillRect(0, 0, width, height);
-      context.imageSmoothingEnabled = false;
-      context.drawImage(image, 0, 0, width, height);
-      for (const feature of projection.map.features) {
-        if (feature.position === null) continue;
-        const bakedStory = feature.kind === 'location' && feature.color === '#b66a8c' && feature.knowledge !== 'rumored';
-        const needsOverlay = feature.kind === 'scene' || feature.kind === 'ping' || feature.knowledge === 'rumored' || (feature.kind === 'location' && !bakedStory);
-        if (!needsOverlay) continue;
-        const [x, y] = mapPoint(feature.position.x, feature.position.y);
-        if (feature.approximateRadius !== null) {
-          context.beginPath();
-          context.fillStyle = 'rgb(231 181 108 / 17%)';
-          context.strokeStyle = 'rgb(231 181 108 / 82%)';
-          context.lineWidth = 1;
-          context.setLineDash([4, 4]);
-          context.arc(x, y, Math.max(12, feature.approximateRadius / worldWidth * width), 0, Math.PI * 2);
-          context.fill();
-          context.stroke();
-          context.setLineDash([]);
-        }
-        context.beginPath();
-        context.fillStyle = feature.color ?? (feature.kind === 'scene' ? '#e7b56c' : feature.kind === 'ping' ? '#e48781' : '#b66a8c');
-        context.strokeStyle = '#fff0e0';
-        context.lineWidth = 1.5;
-        if (feature.kind === 'location') {
-          context.save();
-          context.translate(x, y);
-          context.rotate(Math.PI / 4);
-          context.fillRect(-4, -4, 8, 8);
-          context.strokeRect(-4, -4, 8, 8);
-          context.restore();
-        } else {
-          context.arc(x, y, feature.kind === 'scene' ? 7 : 5, 0, Math.PI * 2);
-          context.fill();
-          context.stroke();
-        }
-        context.font = '600 11px Tahoma, sans-serif';
-        context.textAlign = 'center';
-        context.textBaseline = 'bottom';
-        context.lineWidth = 3;
-        context.strokeStyle = 'rgb(6 10 8 / 88%)';
-        context.fillStyle = '#fff5ea';
-        context.strokeText(feature.label, x, y - 7);
-        context.fillText(feature.label, x, y - 7);
-      }
-    }, { once: true });
-    image.src = projection.map.baseImageDataUrl;
-    return;
-  }
   for (const building of projection.map.buildings) {
     const first = building.footprint[0];
     if (first === undefined) continue;
@@ -387,36 +444,49 @@ function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection): void 
     context.lineWidth = road.classification === 'main' ? 2.1 : road.classification === 'secondary' ? 1.25 : .75;
     context.stroke();
   }
-  for (const feature of projection.map.features) {
-    if (feature.position === null) continue;
-    const [x, y] = mapPoint(feature.position.x, feature.position.y);
-    if (feature.approximateRadius !== null) {
-      context.beginPath();
-      context.fillStyle = 'rgb(231 181 108 / 17%)';
-      context.strokeStyle = 'rgb(231 181 108 / 70%)';
-      context.lineWidth = 1;
-      context.setLineDash([4, 4]);
-      context.arc(x, y, Math.max(12, feature.approximateRadius / worldWidth * width), 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
-      context.setLineDash([]);
-    }
-    context.beginPath();
-    context.fillStyle = feature.color ?? (feature.kind === 'scene' ? '#e7b56c' : feature.kind === 'community' ? '#9bd7c6' : feature.kind === 'ping' ? '#e48781' : '#dce8df');
-    context.strokeStyle = '#0b110e';
-    context.lineWidth = 2;
-    context.arc(x, y, feature.kind === 'scene' ? 7 : feature.kind === 'community' ? 5 : 4, 0, Math.PI * 2);
-    context.fill();
-    context.stroke();
-    if (feature.knowledge !== 'rumored') {
-      context.font = '600 11px Inter, sans-serif';
-      context.textAlign = 'center';
-      context.textBaseline = 'bottom';
-      context.lineWidth = 3;
-      context.strokeStyle = 'rgb(6 10 8 / 85%)';
-      context.fillStyle = '#eef4ef';
-      context.strokeText(feature.label, x, y - 7);
-      context.fillText(feature.label, x, y - 7);
+  drawProjectedMapFeatures(frame, projection, worldWidth, worldHeight);
+  return frame;
+}
+
+async function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection, status?: HTMLElement): Promise<void> {
+  drawProjectedMapFallback(canvas, projection);
+  const recipe = projection.map.worldRecipe;
+  if (recipe === null) {
+    if (status !== undefined) status.textContent = 'Legacy projection: using the lightweight public map geometry.';
+    return;
+  }
+  const key = playerWorldRecipeKey(recipe);
+  canvas.dataset.playerWorldRecipe = key;
+  if (status !== undefined) status.textContent = `Generating ${recipe.seed} locally from the shared world seed…`;
+  try {
+    const world = await generatePlayerWorld(recipe);
+    if (!canvas.isConnected || canvas.dataset.playerWorldRecipe !== key) return;
+    const frame = preparePlayerCanvas(canvas);
+    if (frame === null) return;
+    const renderer = new CanvasRenderer(canvas);
+    renderer.setCustomization(EMPTY_RENDER_CUSTOMIZATION);
+    for (const layer of [
+      RenderLayer.Story,
+      RenderLayer.NPCs,
+      RenderLayer.HiddenPayaw,
+      RenderLayer.SupernaturalActivity,
+      RenderLayer.Travel,
+      RenderLayer.CustomImages,
+      RenderLayer.Authoring,
+      RenderLayer.LiveInfrastructure,
+      RenderLayer.VenueStatus,
+      RenderLayer.SettlementActivity,
+    ]) renderer.layers.setVisible(layer, false);
+    const camera = new Camera();
+    camera.fit(world.width, world.height, frame.width, frame.height);
+    renderer.render(world, camera, { width: frame.width, height: frame.height, pixelRatio: frame.density });
+    playerMapViewports.set(canvas, { camera, worldWidth: world.width, worldHeight: world.height });
+    drawProjectedMapFeatures(frame, projection, world.width, world.height, camera);
+    if (status !== undefined) status.textContent = `Generated locally from seed “${recipe.seed}”. Click a revealed marker to inspect it.`;
+  } catch (error) {
+    if (status !== undefined) {
+      const message = error instanceof Error ? error.message : String(error);
+      status.textContent = `Local generation failed; showing the lightweight public fallback. ${message}`;
     }
   }
 }
@@ -428,7 +498,7 @@ function renderMap(projection: PlayerProjection, onCommand: (command: PlayerComm
   const toolbar = create('div', 'player-map-toolbar');
   const copy = create('div');
   appendText(copy, 'strong', 'Campaign town map');
-  appendText(copy, 'small', 'This uses the same map renderer and public layers as the GM map. Story locations appear only after a GM reveal.');
+  appendText(copy, 'small', 'The player browser regenerates this map from the shared seed and public overrides. Story locations appear only after a GM reveal.');
   const controls = create('div', 'player-map-toolbar-controls');
   const pingLabel = create('input');
   pingLabel.placeholder = 'Ping label';
@@ -462,8 +532,14 @@ function renderMap(projection: PlayerProjection, onCommand: (command: PlayerComm
     const rect = canvas.getBoundingClientRect();
     const base = projection.map.base;
     if (base === null) return;
-    const x = (event.clientX - rect.left) / rect.width * base.worldWidth;
-    const y = (event.clientY - rect.top) / rect.height * base.worldHeight;
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const viewport = playerMapViewports.get(canvas);
+    const worldPoint = viewport === undefined
+      ? { x: localX / rect.width * base.worldWidth, y: localY / rect.height * base.worldHeight }
+      : viewport.camera.screenToWorld(localX, localY);
+    const x = Math.max(0, Math.min(base.worldWidth, worldPoint.x));
+    const y = Math.max(0, Math.min(base.worldHeight, worldPoint.y));
     if (placingPing) {
       onCommand({ kind: 'map.ping', x, y, label: pingLabel.value });
       placingPing = false;
@@ -474,8 +550,8 @@ function renderMap(projection: PlayerProjection, onCommand: (command: PlayerComm
       ? `${nearest.feature.label} · ${titleCase(nearest.feature.knowledge)} · ${nearest.feature.detail}`
       : `Map position ${Math.round(x)}, ${Math.round(y)}`;
   });
-  requestAnimationFrame(() => drawMap(canvas, projection));
-  const observer = new ResizeObserver(() => drawMap(canvas, projection));
+  requestAnimationFrame(() => { void drawMap(canvas, projection, status); });
+  const observer = new ResizeObserver(() => { void drawMap(canvas, projection, status); });
   observer.observe(stage);
   const places = card('Map locations', 'Ordinary communities are public; rumors and story locations appear only after the GM reveals them.');
   const list = create('div', 'player-list');
