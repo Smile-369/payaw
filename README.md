@@ -1,30 +1,32 @@
-# PAYAW build-path fix
+# PAYAW Batch Permissions + Objective Visibility Hotfix
 
-The TypeScript errors referencing `src/src/...` and `src/supabase/...` mean a previous full-project ZIP was extracted **inside the real `src` folder**.
+Extract this ZIP into the PAYAW project root, beside `package.json`.
+Do not extract it inside `src`.
 
-## Correct layout
+## What changed
 
-```text
-PAYAW repository root/
-  package.json
-  src/
-    netcode/GmNetcodePanel.ts
-    ui/ms21.css
-  supabase/
-```
+- The GM can apply permitted actions to either the current player or all active players.
+- Check all / clear all shortcuts are included.
+- Shared dice notifications remain visible for 4 seconds.
+- A new `View Objectives tab` permission controls the entire Objectives feature.
+- When that permission is off:
+  - objective records are omitted from the player projection;
+  - the desktop and mobile Objectives navigation buttons are hidden;
+  - the home-page Objectives card is hidden;
+  - player-created objective proposals are not retained in the visible projection.
+- Enabling `Propose objectives` automatically enables `View Objectives tab`.
+- Disabling `View Objectives tab` automatically disables `Propose objectives`.
 
-There must not be a second `src/src` directory, and `supabase` must remain at the repository root—not under `src`.
+## Install
 
-## Apply
-
-1. Extract this ZIP into the repository root, beside `package.json`.
-2. Open PowerShell in that repository root.
-3. Run:
+From the directory containing `package.json`:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\fix-payaw-build.ps1
 pnpm run build
 ```
 
-The `TS7006` errors in `GmNetcodePanel.ts` are cascading errors from the broken nested imports. They disappear when the duplicate nested project is removed.
+Redeploy the frontend. No Supabase migration or Edge Function deployment is required.
+
+For an existing hosted campaign, open Campaign > Players, select the permission target,
+set the permissions, click Save capabilities, then click `Sync 6 player views now` if the
+room does not immediately republish.

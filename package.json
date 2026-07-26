@@ -36,7 +36,8 @@
     "test:ms21": "node scripts/run-ms21-tests.mjs",
     "test:ms211": "node scripts/run-ms211-tests.mjs",
     "test:ms22": "node scripts/run-ms22-tests.mjs",
-    "test:ms23": "node scripts/run-ms23-tests.mjs"
+    "test:ms23": "node scripts/run-ms23-tests.mjs",
+    "test:character": "node scripts/run-character-social-tests.mjs"
   },
   "devDependencies": {
     "typescript": "5.8.3",

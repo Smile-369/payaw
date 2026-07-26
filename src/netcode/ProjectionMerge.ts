@@ -39,13 +39,23 @@ export function mergePlayerOwnedProjection(generatedValue: PlayerProjection, hos
         ...(editable.has('name') ? { name: hostedCharacter.name } : {}),
         ...(editable.has('pronouns') ? { pronouns: hostedCharacter.pronouns } : {}),
         ...(editable.has('background') ? { background: hostedCharacter.background } : {}),
+        ...(editable.has('portraitUri') ? { portraitUri: hostedCharacter.portraitUri } : {}),
+        ...(editable.has('galleryUris') ? { galleryUris: hostedCharacter.galleryUris } : {}),
+        ...(editable.has('stats') ? { stats: hostedCharacter.stats } : {}),
         ...(editable.has('conditions') ? { conditions: hostedCharacter.conditions } : {}),
         ...(editable.has('inventory') ? { inventory: hostedCharacter.inventory } : {}),
         ...(editable.has('privateNotes') ? { privateNotes: hostedCharacter.privateNotes } : {}),
       };
+  const generatedCharacterOwners = new Set(generated.partyCharacters.map((profile) => profile.ownerId));
+  const partyCharacterValues = new Map(generated.partyCharacters.map((profile) => [profile.ownerId, profile]));
+  for (const profile of hosted.partyCharacters) {
+    if (generatedCharacterOwners.has(profile.ownerId)) partyCharacterValues.set(profile.ownerId, profile);
+  }
+  const partyCharacters = [...partyCharacterValues.values()];
   const merged: PlayerProjection = {
     ...generated,
     ...(character === undefined ? {} : { character }),
+    partyCharacters,
     journal: {
       personal: mergeById(generated.journal.personal, hosted.journal.personal),
       shared: mergeById(generated.journal.shared, hosted.journal.shared.filter((entry) => entry.sharedWithParty)),
@@ -54,7 +64,9 @@ export function mergePlayerOwnedProjection(generatedValue: PlayerProjection, hos
     // Shared dice is event-backed. Do not copy legacy roll history into every
     // recipient slot; PlayerNetworkSession hydrates and preserves it locally.
     diceRolls: generated.diceRolls,
-    objectives: mergeById(generated.objectives, hosted.objectives.filter((objective) => objective.playerCreated)),
+    objectives: generated.capabilities.includes('objective.view')
+      ? mergeById(generated.objectives, hosted.objectives.filter((objective) => objective.playerCreated))
+      : [],
     map: { ...generated.map, features: mergeById(generated.map.features, retainedPings) },
     generatedAt: new Date().toISOString(),
     revision: Math.max(generated.revision, hosted.revision),

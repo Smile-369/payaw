@@ -130,6 +130,7 @@ export function isOfflineSafeCommand(command: PlayerCommand): boolean {
   return command.kind === 'journal.create'
     || command.kind === 'journal.share'
     || command.kind === 'character.update'
+    || command.kind === 'character.sheet.update'
     || command.kind === 'objective.propose';
 }
 

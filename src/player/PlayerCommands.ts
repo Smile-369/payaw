@@ -1,10 +1,24 @@
 import { deepFreeze, type CharacterProjection, type PlayerProjection } from './PlayerProjection';
+import { createPublicCharacterProfile, safeCharacterImageUri } from './CharacterProfiles';
 import type { Capability } from './PlayerViewState';
+
+export interface CharacterSheetUpdate {
+  readonly name: string;
+  readonly pronouns: string;
+  readonly background: string;
+  readonly portraitUri: string | null;
+  readonly galleryUris: readonly string[];
+  readonly stats: Readonly<Record<string, string>>;
+  readonly conditions: readonly string[];
+  readonly inventory: readonly string[];
+  readonly privateNotes: string;
+}
 
 export type PlayerCommand =
   | { readonly kind: 'journal.create'; readonly title: string; readonly body: string; readonly sharedWithParty: boolean }
   | { readonly kind: 'journal.share'; readonly entryId: string; readonly sharedWithParty: boolean }
-  | { readonly kind: 'character.update'; readonly field: CharacterProjection['editableFields'][number]; readonly value: string | readonly string[] }
+  | { readonly kind: 'character.update'; readonly field: CharacterProjection['editableFields'][number]; readonly value: string | readonly string[] | Readonly<Record<string, string>> | null }
+  | { readonly kind: 'character.sheet.update'; readonly character: CharacterSheetUpdate }
   | { readonly kind: 'message.send'; readonly threadId: string; readonly body: string; readonly privateToGm: boolean }
   | { readonly kind: 'dice.roll'; readonly notation: string; readonly visibility: 'private' | 'party' | 'gm'; readonly rollerUsername?: string }
   | { readonly kind: 'map.ping'; readonly x: number; readonly y: number; readonly label: string }
@@ -41,16 +55,95 @@ function cleanText(value: string, maximum: number): string {
   return value.trim().slice(0, maximum);
 }
 
-function updateCharacter(projection: PlayerProjection, field: CharacterProjection['editableFields'][number], value: string | readonly string[]): PlayerProjection {
+function cleanList(values: readonly string[], maximumItems: number, maximumLength: number): string[] {
+  return [...new Set(values.map((item) => cleanText(item, maximumLength)).filter(Boolean))].slice(0, maximumItems);
+}
+
+function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every((item) => typeof item === 'string');
+}
+
+function cleanStats(value: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
+  return Object.fromEntries(Object.entries(value).slice(0, 40).flatMap(([key, item]) => {
+    const cleanKey = cleanText(key, 20);
+    const cleanValue = cleanText(item, 80);
+    return cleanKey.length === 0 ? [] : [[cleanKey, cleanValue]];
+  }));
+}
+
+function refreshOwnPublicProfile(projection: PlayerProjection, character: CharacterProjection): PlayerProjection['partyCharacters'] {
+  const profile = createPublicCharacterProfile({
+    id: projection.viewer.id,
+    displayName: projection.viewer.displayName,
+    color: projection.viewer.color,
+  }, character);
+  return [profile, ...projection.partyCharacters.filter((candidate) => candidate.ownerId !== profile.ownerId)];
+}
+
+function updateCharacter(
+  projection: PlayerProjection,
+  field: CharacterProjection['editableFields'][number],
+  value: string | readonly string[] | Readonly<Record<string, string>> | null,
+): PlayerProjection {
   requireCapability(projection, 'character.edit.self');
   if (projection.character === undefined) throw new Error('No owned character is available.');
   if (!projection.character.editableFields.includes(field)) throw new Error(`The GM has not enabled editing for ${field}.`);
   const character = projection.character;
-  const values = typeof value === 'string' ? value.split('\n') : [...value];
-  const update = field === 'conditions' || field === 'inventory'
-    ? { [field]: [...new Set(values.map((item) => item.trim()).filter(Boolean))].slice(0, field === 'inventory' ? 100 : 40) }
-    : { [field]: cleanText(values.join('\n'), field === 'privateNotes' ? 8000 : field === 'background' ? 2000 : 160) };
-  return { ...projection, character: { ...character, ...update }, revision: projection.revision + 1, generatedAt: new Date().toISOString() };
+  let updated: CharacterProjection;
+  if (field === 'conditions' || field === 'inventory' || field === 'galleryUris') {
+    const values = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    const list = field === 'galleryUris'
+      ? values.flatMap((uri) => safeCharacterImageUri(uri) ?? []).slice(0, 6)
+      : cleanList(values, field === 'inventory' ? 100 : 40, field === 'inventory' ? 300 : 160);
+    updated = { ...character, [field]: list };
+  } else if (field === 'stats') {
+    const stats = isStringRecord(value) ? cleanStats(value) : {};
+    updated = { ...character, stats };
+  } else if (field === 'portraitUri') {
+    updated = { ...character, portraitUri: typeof value === 'string' ? safeCharacterImageUri(value) : null };
+  } else {
+    const text = typeof value === 'string' ? value : '';
+    updated = {
+      ...character,
+      [field]: cleanText(text, field === 'privateNotes' ? 32000 : field === 'background' ? 2000 : 160),
+    };
+  }
+  return {
+    ...projection,
+    character: updated,
+    partyCharacters: refreshOwnPublicProfile(projection, updated),
+    revision: projection.revision + 1,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function updateCharacterSheet(projection: PlayerProjection, value: CharacterSheetUpdate): PlayerProjection {
+  requireCapability(projection, 'character.edit.self');
+  if (projection.character === undefined) throw new Error('No owned character is available.');
+  const editable = new Set(projection.character.editableFields);
+  const current = projection.character;
+  const next: CharacterProjection = {
+    ...current,
+    name: editable.has('name') ? cleanText(value.name, 120) || current.name : current.name,
+    pronouns: editable.has('pronouns') ? cleanText(value.pronouns, 80) : current.pronouns,
+    background: editable.has('background') ? cleanText(value.background, 2000) : current.background,
+    portraitUri: editable.has('portraitUri') ? safeCharacterImageUri(value.portraitUri) : current.portraitUri,
+    galleryUris: editable.has('galleryUris')
+      ? value.galleryUris.flatMap((uri) => safeCharacterImageUri(uri) ?? []).slice(0, 6)
+      : current.galleryUris,
+    stats: editable.has('stats') ? cleanStats(value.stats) : current.stats,
+    conditions: editable.has('conditions') ? cleanList(value.conditions, 40, 160) : current.conditions,
+    inventory: editable.has('inventory') ? cleanList(value.inventory, 100, 300) : current.inventory,
+    privateNotes: editable.has('privateNotes') ? cleanText(value.privateNotes, 32000) : current.privateNotes,
+  };
+  return {
+    ...projection,
+    character: next,
+    partyCharacters: refreshOwnPublicProfile(projection, next),
+    revision: projection.revision + 1,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 interface ParsedDice {
@@ -124,6 +217,9 @@ export function applyPlayerCommand(projection: PlayerProjection, command: Player
     case 'character.update':
       next = { ...updateCharacter(projection, command.field, command.value), generatedAt: timestamp };
       break;
+    case 'character.sheet.update':
+      next = { ...updateCharacterSheet(projection, command.character), generatedAt: timestamp };
+      break;
     case 'message.send': {
       requireCapability(projection, command.privateToGm ? 'message.send.private' : 'message.send.party');
       const body = cleanText(command.body, 4000);
@@ -186,6 +282,7 @@ export function applyPlayerCommand(projection: PlayerProjection, command: Player
       break;
     }
     case 'objective.propose': {
+      requireCapability(projection, 'objective.view');
       requireCapability(projection, 'objective.propose');
       const wording = cleanText(command.wording, 500);
       if (wording.length === 0) throw new Error('Describe the objective you want to propose.');

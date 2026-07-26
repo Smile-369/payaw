@@ -19,6 +19,7 @@ export type Capability =
   | 'message.send.private'
   | 'dice.roll'
   | 'map.ping'
+  | 'objective.view'
   | 'objective.propose';
 
 export const ALL_PLAYER_CAPABILITIES: readonly Capability[] = [
@@ -29,6 +30,7 @@ export const ALL_PLAYER_CAPABILITIES: readonly Capability[] = [
   'message.send.private',
   'dice.roll',
   'map.ping',
+  'objective.view',
   'objective.propose',
 ];
 
@@ -46,6 +48,29 @@ export interface PlayerIdentityRecord {
   readonly active: boolean;
 }
 
+export type CharacterEditableField =
+  | 'name'
+  | 'pronouns'
+  | 'background'
+  | 'portraitUri'
+  | 'galleryUris'
+  | 'stats'
+  | 'conditions'
+  | 'inventory'
+  | 'privateNotes';
+
+export const DEFAULT_CHARACTER_EDITABLE_FIELDS: readonly CharacterEditableField[] = [
+  'name',
+  'pronouns',
+  'background',
+  'portraitUri',
+  'galleryUris',
+  'stats',
+  'conditions',
+  'inventory',
+  'privateNotes',
+];
+
 export interface PlayerCharacterRecord {
   readonly id: string;
   readonly ownerPlayerId: string;
@@ -53,11 +78,12 @@ export interface PlayerCharacterRecord {
   readonly pronouns: string;
   readonly background: string;
   readonly portraitUri: string | null;
+  readonly galleryUris: readonly string[];
   readonly stats: Readonly<Record<string, string>>;
   readonly conditions: readonly string[];
   readonly inventory: readonly string[];
   readonly privateNotes: string;
-  readonly editableFields: readonly ('name' | 'pronouns' | 'background' | 'conditions' | 'inventory' | 'privateNotes')[];
+  readonly editableFields: readonly CharacterEditableField[];
 }
 
 export interface KnowledgeGrant {
@@ -140,7 +166,9 @@ function validIso(value: unknown, fallback: string): string {
 
 function normalizeCapabilities(value: unknown): Capability[] {
   const allowed = new Set<Capability>(ALL_PLAYER_CAPABILITIES);
-  return stringArray(value).filter((item): item is Capability => allowed.has(item as Capability));
+  const normalized = stringArray(value).filter((item): item is Capability => allowed.has(item as Capability));
+  if (normalized.includes('objective.propose') && !normalized.includes('objective.view')) normalized.push('objective.view');
+  return normalized;
 }
 
 export function createDefaultPlayerViewState(playerCount = 6): PlayerViewState {
@@ -165,11 +193,12 @@ export function createDefaultPlayerViewState(playerCount = 6): PlayerViewState {
       pronouns: '',
       background: '',
       portraitUri: null,
+      galleryUris: [],
       stats: {},
       conditions: [],
       inventory: [],
       privateNotes: '',
-      editableFields: ['name', 'pronouns', 'background', 'conditions', 'inventory', 'privateNotes'],
+      editableFields: [...DEFAULT_CHARACTER_EDITABLE_FIELDS],
     });
     capabilitiesByPlayer[playerId] = [...DEFAULT_PLAYER_CAPABILITIES];
   }
@@ -213,21 +242,31 @@ export function normalizePlayerViewState(value: unknown, playerCount = 6): Playe
     if (!isRecord(candidate) || typeof candidate.id !== 'string' || typeof candidate.ownerPlayerId !== 'string' || !playerIds.has(candidate.ownerPlayerId)) return [];
     const rawStats = isRecord(candidate.stats) ? candidate.stats : {};
     const stats = Object.fromEntries(Object.entries(rawStats).filter((entry): entry is [string, string] => typeof entry[1] === 'string').slice(0, 40));
-    const editable = stringArray(candidate.editableFields).filter((field): field is PlayerCharacterRecord['editableFields'][number] =>
-      ['name', 'pronouns', 'background', 'conditions', 'inventory', 'privateNotes'].includes(field),
+    const allowedEditable = new Set<CharacterEditableField>(DEFAULT_CHARACTER_EDITABLE_FIELDS);
+    const editable = stringArray(candidate.editableFields).filter((field): field is CharacterEditableField =>
+      allowedEditable.has(field as CharacterEditableField),
     );
+    // Older PAYAW saves used Private Notes as the workbook-backed character
+    // editor. Preserve that intent by enabling the complete Player View sheet
+    // instead of requiring the GM to recreate every existing player slot.
+    if (editable.includes('privateNotes')) {
+      for (const field of DEFAULT_CHARACTER_EDITABLE_FIELDS) {
+        if (!editable.includes(field)) editable.push(field);
+      }
+    }
     return [{
       id: candidate.id,
       ownerPlayerId: candidate.ownerPlayerId,
       name: text(candidate.name, 'Unnamed Character').slice(0, 120),
       pronouns: text(candidate.pronouns).slice(0, 80),
       background: text(candidate.background).slice(0, 2000),
-      portraitUri: typeof candidate.portraitUri === 'string' ? candidate.portraitUri : null,
+      portraitUri: typeof candidate.portraitUri === 'string' ? candidate.portraitUri.slice(0, 1000) : null,
+      galleryUris: stringArray(candidate.galleryUris).slice(0, 6).map((uri) => uri.slice(0, 1000)),
       stats,
       conditions: stringArray(candidate.conditions).slice(0, 40),
       inventory: stringArray(candidate.inventory).slice(0, 100),
-      privateNotes: text(candidate.privateNotes).slice(0, 8000),
-      editableFields: editable.length > 0 ? editable : ['privateNotes'],
+      privateNotes: text(candidate.privateNotes).slice(0, 32000),
+      editableFields: editable.length > 0 ? editable : [...DEFAULT_CHARACTER_EDITABLE_FIELDS],
     } satisfies PlayerCharacterRecord];
   }) : [];
   const characterByOwner = new Map(characters.map((character) => [character.ownerPlayerId, character]));
@@ -238,11 +277,12 @@ export function normalizePlayerViewState(value: unknown, playerCount = 6): Playe
     pronouns: '',
     background: '',
     portraitUri: null,
+    galleryUris: [],
     stats: {},
     conditions: [],
     inventory: [],
     privateNotes: '',
-    editableFields: ['privateNotes'],
+    editableFields: [...DEFAULT_CHARACTER_EDITABLE_FIELDS],
   } satisfies PlayerCharacterRecord));
 
   const grants = Array.isArray(value.knowledgeGrants) ? value.knowledgeGrants.flatMap((candidate) => {
@@ -340,11 +380,12 @@ export function resizePlayerViewState(value: PlayerViewState, playerCount: numbe
       pronouns: '',
       background: '',
       portraitUri: null,
+      galleryUris: [],
       stats: {},
       conditions: [],
       inventory: [],
       privateNotes: '',
-      editableFields: ['name', 'pronouns', 'background', 'conditions', 'inventory', 'privateNotes'],
+      editableFields: [...DEFAULT_CHARACTER_EDITABLE_FIELDS],
     });
     capabilitiesByPlayer[playerId] = [...DEFAULT_PLAYER_CAPABILITIES];
     usedPlayerIds.add(playerId);
@@ -405,11 +446,13 @@ export function updatePlayerIdentity(state: PlayerViewState, playerId: string, d
 
 export function setPlayerCapabilities(state: PlayerViewState, playerId: string, capabilities: readonly Capability[]): PlayerViewState {
   const allowed = new Set<Capability>(ALL_PLAYER_CAPABILITIES);
+  const normalized = unique(capabilities.filter((capability) => allowed.has(capability)));
+  if (normalized.includes('objective.propose') && !normalized.includes('objective.view')) normalized.push('objective.view');
   return {
     ...state,
     capabilitiesByPlayer: {
       ...state.capabilitiesByPlayer,
-      [playerId]: unique(capabilities.filter((capability) => allowed.has(capability))),
+      [playerId]: normalized,
     },
   };
 }

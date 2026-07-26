@@ -32,6 +32,7 @@ import {
   type SceneProjection,
 } from './PlayerProjection';
 import { createPlayerWorldGenerationRecipe } from './PlayerWorldRecipe';
+import { createPublicCharacterProfile } from './CharacterProfiles';
 import type {
   KnowledgeGrant,
   KnowledgeLevel,
@@ -349,6 +350,7 @@ function clueProjections(context: PlayerProjectionContext, now: string): CluePro
 function safeUri(uri: string): string | null {
   const trimmed = uri.trim();
   if (/^https:\/\//i.test(trimmed) || /^data:(?:image|audio|video)\//i.test(trimmed)) return trimmed;
+  if (/^payaw-player-asset:[0-9a-f-]{36}\/[0-9a-f-]{36}\/character\/[a-z0-9_.-]{1,180}$/i.test(trimmed)) return trimmed;
   return null;
 }
 
@@ -397,6 +399,7 @@ function messageThreadProjections(context: PlayerProjectionContext, now: string)
 }
 
 function objectiveProjections(context: PlayerProjectionContext, now: string): ObjectiveProjection[] {
+  if (!context.playerView.capabilitiesByPlayer[context.viewerId]?.includes('objective.view')) return [];
   return context.campaign.objectives.flatMap((objective) => {
     const knowledge = knowledgeFor(context, 'objective', objective.id, now);
     if ((objective.status === 'hidden' || objective.playerWording.trim().length === 0) && knowledge === null) return [];
@@ -440,12 +443,38 @@ function characterProjection(context: PlayerProjectionContext): CharacterProject
     pronouns: character.pronouns,
     background: character.background,
     portraitUri: safeUri(character.portraitUri ?? ''),
+    galleryUris: character.galleryUris.flatMap((uri) => safeUri(uri) ?? []).slice(0, 6),
     stats: { ...character.stats },
     conditions: [...character.conditions],
     inventory: [...character.inventory],
     privateNotes: character.privateNotes,
     editableFields: [...character.editableFields],
   };
+}
+
+function partyCharacterProjections(context: PlayerProjectionContext): PlayerProjection['partyCharacters'] {
+  return context.playerView.players.filter((player) => player.active).flatMap((player) => {
+    const character = context.playerView.characters.find((candidate) => candidate.id === player.characterId && candidate.ownerPlayerId === player.id);
+    if (character === undefined) return [];
+    const projected: CharacterProjection = {
+      id: safeId(context.campaign.id, 'character', character.id),
+      name: character.name,
+      pronouns: character.pronouns,
+      background: character.background,
+      portraitUri: safeUri(character.portraitUri ?? ''),
+      galleryUris: character.galleryUris.flatMap((uri) => safeUri(uri) ?? []).slice(0, 6),
+      stats: { ...character.stats },
+      conditions: [...character.conditions],
+      inventory: [...character.inventory],
+      privateNotes: character.privateNotes,
+      editableFields: [...character.editableFields],
+    };
+    return [createPublicCharacterProfile({
+      id: safeId(context.campaign.id, 'viewer', player.id),
+      displayName: player.displayName,
+      color: player.color,
+    }, projected)];
+  });
 }
 
 function sceneProjection(context: PlayerProjectionContext, npcs: readonly NpcProjection[], locations: readonly LocationProjection[]): SceneProjection | undefined {
@@ -574,6 +603,7 @@ export function createPlayerProjection(context: PlayerProjectionContext): Player
     handouts: handoutProjections(context, now),
     messages: messageThreadProjections(context, now),
     ...(projectedCharacter === undefined ? {} : { character: projectedCharacter }),
+    partyCharacters: partyCharacterProjections(context),
     journal: journalProjection(context),
     objectives: objectiveProjections(context, now),
     diceRolls: [],

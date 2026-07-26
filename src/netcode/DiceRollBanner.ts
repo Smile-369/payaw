@@ -10,7 +10,7 @@ export interface SharedDiceRoll {
 
 const STYLE_ID = 'payaw-party-dice-banner-style';
 const ROOT_ID = 'payaw-party-dice-banner-root';
-const DISPLAY_DURATION_MS = 2_300;
+const DISPLAY_DURATION_MS = 4_000;
 const MAX_QUEUED_ROLLS = 5;
 const announcedIds = new Set<string>();
 const queue: SharedDiceRoll[] = [];
@@ -77,7 +77,7 @@ function installStyle(): void {
       font-family: Tahoma, "MS Sans Serif", Arial, sans-serif;
       transform-origin: right bottom;
       animation: payaw-party-dice-enter 140ms ease-out,
-        payaw-party-dice-exit 180ms ease-in 2.08s forwards;
+        payaw-party-dice-exit 180ms ease-in 3.78s forwards;
     }
     .payaw-party-dice-titlebar {
       display: flex;
@@ -173,10 +173,10 @@ function installStyle(): void {
     }
     @media (prefers-reduced-motion: reduce) {
       .payaw-party-dice-banner {
-        animation: payaw-party-dice-fade 2.3s linear forwards;
+        animation: payaw-party-dice-fade 4s linear forwards;
       }
       @keyframes payaw-party-dice-fade {
-        0%, 91% { opacity: 1; }
+        0%, 95% { opacity: 1; }
         100% { opacity: 0; }
       }
     }
