@@ -13,7 +13,7 @@ const html = readFileSync(join(projectPath, 'index.html'), 'utf8');
 const main = readFileSync(join(projectPath, 'src', 'main.ts'), 'utf8');
 const renderer = readFileSync(join(projectPath, 'src', 'engine', 'renderer', 'CanvasRenderer.ts'), 'utf8');
 const pipeline = readFileSync(join(projectPath, 'src', 'engine', 'generation', 'GenerationPipeline.ts'), 'utf8');
-const packageLock = readFileSync(join(projectPath, 'package-lock.json'), 'utf8');
+const dependencyLock = readFileSync(join(projectPath, 'pnpm-lock.yaml'), 'utf8');
 
 for (const id of [
   'authoring-card', 'authoring-settlement-name', 'authoring-settlement-kind',
@@ -39,9 +39,8 @@ for (const stage of ['AuthoringTerrainStage', 'GeneratedRoadOverrideStage', 'Aut
 assert(/id="live-infrastructure-layer"(?![^>]*checked)/.test(html), 'Infrastructure exception overlay should not be enabled by default.');
 assert(renderer.includes('zoom < 3.2') && renderer.includes('zoom < 2.25'), 'Infrastructure status overlay is not zoom-aware.');
 assert(renderer.includes('manualRoadStatusById') && renderer.includes('manualBridgeStatusById'), 'Infrastructure overlay does not prioritize manual exceptions.');
-assert(!packageLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
-const packageVersion = JSON.parse(readFileSync(join(projectPath, 'package.json'), 'utf8')).version;
-assert(packageLock.includes(`"version": "${packageVersion}"`), `Release lockfile version does not match package.json (${packageVersion}).`);
+assert(dependencyLock.includes("lockfileVersion: '9.0'"), 'Release dependency lockfile is invalid.');
+assert(!dependencyLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
 
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompilerPath, '-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });
@@ -49,4 +48,3 @@ else execFileSync('tsc', ['-p', 'tsconfig.test.json'], { cwd: projectPath, stdio
 writeFileSync(join(outputPath, 'package.json'), '{"type":"commonjs"}\n');
 const output = execFileSync(process.execPath, [join(outputPath, 'tests', 'Milestone18Test.js')], { cwd: projectPath, encoding: 'utf8' });
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS18_TEST_RESULTS.json'), output.trim() + '\n');

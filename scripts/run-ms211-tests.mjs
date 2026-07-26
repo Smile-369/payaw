@@ -22,8 +22,7 @@ const renderer = withoutComments(read('src', 'engine', 'renderer', 'CanvasRender
 const travel = withoutComments(read('src', 'engine', 'travel', 'TravelPlanner.ts'));
 const simulationTypes = withoutComments(read('src', 'engine', 'simulation', 'SimulationTypes.ts'));
 const main = withoutComments(read('src', 'main.ts'));
-const packageJson = JSON.parse(read('package.json'));
-const packageLock = read('package-lock.json');
+const dependencyLock = read('pnpm-lock.yaml');
 
 for (const retiredClass of ['.bridge-editor', '.maritime-editor', '.naming-editor', '.zone-editor', '.asset-editor']) {
   assert(shell.includes(retiredClass), `Legacy editor is not retired by the shell: ${retiredClass}`);
@@ -46,8 +45,8 @@ assert(!travel.includes('MixedFerry') && !travel.includes("'ferry'"), 'Ferry rou
 assert(!simulationTypes.includes('waterRouteStatusById') && !simulationTypes.includes('manualWaterRouteStatusById'), 'Water-route simulation state remains active.');
 assert(!existsSync(join(projectPath, 'src', 'engine', 'infrastructure', 'WaterRoute.ts')), 'Water-route domain module still exists.');
 assert(!existsSync(join(projectPath, 'src', 'engine', 'generation', 'stages', 'WaterRouteStage.ts')), 'Water-route generation module still exists.');
-assert(packageLock.includes(`"version": "${packageJson.version}"`), 'Release lockfile version is out of sync.');
-assert(!packageLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
+assert(dependencyLock.includes("lockfileVersion: '9.0'"), 'Release dependency lockfile is invalid.');
+assert(!dependencyLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
 
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompilerPath, '-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });
@@ -66,4 +65,3 @@ const result = {
 };
 const output = `${JSON.stringify(result, null, 2)}\n`;
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS21_1_TEST_RESULTS.json'), output);

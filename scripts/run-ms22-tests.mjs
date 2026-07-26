@@ -20,8 +20,7 @@ const app = read('src', 'player', 'PlayerApp.ts');
 const css = read('src', 'player', 'player.css');
 const staticBuild = read('scripts', 'build-static.mjs');
 const main = read('src', 'main.ts');
-const packageJson = JSON.parse(read('package.json'));
-const packageLock = read('package-lock.json');
+const dependencyLock = read('pnpm-lock.yaml');
 
 for (const id of [
   'player-preview-panel', 'player-preview-viewer', 'player-capability-grid', 'player-grant-type',
@@ -44,8 +43,8 @@ assert(staticBuild.includes("'player.css'") && staticBuild.includes('route-style
 assert(staticBuild.includes('await\\s+import') || staticBuild.includes('await\s+import'), 'Static build does not remove browser-invalid dynamic CSS imports.');
 assert(app.includes("if (child !== app) child.remove()"), 'Player bootstrap does not remove the static GM DOM outside the player root.');
 assert(main.includes('playerView: playerViewState') && main.includes('pendingImportedPlayerView'), 'Player View state is not persisted through save/import.');
-assert(!packageLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
-assert(packageLock.includes(`"version": "${packageJson.version}"`), 'Release lockfile version is out of sync.');
+assert(dependencyLock.includes("lockfileVersion: '9.0'"), 'Release dependency lockfile is invalid.');
+assert(!dependencyLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
 
 const retiredSources = [
   ['src', 'engine', 'infrastructure', 'WaterRoute.ts'],
@@ -69,4 +68,3 @@ const result = {
 };
 const output = `${JSON.stringify(result, null, 2)}\n`;
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS22_TEST_RESULTS.json'), output);

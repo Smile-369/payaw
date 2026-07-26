@@ -1,9 +1,0 @@
-PAYAW Milestone 16.1 production build
-Command: npm run build
-Result: PASS
-TypeScript: PASS
-Vite: 8.1.5
-Modules transformed: 110
-Generated worker bundle: dist/assets/generation.worker-WCN085Xb.js
-Generated CSS bundle: dist/assets/index-CTEgpezC.css
-Generated application bundle: dist/assets/index-mAnnvFOA.js

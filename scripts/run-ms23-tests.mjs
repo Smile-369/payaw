@@ -27,7 +27,7 @@ const optimizationMigration = read('supabase', 'migrations', '202607260010_netco
 const edgeFunction = read('supabase', 'functions', 'campaign-command', 'index.ts');
 const envExample = read('.env.example');
 
-assert(packageJson.version === '0.24.0', 'Package version is not PAYAW 0.24.0.');
+assert(packageJson.version === '1.0.0', 'Package version is not PAYAW 1.0.0.');
 assert(packageJson.dependencies?.['@supabase/supabase-js'], 'Supabase JavaScript client dependency is missing.');
 for (const id of [
   'player-slot-count', 'player-slot-count-apply', 'netcode-panel', 'netcode-status',
@@ -130,4 +130,3 @@ const result = {
 };
 const output = `${JSON.stringify(result, null, 2)}\n`;
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS23_TEST_RESULTS.json'), output);

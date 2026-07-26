@@ -264,12 +264,18 @@ function applyCommand(projectionValue: unknown, kind: string, payloadValue: unkn
   return projection;
 }
 
+function messageDelta(projection: JsonRecord, payload: JsonRecord): JsonRecord | null {
+  const threadId = text(payload.threadId, 200);
+  const thread = (Array.isArray(projection.messages) ? projection.messages : []).map(record).find((item) => item.id === threadId);
+  const message = thread !== undefined && Array.isArray(thread.messages) ? thread.messages.at(-1) : undefined;
+  return message === undefined
+    ? null
+    : { kind: 'message.send', threadId, message, privateToGm: payload.privateToGm === true };
+}
+
 function partyDelta(projection: JsonRecord, kind: string, payload: JsonRecord): JsonRecord | null {
   if (kind === 'message.send' && payload.privateToGm !== true) {
-    const threadId = text(payload.threadId, 200);
-    const thread = (Array.isArray(projection.messages) ? projection.messages : []).map(record).find((item) => item.id === threadId);
-    const message = thread !== undefined && Array.isArray(thread.messages) ? thread.messages.at(-1) : undefined;
-    return message === undefined ? null : { kind, threadId, message };
+    return messageDelta(projection, payload);
   }
   if (kind === 'map.ping') {
     const map = record(projection.map);
@@ -410,6 +416,7 @@ Deno.serve(async (request) => {
       }];
 
       const delta = partyVisible ? partyDelta(projection, body.kind, body.payload) : null;
+      const eventDelta = delta ?? (gmOnly ? messageDelta(projection, body.payload) : null);
       if (delta !== null) {
         for (const partySlot of slots) {
           if (partySlot.source_player_id === slot.source_player_id) continue;
@@ -427,7 +434,7 @@ Deno.serve(async (request) => {
         p_updates: updates,
         p_audience: partyVisible ? 'party' : gmOnly ? 'gm' : 'player',
         p_audience_user_id: partyVisible || gmOnly ? null : command.user_id,
-        p_event_payload: {},
+        p_event_payload: eventDelta ?? {},
       });
       if (finalizeError !== null) {
         return json(finalizeError.code === '40001' ? 409 : finalizeError.code === '42501' ? 403 : 400, { error: finalizeError.message });

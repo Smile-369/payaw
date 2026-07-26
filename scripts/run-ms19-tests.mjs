@@ -13,7 +13,7 @@ const html = readFileSync(join(projectPath, 'index.html'), 'utf8');
 const main = readFileSync(join(projectPath, 'src', 'main.ts'), 'utf8');
 const npcAuthoring = readFileSync(join(projectPath, 'src', 'campaign', 'NPCLocationAuthoring.ts'), 'utf8');
 const npcGenerator = readFileSync(join(projectPath, 'src', 'engine', 'npc', 'NPCGenerator.ts'), 'utf8');
-const packageLock = readFileSync(join(projectPath, 'package-lock.json'), 'utf8');
+const dependencyLock = readFileSync(join(projectPath, 'pnpm-lock.yaml'), 'utf8');
 
 for (const id of [
   'npc-create-button', 'npc-edit-home', 'npc-edit-unusual-home', 'npc-schedule-day-tabs',
@@ -39,10 +39,10 @@ for (const feature of [
 assert(npcAuthoring.includes('NPC homes must be residential'), 'Residential-only home validation is missing.');
 assert(npcAuthoring.includes("source: 'scene' | 'override' | 'schedule' | 'home'"), 'NPC placement precedence is missing.');
 assert(npcGenerator.includes('status: NPCStatus.Alive'), 'Generated NPCs still receive random story conditions.');
-assert(!packageLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
-const releaseVersion = JSON.parse(packageLock).version;
+assert(!dependencyLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
+const releaseVersion = JSON.parse(readFileSync(join(projectPath, 'package.json'), 'utf8')).version;
 const [releaseMajor, releaseMinor] = releaseVersion.split('.').map(Number);
-assert(releaseMajor > 0 || releaseMinor >= 19, 'Release lockfile version is older than Milestone 19.');
+assert(releaseMajor > 0 || releaseMinor >= 19, 'Release version is older than Milestone 19.');
 
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompilerPath, '-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });
@@ -50,4 +50,3 @@ else execFileSync('tsc', ['-p', 'tsconfig.test.json'], { cwd: projectPath, stdio
 writeFileSync(join(outputPath, 'package.json'), '{"type":"commonjs"}\n');
 const output = execFileSync(process.execPath, [join(outputPath, 'tests', 'Milestone19Test.js')], { cwd: projectPath, encoding: 'utf8' });
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS19_TEST_RESULTS.json'), output.trim() + '\n');

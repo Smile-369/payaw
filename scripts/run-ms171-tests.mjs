@@ -13,7 +13,7 @@ const html = readFileSync(join(projectPath, 'index.html'), 'utf8');
 const main = readFileSync(join(projectPath, 'src', 'main.ts'), 'utf8');
 const renderer = readFileSync(join(projectPath, 'src', 'engine', 'renderer', 'CanvasRenderer.ts'), 'utf8');
 const layers = readFileSync(join(projectPath, 'src', 'engine', 'renderer', 'Layers.ts'), 'utf8');
-const packageLock = readFileSync(join(projectPath, 'package-lock.json'), 'utf8');
+const dependencyLock = readFileSync(join(projectPath, 'pnpm-lock.yaml'), 'utf8');
 
 for (const id of [
   'simulation-timezone-summary', 'simulation-now-summary', 'simulation-period-summary',
@@ -30,9 +30,8 @@ for (const feature of ['drawLiveInfrastructure', 'drawVenueStatus', 'drawSettlem
 for (const feature of ['LiveInfrastructure', 'VenueStatus', 'SettlementActivity', 'SupernaturalActivity']) {
   assert(layers.includes(feature), `Milestone 17.1 layer definition missing: ${feature}`);
 }
-assert(!packageLock.includes('applied-caas'), 'Release lockfile still contains an internal package registry URL.');
-const packageVersion = JSON.parse(readFileSync(join(projectPath, 'package.json'), 'utf8')).version;
-assert(packageLock.includes(`"version": "${packageVersion}"`), `Release lockfile version does not match package.json (${packageVersion}).`);
+assert(dependencyLock.includes("lockfileVersion: '9.0'"), 'Release dependency lockfile is invalid.');
+assert(!dependencyLock.includes('applied-caas'), 'Release lockfile still contains an internal package registry URL.');
 
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompilerPath, '-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });
@@ -40,4 +39,3 @@ else execFileSync('tsc', ['-p', 'tsconfig.test.json'], { cwd: projectPath, stdio
 writeFileSync(join(outputPath, 'package.json'), '{"type":"commonjs"}\n');
 const output = execFileSync(process.execPath, [join(outputPath, 'tests', 'Milestone171Test.js')], { cwd: projectPath, encoding: 'utf8' });
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS171_TEST_RESULTS.json'), output.trim() + '\n');

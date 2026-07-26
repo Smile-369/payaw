@@ -1,7 +1,7 @@
 {
   "name": "payaw-procgen",
   "private": true,
-  "version": "0.24.0",
+  "version": "1.0.0",
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "engines": {
@@ -12,6 +12,7 @@
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "preview": "vite preview",
+    "test": "node scripts/run-release-tests.mjs",
     "test:engine": "node scripts/run-engine-tests.mjs",
     "test:ms8": "node scripts/run-ms8-tests.mjs",
     "test:ms81": "node scripts/run-ms81-tests.mjs",
@@ -37,7 +38,8 @@
     "test:ms211": "node scripts/run-ms211-tests.mjs",
     "test:ms22": "node scripts/run-ms22-tests.mjs",
     "test:ms23": "node scripts/run-ms23-tests.mjs",
-    "test:character": "node scripts/run-character-social-tests.mjs"
+    "test:character": "node scripts/run-character-social-tests.mjs",
+    "test:editor-state": "node scripts/run-editor-state-tests.mjs"
   },
   "devDependencies": {
     "typescript": "5.8.3",

@@ -6,6 +6,55 @@ function mergeById<T extends { readonly id: string }>(baseline: readonly T[], re
   return [...values.values()];
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+/**
+ * Apply the small recipient-safe delta carried by a collaboration event.
+ * Slot updates remain authoritative; this path makes pings and messages appear
+ * immediately and also covers clients that miss a large projection update.
+ */
+export function mergeSharedProjectionEvent(
+  currentValue: PlayerProjection,
+  eventType: string,
+  payloadValue: Readonly<Record<string, unknown>>,
+): PlayerProjection {
+  const current = parsePlayerProjection(currentValue);
+  const payload = record(payloadValue);
+  if (payload === null) return currentValue;
+
+  if (eventType === 'command.map.ping') {
+    const ping = record(payload.ping);
+    if (ping === null || typeof ping.id !== 'string') return currentValue;
+    if (current.map.features.some((feature) => feature.id === ping.id)) return currentValue;
+    return parsePlayerProjection({
+      ...current,
+      map: { ...current.map, features: [...current.map.features, ping] },
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
+  if (eventType === 'command.message.send') {
+    const threadId = typeof payload.threadId === 'string' ? payload.threadId : '';
+    const message = record(payload.message);
+    if (threadId.length === 0 || message === null || typeof message.id !== 'string') return currentValue;
+    const thread = current.messages.find((candidate) => candidate.id === threadId);
+    if (thread === undefined || thread.messages.some((candidate) => candidate.id === message.id)) return currentValue;
+    return parsePlayerProjection({
+      ...current,
+      messages: current.messages.map((candidate) => candidate.id === threadId
+        ? { ...candidate, messages: [...candidate.messages, message] }
+        : candidate),
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
+  return currentValue;
+}
+
 /**
  * Preserve player-authored records when the GM republishes a projection.
  * GM-authored and revealed data always comes from `generated`; only explicitly
@@ -71,4 +120,3 @@ export function mergePlayerOwnedProjection(generatedValue: PlayerProjection, hos
   };
   return deepFreeze(merged);
 }
-

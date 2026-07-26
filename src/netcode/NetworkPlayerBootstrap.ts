@@ -1,5 +1,12 @@
 import { installPlayerApp } from '../player/PlayerApp';
+import { preparePlayerRoot } from '../player/PlayerRoot';
 import { PlayerNetworkSession } from './PlayerNetworkSession';
+import {
+  forgetRecentCampaign,
+  readRecentCampaigns,
+  rememberRecentCampaign,
+  type RecentCampaign,
+} from './RecentCampaigns';
 import { createPlayerSupabaseClient, normalizeCampaignId, normalizePlayerLoginId } from './SupabaseClient';
 import { SupabaseGateway } from './SupabaseGateway';
 import type { PresenceRecord } from './NetcodeTypes';
@@ -21,6 +28,49 @@ function create<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', t
 
 function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : 'The player portal could not be opened.';
+}
+
+function shortCampaignId(campaignId: string): string {
+  return `${campaignId.slice(0, 8)}…${campaignId.slice(-4)}`;
+}
+
+function renderRecentCampaigns(
+  onSelect: (campaign: RecentCampaign) => void,
+): HTMLElement | null {
+  const recent = readRecentCampaigns();
+  if (recent.length === 0) return null;
+  const section = create('section', 'player-recent-campaigns');
+  const heading = create('div', 'player-recent-heading');
+  heading.append(create('strong', '', 'Recent campaigns'));
+  heading.append(create('span', '', 'Stored on this device. Passwords are never saved.'));
+  const list = create('div', 'player-recent-list');
+
+  for (const campaign of recent) {
+    const row = create('article', 'player-recent-campaign');
+    const select = create('button', 'player-recent-select');
+    select.type = 'button';
+    select.title = `Use ${campaign.campaignId}`;
+    const copy = create('span');
+    copy.append(create('strong', '', campaign.campaignName));
+    copy.append(create('small', '', `${campaign.username} · ${shortCampaignId(campaign.campaignId)}`));
+    select.append(copy, create('span', 'player-recent-use', 'Use'));
+    select.addEventListener('click', () => onSelect(campaign));
+
+    const forget = create('button', 'player-recent-forget', '×');
+    forget.type = 'button';
+    forget.setAttribute('aria-label', `Forget ${campaign.campaignName} for ${campaign.username}`);
+    forget.title = 'Forget this campaign on this device';
+    forget.addEventListener('click', () => {
+      forgetRecentCampaign(campaign.campaignId, campaign.username);
+      row.remove();
+      if (list.childElementCount === 0) section.remove();
+    });
+    row.append(select, forget);
+    list.append(row);
+  }
+
+  section.append(heading, list);
+  return section;
 }
 
 interface StoredPortalSession {
@@ -125,6 +175,13 @@ function renderPortalLogin(
   const submit = create('button', 'player-primary', 'Open Player View');
   submit.type = 'submit';
   const status = create('p', 'player-join-status', initialError || 'These credentials remain valid until the GM resets or disables them.');
+  const recentCampaigns = renderRecentCampaigns((campaign) => {
+    campaignId.value = campaign.campaignId;
+    username.value = campaign.username;
+    password.value = '';
+    password.focus();
+    status.textContent = `${campaign.campaignName} selected. Enter your password to continue.`;
+  });
   const turnstileSiteKey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '').trim();
   let captchaToken: string | undefined;
   if (turnstileSiteKey.length > 0) {
@@ -146,6 +203,7 @@ function renderPortalLogin(
   }
 
   const note = create('p', 'player-join-note', 'Use the permanent Player Portal URL. The campaign ID selects the room; the username and password select your player slot.');
+  if (recentCampaigns !== null) card.append(recentCampaigns);
   card.append(form, note);
   shell.append(card);
   app.replaceChildren(shell);
@@ -210,6 +268,11 @@ async function openRoom(
     projection = cached;
     sourcePlayerId = cached.viewer.id;
   }
+  rememberRecentCampaign({
+    campaignId,
+    username,
+    campaignName: projection.campaign.name,
+  });
   const presence: PresenceRecord = {
     userId,
     displayName: projection.viewer.displayName,
@@ -241,6 +304,12 @@ async function openRoom(
           normalizedUsername,
           newPassword,
         );
+        forgetRecentCampaign(campaignId, username);
+        rememberRecentCampaign({
+          campaignId,
+          username: updatedUsername,
+          campaignName: projection.campaign.name,
+        });
         networkSession.stop();
         await gateway.signOut();
         clearPortalSession();
@@ -275,6 +344,7 @@ async function openRoom(
 export async function installNetworkedPlayerApp(): Promise<void> {
   const app = document.querySelector<HTMLElement>('#app');
   if (app === null) throw new Error('Player View requires the #app root.');
+  preparePlayerRoot(app, 'PAYAW Player Portal', 'player-view-body', 'player-join-body');
   const stored = readStoredPortalSession();
   const initialCampaignId = stored?.campaignId ?? initialCampaignIdFromAddress();
   const initialUsername = stored?.username ?? '';

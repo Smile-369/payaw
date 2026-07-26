@@ -38,4 +38,3 @@ else execFileSync('tsc', ['-p', 'tsconfig.test.json'], { cwd: projectPath, stdio
 writeFileSync(join(outputPath, 'package.json'), '{"type":"commonjs"}\n');
 const output = execFileSync(process.execPath, [join(outputPath, 'tests', 'Milestone17Test.js')], { cwd: projectPath, encoding: 'utf8' });
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS17_TEST_RESULTS.json'), output.trim() + '\n');

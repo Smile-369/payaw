@@ -1,8 +1,0 @@
-PASS — npm run build
-Vite 8.1.5 production build completed successfully.
-
-Output:
-- dist/index.html
-- dist/assets/index-*.css
-- dist/assets/index-*.js
-- dist/assets/generation.worker-*.js

@@ -1,5 +1,5 @@
 import { isOfflineSafeCommand } from '../src/netcode/NetcodeTypes';
-import { mergePlayerOwnedProjection } from '../src/netcode/ProjectionMerge';
+import { mergePlayerOwnedProjection, mergeSharedProjectionEvent } from '../src/netcode/ProjectionMerge';
 import { parsePlayerProjection, type PlayerProjection } from '../src/player/PlayerProjection';
 import { createDefaultPlayerViewState, resizePlayerViewState, setPlayerMapPolicy } from '../src/player/PlayerViewState';
 
@@ -44,6 +44,38 @@ function main(): void {
   assert(merged.objectives.some((objective) => objective.playerCreated), 'Player objective proposal was overwritten.');
   assert(merged.diceRolls.length === 0, 'Legacy dice history was copied back into the durable player slot.');
   assert(merged.revision === 15, 'Projection merge moved the revision backwards.');
+  const sharedPing = mergeSharedProjectionEvent(baseProjection(20), 'command.map.ping', {
+    ping: {
+      id: 'ping:party',
+      kind: 'ping',
+      label: 'Party ping',
+      knowledge: 'visited',
+      position: { x: 40, y: 30 },
+      approximateRadius: null,
+      detail: 'Temporary player ping',
+      linkedEntityId: null,
+      color: '#73b7a4',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    },
+  });
+  assert(sharedPing.map.features.some((feature) => feature.id === 'ping:party'), 'Realtime party ping was not merged.');
+  const sharedMessage = mergeSharedProjectionEvent(sharedPing, 'command.message.send', {
+    threadId: 'thread:one',
+    message: {
+      id: 'message:party',
+      senderLabel: 'Bea',
+      body: 'Meet at the bridge.',
+      sentAt: '2026-07-23T00:00:00.000Z',
+      status: 'sent',
+      presentation: { glitch: false, corruption: 0 },
+    },
+  });
+  assert(sharedMessage.messages[0]?.messages.some((message) => message.id === 'message:party'), 'Realtime party message was not merged.');
+  const deduplicated = mergeSharedProjectionEvent(sharedMessage, 'command.message.send', {
+    threadId: 'thread:one',
+    message: sharedMessage.messages[0]?.messages[0],
+  });
+  assert(deduplicated === sharedMessage, 'Duplicate collaboration event caused a second render.');
   assert(isOfflineSafeCommand({ kind: 'journal.create', title: 'x', body: '', sharedWithParty: false }), 'Private journal write should be offline-safe.');
   assert(!isOfflineSafeCommand({ kind: 'dice.roll', notation: '1d20', visibility: 'party' }), 'Dice must not be queued offline.');
   assert(!isOfflineSafeCommand({ kind: 'message.send', threadId: 'x', body: 'x', privateToGm: false }), 'Shared messages must not be queued offline.');
@@ -76,7 +108,7 @@ function main(): void {
   console.log(JSON.stringify({
     projectionMerge: true, staleKnowledgeRemoved: true, playerOwnedDataPreserved: true, eventBackedDice: true,
     monotonicRevision: true, offlineQueueAllowlist: true, configurablePlayerCount: true,
-    denyByDefault: true, publicTownMapBaseline: true,
+    denyByDefault: true, publicTownMapBaseline: true, realtimeCollaborationDelta: true,
   }, null, 2));
 }
 

@@ -1,4 +1,0 @@
-
-> payaw-procgen@0.17.1 check
-> tsc --noEmit
-

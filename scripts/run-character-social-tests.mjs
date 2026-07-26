@@ -62,4 +62,3 @@ const result = {
 };
 const output = `${JSON.stringify(result, null, 2)}\n`;
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'CHARACTER_SOCIAL_TEST_RESULTS.json'), output);

@@ -3,6 +3,7 @@ import { parsePlayerProjection, type PlayerProjection } from '../player/PlayerPr
 import { isOfflineSafeCommand, type ConnectionSnapshot, type PresenceRecord, type QueuedPlayerCommand } from './NetcodeTypes';
 import { SupabaseGateway } from './SupabaseGateway';
 import { parseSharedDiceRoll, type SharedDiceRoll } from './DiceRollBanner';
+import { mergeSharedProjectionEvent } from './ProjectionMerge';
 
 const QUEUE_LIMIT = 100;
 
@@ -166,9 +167,16 @@ export class PlayerNetworkSession {
         }
       },
       onEvent: (event) => {
-        if (event.event_type !== 'command.dice.roll') return;
-        const roll = parseSharedDiceRoll(event.safe_payload.diceRoll);
-        if (roll !== null) this.acceptDiceRoll(roll, true);
+        if (event.event_type === 'command.dice.roll') {
+          const roll = parseSharedDiceRoll(event.safe_payload.diceRoll);
+          if (roll !== null) this.acceptDiceRoll(roll, true);
+          return;
+        }
+        const merged = mergeSharedProjectionEvent(this.projectionValue, event.event_type, event.safe_payload);
+        if (merged === this.projectionValue) return;
+        this.projectionValue = merged;
+        this.writeCache(merged);
+        this.emitProjection();
       },
     });
   }

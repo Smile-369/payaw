@@ -13,7 +13,7 @@ const html = readFileSync(join(projectPath, 'index.html'), 'utf8');
 const main = readFileSync(join(projectPath, 'src', 'main.ts'), 'utf8');
 const campaignSystem = readFileSync(join(projectPath, 'src', 'campaign', 'CampaignSystem.ts'), 'utf8');
 const campaignStudio = readFileSync(join(projectPath, 'src', 'campaign', 'CampaignStudio.ts'), 'utf8');
-const packageLock = readFileSync(join(projectPath, 'package-lock.json'), 'utf8');
+const dependencyLock = readFileSync(join(projectPath, 'pnpm-lock.yaml'), 'utf8');
 const worldSource = readFileSync(join(projectPath, 'src', 'engine', 'world', 'World.ts'), 'utf8');
 
 for (const id of [
@@ -41,10 +41,10 @@ assert(main.includes('pendingImportedCampaign'), 'Project import does not restor
 assert(main.includes('syncCampaignScenePlacement'), 'Active scenes do not stage NPCs without overwriting schedules.');
 assert(main.includes("weather === 'auto' ? null"), 'Campaign automatic weather is not synchronized safely.');
 assert(worldSource.includes('schemaVersion: 20'), 'World schema version is not 20.');
-assert(!packageLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
-const releaseVersion = JSON.parse(packageLock).version;
+assert(!dependencyLock.includes('applied-caas'), 'Release lockfile contains an internal registry URL.');
+const releaseVersion = JSON.parse(readFileSync(join(projectPath, 'package.json'), 'utf8')).version;
 const [releaseMajor, releaseMinor] = releaseVersion.split('.').map(Number);
-assert(releaseMajor > 0 || releaseMinor >= 20, 'Release lockfile version is older than Milestone 20.');
+assert(releaseMajor > 0 || releaseMinor >= 20, 'Release version is older than Milestone 20.');
 
 rmSync(outputPath, { recursive: true, force: true });
 if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompilerPath, '-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });
@@ -52,4 +52,3 @@ else execFileSync('tsc', ['-p', 'tsconfig.test.json'], { cwd: projectPath, stdio
 writeFileSync(join(outputPath, 'package.json'), '{"type":"commonjs"}\n');
 const output = execFileSync(process.execPath, [join(outputPath, 'tests', 'Milestone20Test.js')], { cwd: projectPath, encoding: 'utf8' });
 process.stdout.write(output);
-writeFileSync(join(projectPath, 'docs', 'MS20_TEST_RESULTS.json'), output.trim() + '\n');

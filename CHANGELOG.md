@@ -1,13 +1,29 @@
 # Changelog
 
-## Unreleased
+## 1.0.0
+
+### Changed
+- Consolidated release documentation into the README and current user, deployment, architecture, and QA guides.
+- Added a single release regression command covering the engine, GM campaign workspace, Player View, hosted authority boundary, character privacy, and editor persistence.
+- Centralized product version labels and removed milestone labels from the active interface.
+- Replaced inert application-menu items with working Project, Commands, View, Campaign, and Help actions.
+- Added an explicit narrow-screen message for the desktop/tablet GM studio while retaining a responsive Player Portal.
+- Removed generated QA reports, milestone implementation notes, obsolete hotfix documents, source manifests, and the redundant npm lockfile.
+
+### Security
+- Replaced dynamic story-card HTML interpolation with text-only DOM construction.
+- Disabled production source maps and added immutable hashed-asset caching with no-cache HTML.
 
 ### Added
 - Added party-wide dice announcements in both GM and Player View: `USERNAME rolled XX` appears as a large temporary banner on every connected screen.
+- Added Player map Region/Town/Terrain/Hydrology/Planning presets, recipient-safe
+  layer controls, zoom, pan, Fit, Grid, touch, and keyboard navigation.
 - Added campaign-event Realtime delivery and bounded history hydration for resolved dice results.
 - Added an atomic event-only dice RPC, an optimized campaign snapshot RPC, transport-history retention cleanup, and supporting hot-path indexes.
 
 ### Changed
+- Consolidated GM and Player map-view presets into one shared map configuration.
+- Extended dice notifications to four seconds.
 - Dice rolls are now always party-visible. The private and GM-only visibility selector was removed from the player dice tray.
 - Player presence now uses the current player-portal username so roll announcements follow self-service username changes.
 - Dice rolls no longer rewrite every player's full projection JSON. One applied command and one party event now carry the durable result.
@@ -19,8 +35,17 @@
 - Unsharing a party journal entry now removes it from the other player projections instead of leaving a stale copy.
 - The GM performs bounded best-effort cleanup of old transient events and commands when opening a hosted room.
 
+### Fixed
+- Removed doubled generated labels and markers from the Player map.
+- Made party pings and party messages resilient through recipient-safe Realtime
+  deltas, and surfaced private Player-to-GM message bodies in GM View.
+- Corrected the server capability check for private Player-to-GM messages and
+  complete character-sheet updates.
+
 ### Deployment
-- Apply `202607260010_netcode_write_reduction.sql`, redeploy the `campaign-command` Supabase Edge Function, then deploy the frontend.
+- Apply `202607260010_netcode_write_reduction.sql` and
+  `202607260030_player_collaboration_reliability.sql`, redeploy the
+  `campaign-command` Supabase Edge Function, then deploy the frontend.
 
 ## 0.24.0
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const source = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -63,5 +63,4 @@ const result = {
   dmTools: ['story search', 'random encounter', 'per-site roll', 'session log', 'map presets'],
 };
 
-writeFileSync(new URL('../docs/MS82_TEST_RESULTS.json', import.meta.url), `${JSON.stringify(result, null, 2)}\n`);
 console.log(JSON.stringify(result, null, 2));

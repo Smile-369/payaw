@@ -18,7 +18,7 @@
 <h1>World Studio</h1>
 </div>
 </div>
-<span class="version-pill">M20</span>
+<span class="version-pill">v1</span>
 <p class="subtitle">Generate a campaign region, then reshape it freely through non-destructive GM authoring.</p>
 </header>
 <nav aria-label="Workspace" class="workspace-switcher">
@@ -188,7 +188,7 @@
 </div>
 </details><div class="workspace-section-heading"><span>02</span><div><strong>World authoring</strong><small>Move, add, redraw, hide, lock, and restore generated features</small></div></div>
 <details class="card disclosure authoring-card" id="authoring-card">
-<summary><span><small>Milestone 18</small>The GM owns the world</span><span class="summary-caret">⌄</span></summary>
+  <summary><span><small>World authoring</small>The GM owns the world</span><span class="summary-caret">⌄</span></summary>
 <div class="disclosure-body authoring-workspace">
   <div class="authoring-toolbar" role="toolbar" aria-label="World authoring tools">
     <button type="button" data-authoring-tool="select" class="active">Select / move</button>
@@ -683,6 +683,12 @@
 <button class="secondary" id="npc-generate-button" type="button">Regenerate suggestions</button>
 <button class="primary" id="npc-create-button" type="button">+ New NPC</button>
 </div>
+<div class="button-row npc-json-actions">
+<button id="npc-export-selected" type="button" disabled>Export selected NPC</button>
+<button id="npc-export-group" type="button">Export NPC group</button>
+<label class="file-button">Import NPC JSON<input accept=".json,application/json" hidden id="npc-import-file" type="file"/></label>
+</div>
+<p class="helper-text npc-json-help">Group export uses the current search results, or the entire roster when no search is active. NPC JSON is separate from World JSON.</p>
 <div class="npc-list" id="npc-list"></div>
 
 <section class="authoring-section npc-editor-section">
@@ -789,10 +795,10 @@
 <div class="project-json-panel" id="project-json-dropzone">
 <div>
 <strong>Project JSON</strong>
-<p class="helper-text">Export the complete reproducible project, or import a PAYAW project/world JSON. Dropping a JSON file here also works.</p>
+<p class="helper-text">Export a compact reproducible project recipe, or import a PAYAW project/world JSON. Generated world caches and NPC records are excluded; move NPCs separately from the NPC Generator.</p>
 </div>
 <div class="button-row">
-<button id="export-button" type="button">Export World JSON</button>
+<button id="export-button" type="button">Export Compact World JSON</button>
 <label class="file-button primary-file">Import Project JSON<input accept=".json,application/json" hidden="" id="project-import-file" type="file"/></label>
 </div>
 </div>
@@ -929,6 +935,7 @@
       <section>
         <strong>Room authority</strong>
         <div class="netcode-room-name" id="netcode-room-name">No hosted room linked</div>
+        <label class="form-field"><span>Previously hosted campaigns</span><select id="netcode-recent-campaigns" disabled><option value="">Sign in to view hosted campaigns</option></select></label>
         <label class="form-field"><span>Campaign ID</span><input id="netcode-campaign-id" autocomplete="off" spellcheck="false" maxlength="36" placeholder="Paste the hosted campaign UUID"/></label>
         <div class="button-row"><button class="primary" id="netcode-load-campaign" type="button">Load campaign</button><button id="netcode-create-room" type="button">Create / link room</button><button id="netcode-publish-all" type="button">Sync player views now</button><button id="netcode-open-dice-tray" type="button">Open dice tray</button></div>
       </section>
@@ -946,7 +953,7 @@
     </div>
     <div class="netcode-room-grid">
       <section><strong>Connected table</strong><div id="netcode-roster" class="netcode-roster"><span>No hosted room.</span></div></section>
-      <section><strong>Recent player commands</strong><div id="netcode-commands" class="netcode-roster"><span>No commands received.</span></div></section>
+      <section><strong>Player messages &amp; actions</strong><div id="netcode-commands" class="netcode-roster"><span>No messages or actions received.</span></div></section>
     </div>
   </section>
 
@@ -1176,7 +1183,7 @@
 </div>
 </main>
 <aside aria-label="PAYAW Studio dock" class="studio-dock" id="studio-dock">
-<header class="studio-dock-header"><div><p class="section-kicker">Milestone 18</p><h2>Studio Dock</h2></div><button id="close-studio-dock-button" title="Close dock" type="button">×</button></header>
+<header class="studio-dock-header"><div><p class="section-kicker">Workspace</p><h2>Studio Dock</h2></div><button id="close-studio-dock-button" title="Close dock" type="button">×</button></header>
 <nav aria-label="Studio panels" class="studio-dock-tabs">
 <button aria-selected="true" data-studio-tab="inspector" id="studio-tab-inspector" type="button">Inspector</button>
 <button aria-selected="false" data-studio-tab="layers" id="studio-tab-layers" type="button">Layers</button>
@@ -1194,7 +1201,7 @@
 <section class="studio-dock-panel" data-studio-panel="project" hidden id="studio-project-panel">
 <div class="studio-panel-heading"><div><p class="section-kicker">Workspace</p><h3>Project & recovery</h3></div><span class="autosave-indicator" id="autosave-indicator">Autosave ready</span></div>
 <label class="form-field"><span>Appearance</span><select id="studio-theme-select"><option value="dark">Dark</option><option value="light">Light</option><option value="contrast">High contrast</option></select></label>
-<div class="project-action-grid"><button id="studio-save-button" type="button">Save JSON</button><button id="studio-open-button" type="button">Open JSON</button><button id="studio-export-image-button" type="button">Export PNG</button><button id="restore-session-button" type="button">Restore autosave</button></div>
+<div class="project-action-grid"><button id="studio-save-button" type="button">Save World JSON</button><button id="studio-open-button" type="button">Open JSON</button><button id="studio-export-image-button" type="button">Export PNG</button><button id="restore-session-button" type="button">Restore autosave</button></div>
 <div class="project-recovery-copy" id="session-recovery-copy">No recoverable session yet.</div>
 <div class="studio-subsection"><div class="studio-panel-heading compact"><h3>Recent worlds</h3><button id="clear-recent-projects-button" type="button">Clear</button></div><div class="recent-project-list" id="recent-project-list"></div></div>
 <div class="shortcut-reference"><strong>Shortcuts</strong><span><kbd>Ctrl</kbd>+<kbd>P</kbd> Commands</span><span><kbd>Ctrl</kbd>+<kbd>S</kbd> Save JSON</span><span><kbd>Ctrl</kbd>+<kbd>O</kbd> Open JSON</span><span><kbd>F</kbd> Fit or focus</span><span><kbd>[</kbd>/<kbd>]</kbd> Panels</span></div>

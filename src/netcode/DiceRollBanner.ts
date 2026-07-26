@@ -10,7 +10,7 @@ export interface SharedDiceRoll {
 
 const STYLE_ID = 'payaw-party-dice-banner-style';
 const ROOT_ID = 'payaw-party-dice-banner-root';
-const DISPLAY_DURATION_MS = 2_300;
+const DISPLAY_DURATION_MS = 4_000;
 const MAX_QUEUED_ROLLS = 5;
 const announcedIds = new Set<string>();
 const queue: SharedDiceRoll[] = [];

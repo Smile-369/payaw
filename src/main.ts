@@ -41,6 +41,13 @@ import {
   normalizeCampaignState,
   type CampaignState,
 } from './campaign/CampaignSystem';
+import {
+  createNpcJsonBundle,
+  parseNpcJsonBundle,
+  withSettlementNames,
+  type NpcJsonBundle,
+  type PortableNpcRecord,
+} from './campaign/NpcJson';
 import { CampaignStudio, type CampaignStudioOption } from './campaign/CampaignStudio';
 import { GmPlayerPreview } from './player/GmPlayerPreview';
 import { readNetcodeConfig } from './netcode/NetcodeConfig';
@@ -82,6 +89,7 @@ import {
 import { Camera } from './engine/renderer/Camera';
 import { CanvasRenderer, rasterCacheLayersForStage } from './engine/renderer/CanvasRenderer';
 import { RenderLayer } from './engine/renderer/Layers';
+import { GM_MAP_VIEW_PRESETS } from './engine/renderer/MapViewPresets';
 import {
   ANCHOR_LABELS,
   AnchorProximityBand,
@@ -118,10 +126,35 @@ import type { Building } from './engine/buildings/Building';
 import { PORT_TYPE_LABELS, PortType, type PortOverride, type CustomPortDefinition } from './engine/infrastructure/Port';
 import { brushIndices, floodFillIndices, rectangleIndices, setZoneOverrides, smoothZoneOverrides, type ZoneTool } from './editor/ZoneEditor';
 import { HistoryManager } from './editor/HistoryManager';
+import {
+  MAX_CUSTOM_ANCHORS,
+  MAX_CUSTOM_STORY_POINTS,
+  finiteSetting,
+  formatEncounterLines,
+  isEnumValue,
+  loadAnchorState,
+  loadCustomStoryDefinitions,
+  loadLabelSettings,
+  loadNameState,
+  loadProfile,
+  normalizeAnchorState,
+  normalizeCustomStoryDefinition,
+  normalizeEncounter,
+  normalizeLabelSettings,
+  normalizeStoredProfile,
+  parseEncounterLines,
+  saveAnchorState,
+  saveCustomStoryDefinitions,
+  saveLabelSettings,
+  saveNameState,
+  saveProfile,
+  validNameOverrides,
+  type StoredProfile,
+} from './editor/EditorStatePersistence';
 import { World } from './engine/world/World';
 import { ZoneType } from './engine/zoning/Zone';
 import { pickWeightedEncounter } from './story/EncounterGenerator';
-import { EncounterDanger, StoryObjectSource, StoryObjectType, type CustomStoryPointDefinition, type StoryEncounterDefinition } from './story/StoryObject';
+import { StoryObjectSource, StoryObjectType, type CustomStoryPointDefinition, type StoryEncounterDefinition } from './story/StoryObject';
 import {
   TrafficProfile,
   TravelMode,
@@ -136,14 +169,8 @@ import {
 } from './engine/travel/TravelPlanner';
 
 
-const ANCHOR_STORAGE_KEY = 'payaw.anchor-rules.v2';
-const PROFILE_STORAGE_KEY = 'payaw.generation-profile.v1';
-const NAME_STORAGE_KEY = 'payaw.place-names.v1';
 const MAP_CUSTOMIZATION_STORAGE_KEY = 'payaw.map-customization.v2';
-const LABEL_STORAGE_KEY = 'payaw.label-display.v1';
-const MAX_CUSTOM_ANCHORS = 12;
-const CUSTOM_STORY_STORAGE_KEY = 'payaw.custom-story-points.v1';
-const MAX_CUSTOM_STORY_POINTS = 24;
+const SATELLITE_SETTLEMENT_COUNT = 0;
 const WORKSPACE_STORAGE_KEY = 'payaw.workspace.v1';
 const UI_THEME_STORAGE_KEY = 'payaw.ui-theme.v1';
 const UI_LEFT_PANEL_STORAGE_KEY = 'payaw.ui-left-panel.v1';
@@ -154,27 +181,6 @@ const SESSION_AUTOSAVE_STORAGE_KEY = 'payaw.session-autosave.v1';
 const RECENT_PROJECTS_STORAGE_KEY = 'payaw.recent-projects.v1';
 const CLOCK_FORMAT_STORAGE_KEY = 'payaw.clock-format.v1';
 
-interface StoredAnchorState {
-  readonly customAnchors: readonly CustomAnchorDefinition[];
-  readonly builtInOverrides: readonly BuiltInAnchorOverride[];
-}
-
-interface StoredProfile {
-  readonly terrainSize: TerrainSize;
-  readonly townScale: TownScale;
-  readonly terrainShape: TerrainShape;
-  readonly climatePreset: ClimatePreset;
-  readonly islandCount: number;
-  readonly islandSpacingKilometers: number;
-  readonly satelliteSettlementCount: number;
-}
-
-interface StoredNameState {
-  readonly roads: readonly EntityNameOverride[];
-  readonly blocks: readonly EntityNameOverride[];
-}
-
-type NameStateByWorld = Readonly<Record<string, StoredNameState>>;
 type MapCustomizationByWorld = Readonly<Record<string, StoredMapCustomization>>;
 
 interface EditorSnapshot {
@@ -207,6 +213,12 @@ function createRuleId(): string {
   return [...values].map((value) => value.toString(36)).join('-');
 }
 
+function worldCustomizationPayload(customization: StoredMapCustomization): Record<string, unknown> {
+  const payload: Record<string, unknown> = { ...customization };
+  delete payload.npcLocationAuthoring;
+  return payload;
+}
+
 function createProjectPayload(
   world: World,
   customization: StoredMapCustomization,
@@ -230,28 +242,21 @@ function createProjectPayload(
     blockNames: blockNameOverrides,
     labelDisplay: labels,
     customStoryPoints,
-    npcRosterSize: world.npcs.length,
-    npcLocationAuthoring,
     campaign: campaignState,
     playerView: playerViewState,
     simulation: simulation?.serialize(),
-    customization,
+    customization: worldCustomizationPayload(customization),
     imageAssets: assets,
   };
   return {
     format: 'payaw-project',
-    projectVersion: 1,
-    project: { seed: world.seed, profile, authoring },
-    campaign: campaignState,
-    playerView: playerViewState,
-    ...world.toJSON(),
-    customization: {
-      ...customization,
-      imageAssets: assets,
-      labelDisplay: labels,
-      customStoryPoints,
-      npcRosterSize: world.npcs.length,
+    projectVersion: 2,
+    metadata: {
+      schemaVersion: world.metadata.schemaVersion,
+      generationVersion: world.metadata.generationVersion,
+      exportKind: 'compact-recipe',
     },
+    project: { seed: world.seed, profile, authoring },
   };
 }
 
@@ -312,302 +317,6 @@ function downloadWorld(
   anchor.download = `${world.seed.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}.world.json`;
   anchor.click();
   URL.revokeObjectURL(url);
-}
-
-function isEnumValue<T extends string>(values: readonly T[], value: unknown): value is T {
-  return typeof value === 'string' && values.includes(value as T);
-}
-
-function parseRuleSettings(value: unknown): AnchorRuleSettings | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const item = value as Partial<AnchorRuleSettings>;
-  const builtInTargets = [...BUILT_IN_ANCHOR_TYPES];
-  const zoneValues = Object.values(ZoneType);
-  if (
-    typeof item.name !== 'string'
-    || item.name.trim().length === 0
-    || !isEnumValue(Object.values(AnchorRegionPreference), item.region)
-    || !isEnumValue(Object.values(AnchorTerrainPreference), item.terrain)
-    || (item.targetAnchor !== null && !isEnumValue(builtInTargets, item.targetAnchor))
-    || !isEnumValue(Object.values(AnchorProximityBand), item.proximity)
-    || typeof item.radius !== 'number'
-    || !Number.isFinite(item.radius)
-    || typeof item.minimumDistance !== 'number'
-    || !Number.isFinite(item.minimumDistance)
-    || (item.zoneType !== null && !isEnumValue(zoneValues, item.zoneType))
-  ) return undefined;
-  return {
-    name: item.name.trim(),
-    region: item.region,
-    terrain: item.terrain,
-    targetAnchor: item.targetAnchor,
-    proximity: item.proximity,
-    radius: item.radius,
-    minimumDistance: item.minimumDistance,
-    zoneType: item.zoneType,
-  };
-}
-
-function normalizeAnchorState(value: unknown): StoredAnchorState {
-  const parsed = typeof value === 'object' && value !== null
-    ? value as { customAnchors?: unknown; builtInOverrides?: unknown; builtInAnchorOverrides?: unknown }
-    : {};
-  const customAnchors = Array.isArray(parsed.customAnchors)
-    ? parsed.customAnchors.flatMap((item) => {
-      const settings = parseRuleSettings(item);
-      const id = typeof (item as { id?: unknown })?.id === 'string' ? (item as { id: string }).id : undefined;
-      return settings === undefined || id === undefined ? [] : [{ id, ...settings }];
-    }).slice(0, MAX_CUSTOM_ANCHORS)
-    : [];
-  const builtInSource = parsed.builtInOverrides ?? parsed.builtInAnchorOverrides;
-  const builtInOverrides = Array.isArray(builtInSource)
-    ? builtInSource.flatMap((item) => {
-      const settings = parseRuleSettings(item);
-      const type = (item as { type?: unknown })?.type;
-      return settings === undefined || !isEnumValue(BUILT_IN_ANCHOR_TYPES, type)
-        ? []
-        : [{ type, ...settings }];
-    })
-    : [];
-  return { customAnchors, builtInOverrides };
-}
-
-function loadAnchorState(): StoredAnchorState {
-  try {
-    const raw = localStorage.getItem(ANCHOR_STORAGE_KEY);
-    return raw === null ? { customAnchors: [], builtInOverrides: [] } : normalizeAnchorState(JSON.parse(raw));
-  } catch {
-    return { customAnchors: [], builtInOverrides: [] };
-  }
-}
-
-function saveAnchorState(customAnchors: readonly CustomAnchorDefinition[], builtInOverrides: readonly BuiltInAnchorOverride[]): void {
-  localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify({ customAnchors, builtInOverrides }));
-}
-
-function finiteSetting(value: unknown, fallback: number, minimum: number, maximum: number): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.min(maximum, Math.max(minimum, value))
-    : fallback;
-}
-
-function booleanSetting(value: unknown, fallback: boolean): boolean {
-  return typeof value === 'boolean' ? value : fallback;
-}
-
-function normalizeLabelSettings(value: unknown): LabelDisplaySettings {
-  const root = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
-  const road = typeof root.road === 'object' && root.road !== null ? root.road as Record<string, unknown> : {};
-  const block = typeof root.block === 'object' && root.block !== null ? root.block as Record<string, unknown> : {};
-  const defaults = DEFAULT_LABEL_DISPLAY_SETTINGS;
-  return {
-    road: {
-      visible: booleanSetting(road.visible, defaults.road.visible),
-      fontSizePx: finiteSetting(road.fontSizePx, defaults.road.fontSizePx, 4, 24),
-      opacity: finiteSetting(road.opacity, defaults.road.opacity, 0, 1),
-      density: finiteSetting(road.density, defaults.road.density, 0, 1),
-      showMain: booleanSetting(road.showMain, defaults.road.showMain),
-      showSecondary: booleanSetting(road.showSecondary, defaults.road.showSecondary),
-      showLocal: booleanSetting(road.showLocal, defaults.road.showLocal),
-      mainMinZoom: finiteSetting(road.mainMinZoom, defaults.road.mainMinZoom, 0.5, 12),
-      secondaryMinZoom: finiteSetting(road.secondaryMinZoom, defaults.road.secondaryMinZoom, 0.5, 12),
-      localMinZoom: finiteSetting(road.localMinZoom, defaults.road.localMinZoom, 0.5, 12),
-      rotateAlongRoad: booleanSetting(road.rotateAlongRoad, defaults.road.rotateAlongRoad),
-      outline: booleanSetting(road.outline, defaults.road.outline),
-    },
-    block: {
-      visible: booleanSetting(block.visible, defaults.block.visible),
-      fontSizePx: finiteSetting(block.fontSizePx, defaults.block.fontSizePx, 4, 24),
-      opacity: finiteSetting(block.opacity, defaults.block.opacity, 0, 1),
-      density: finiteSetting(block.density, defaults.block.density, 0, 1),
-      minZoom: finiteSetting(block.minZoom, defaults.block.minZoom, 0.5, 12),
-      outline: booleanSetting(block.outline, defaults.block.outline),
-    },
-    avoidCollisions: booleanSetting(root.avoidCollisions, defaults.avoidCollisions),
-  };
-}
-
-function loadLabelSettings(): LabelDisplaySettings {
-  try {
-    const raw = localStorage.getItem(LABEL_STORAGE_KEY);
-    return raw === null ? DEFAULT_LABEL_DISPLAY_SETTINGS : normalizeLabelSettings(JSON.parse(raw));
-  } catch {
-    return DEFAULT_LABEL_DISPLAY_SETTINGS;
-  }
-}
-
-function saveLabelSettings(settings: LabelDisplaySettings): void {
-  localStorage.setItem(LABEL_STORAGE_KEY, JSON.stringify(settings));
-}
-
-function normalizeTerrainShapeValue(value: unknown): TerrainShape | undefined {
-  if (!isEnumValue(Object.values(TerrainShape), value)) return undefined;
-  switch (value) {
-    case TerrainShape.LegacyFullIsland: return TerrainShape.SingleLargeIsland;
-    case TerrainShape.LegacyInland: return TerrainShape.InlandCoast;
-    case TerrainShape.LegacyRiverDelta: return TerrainShape.Delta;
-    case TerrainShape.LegacyAtoll: return TerrainShape.SingleMediumIsland;
-    default: return value;
-  }
-}
-
-function defaultStoredProfile(): StoredProfile {
-  return {
-    terrainSize: TerrainSize.Small,
-    townScale: TownScale.SemiUrban,
-    terrainShape: TerrainShape.SingleLargeIsland,
-    climatePreset: ClimatePreset.TropicalMonsoon,
-    islandCount: 5,
-    islandSpacingKilometers: 4,
-    satelliteSettlementCount: 0,
-  };
-}
-
-function loadProfile(): StoredProfile {
-  const defaults = defaultStoredProfile();
-  try {
-    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (raw === null) return defaults;
-    const value = JSON.parse(raw) as Partial<StoredProfile>;
-    return {
-      terrainSize: isEnumValue(Object.values(TerrainSize), value.terrainSize) ? value.terrainSize : defaults.terrainSize,
-      townScale: isEnumValue(Object.values(TownScale), value.townScale) ? value.townScale : defaults.townScale,
-      terrainShape: normalizeTerrainShapeValue(value.terrainShape) ?? defaults.terrainShape,
-      climatePreset: isEnumValue(Object.values(ClimatePreset), value.climatePreset) ? value.climatePreset : defaults.climatePreset,
-      islandCount: Math.round(finiteSetting(value.islandCount, defaults.islandCount, 2, 12)),
-      islandSpacingKilometers: finiteSetting(value.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),
-      satelliteSettlementCount: 0,
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-function saveProfile(profile: StoredProfile): void {
-  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-}
-
-
-function validEncounterDanger(value: unknown): value is EncounterDanger {
-  return typeof value === 'string' && Object.values(EncounterDanger).includes(value as EncounterDanger);
-}
-
-function normalizeEncounter(value: unknown, index: number): StoryEncounterDefinition | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const item = value as Partial<StoryEncounterDefinition>;
-  if (typeof item.title !== 'string' || item.title.trim().length === 0 || typeof item.description !== 'string') return undefined;
-  return {
-    id: typeof item.id === 'string' && item.id.length > 0 ? item.id : `encounter-${index + 1}`,
-    title: item.title.trim(),
-    description: item.description.trim(),
-    weight: finiteSetting(item.weight, 1, 0.05, 100),
-    danger: validEncounterDanger(item.danger) ? item.danger : EncounterDanger.Low,
-  };
-}
-
-function parseEncounterLines(value: string): StoryEncounterDefinition[] {
-  return value.split(/\r?\n/).flatMap((line, index) => {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) return [];
-    const [weightText = '1', dangerText = EncounterDanger.Low, titleText = 'Encounter', ...descriptionParts] = trimmed.split('|').map((part) => part.trim());
-    const weight = finiteSetting(Number(weightText), 1, 0.05, 100);
-    const danger = validEncounterDanger(dangerText) ? dangerText : EncounterDanger.Low;
-    const title = titleText.length > 0 ? titleText : `Encounter ${index + 1}`;
-    const description = descriptionParts.join(' | ').trim() || 'Something strange happens at the story point.';
-    return [{ id: `authored-${index + 1}`, title, description, weight, danger }];
-  });
-}
-
-function formatEncounterLines(encounters: readonly StoryEncounterDefinition[]): string {
-  return encounters.map((encounter) => `${encounter.weight} | ${encounter.danger} | ${encounter.title} | ${encounter.description}`).join('\n');
-}
-
-function normalizeCustomStoryDefinition(value: unknown): CustomStoryPointDefinition | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const item = value as Partial<CustomStoryPointDefinition>;
-  const zoneValues = Object.values(ZoneType);
-  if (
-    typeof item.id !== 'string'
-    || typeof item.name !== 'string'
-    || item.name.trim().length === 0
-    || !isEnumValue(Object.values(StoryObjectType), item.type)
-    || !isEnumValue(Object.values(AnchorRegionPreference), item.region)
-    || !isEnumValue(Object.values(AnchorTerrainPreference), item.terrain)
-    || (item.preferredZone !== null && item.preferredZone !== undefined && !isEnumValue(zoneValues, item.preferredZone))
-  ) return undefined;
-  const allowedZones = Array.isArray(item.allowedZones) ? item.allowedZones.filter((zone): zone is ZoneType => isEnumValue(zoneValues, zone)) : [];
-  const disallowedZones = Array.isArray(item.disallowedZones) ? item.disallowedZones.filter((zone): zone is ZoneType => isEnumValue(zoneValues, zone)) : [];
-  const encounters = Array.isArray(item.encounters)
-    ? item.encounters.flatMap((encounter, index) => normalizeEncounter(encounter, index) ?? [])
-    : [];
-  return {
-    id: item.id,
-    name: item.name.trim(),
-    type: item.type,
-    region: item.region,
-    terrain: item.terrain,
-    preferredZone: item.preferredZone ?? null,
-    allowedZones,
-    disallowedZones: disallowedZones.filter((zone) => !allowedZones.includes(zone)),
-    influenceRadius: finiteSetting(item.influenceRadius, 10, 2, 40),
-    minimumDistance: finiteSetting(item.minimumDistance, 12, 4, 80),
-    ...(typeof item.wish === 'string' && item.wish.trim().length > 0 ? { wish: item.wish.trim() } : {}),
-    ...(typeof item.manifestation === 'string' && item.manifestation.trim().length > 0 ? { manifestation: item.manifestation.trim() } : {}),
-    encounters,
-  };
-}
-
-function loadCustomStoryDefinitions(): CustomStoryPointDefinition[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_STORY_STORAGE_KEY);
-    if (raw === null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.flatMap((value) => normalizeCustomStoryDefinition(value) ?? []).slice(0, MAX_CUSTOM_STORY_POINTS)
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomStoryDefinitions(definitions: readonly CustomStoryPointDefinition[]): void {
-  localStorage.setItem(CUSTOM_STORY_STORAGE_KEY, JSON.stringify(definitions));
-}
-
-
-
-function loadAllNameStates(): NameStateByWorld {
-  try {
-    const raw = localStorage.getItem(NAME_STORAGE_KEY);
-    if (raw === null) return {};
-    const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null ? parsed as NameStateByWorld : {};
-  } catch {
-    return {};
-  }
-}
-
-function validNameOverrides(values: unknown): EntityNameOverride[] {
-  if (!Array.isArray(values)) return [];
-  return values.flatMap((value) => {
-    if (typeof value !== 'object' || value === null) return [];
-    const item = value as { id?: unknown; name?: unknown };
-    if (!Number.isInteger(item.id) || (item.id as number) < 0 || typeof item.name !== 'string' || item.name.trim().length === 0) return [];
-    return [{ id: item.id as number, name: item.name.trim() }];
-  });
-}
-
-function loadNameState(signature: string): StoredNameState {
-  const stored = loadAllNameStates()[signature];
-  return {
-    roads: validNameOverrides(stored?.roads),
-    blocks: validNameOverrides(stored?.blocks),
-  };
-}
-
-function saveNameState(signature: string, state: StoredNameState): void {
-  const all = { ...loadAllNameStates(), [signature]: state };
-  localStorage.setItem(NAME_STORAGE_KEY, JSON.stringify(all));
 }
 
 function emptyMapCustomization(): StoredMapCustomization {
@@ -790,9 +499,9 @@ function loadAllMapCustomizations(): MapCustomizationByWorld {
   }
 }
 
-function loadMapCustomization(signature: string): StoredMapCustomization {
-  const stored = loadAllMapCustomizations()[signature];
-  if (stored === undefined) return emptyMapCustomization();
+function normalizeMapCustomization(value: unknown): StoredMapCustomization {
+  if (typeof value !== 'object' || value === null) return emptyMapCustomization();
+  const stored = value as Partial<StoredMapCustomization>;
   const anchorPositions = Array.isArray(stored.anchorPositions)
     ? stored.anchorPositions.filter((item) => typeof item.key === 'string' && Number.isFinite(item.x) && Number.isFinite(item.y))
     : [];
@@ -911,6 +620,10 @@ function loadMapCustomization(signature: string): StoredMapCustomization {
   const authoringLayer = normalizeAuthoringLayer(stored.authoringLayer);
   const npcLocationAuthoring = normalizeNpcLocationAuthoring(stored.npcLocationAuthoring);
   return { anchorPositions, settlementPositions, storyPositions, storyRules, zoneOverrides, placedImages, islandOverrides, bridgeOverrides, customBridges, portOverrides, customPorts, authoringLayer, npcLocationAuthoring };
+}
+
+function loadMapCustomization(signature: string): StoredMapCustomization {
+  return normalizeMapCustomization(loadAllMapCustomizations()[signature]);
 }
 
 function saveMapCustomization(signature: string, state: StoredMapCustomization): void {
@@ -1153,6 +866,9 @@ const npcSearch = requireElement<HTMLInputElement>('#npc-search');
 const npcGenerateButton = requireElement<HTMLButtonElement>('#npc-generate-button');
 const npcList = requireElement<HTMLElement>('#npc-list');
 const npcCreateButton = requireElement<HTMLButtonElement>('#npc-create-button');
+const npcExportSelected = requireElement<HTMLButtonElement>('#npc-export-selected');
+const npcExportGroup = requireElement<HTMLButtonElement>('#npc-export-group');
+const npcImportFile = requireElement<HTMLInputElement>('#npc-import-file');
 const npcEditorHeading = requireElement<HTMLElement>('#npc-editor-heading');
 const npcEditName = requireElement<HTMLInputElement>('#npc-edit-name');
 const npcEditAge = requireElement<HTMLInputElement>('#npc-edit-age');
@@ -1418,14 +1134,6 @@ const TERRAIN_LABELS: Readonly<Record<AnchorTerrainPreference, string>> = {
   [AnchorTerrainPreference.Farmland]: 'farmland',
   [AnchorTerrainPreference.HighGround]: 'high ground',
   [AnchorTerrainPreference.DryLand]: 'dry land',
-};
-
-const VIEW_PRESETS: Readonly<Record<string, readonly RenderLayer[]>> = {
-  town: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Zones, RenderLayer.Blocks, RenderLayer.BlockLabels, RenderLayer.Rivers, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.Ports, RenderLayer.PortLabels, RenderLayer.RoadLabels, RenderLayer.Buildings, RenderLayer.CustomImages, RenderLayer.Vegetation, RenderLayer.Anchors, RenderLayer.Story, RenderLayer.NPCs, RenderLayer.Authoring, RenderLayer.Travel],
-  story: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Rivers, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.Ports, RenderLayer.PortLabels, RenderLayer.RoadLabels, RenderLayer.Buildings, RenderLayer.CustomImages, RenderLayer.Vegetation, RenderLayer.Anchors, RenderLayer.Story, RenderLayer.NPCs, RenderLayer.Authoring, RenderLayer.HiddenPayaw, RenderLayer.Travel],
-  terrain: [RenderLayer.Terrain, RenderLayer.Elevation, RenderLayer.Rivers, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Bridges, RenderLayer.Ports],
-  hydrology: [RenderLayer.Terrain, RenderLayer.Floodplains, RenderLayer.Rivers, RenderLayer.Islands, RenderLayer.Bridges, RenderLayer.Ports],
-  planning: [RenderLayer.Terrain, RenderLayer.Islands, RenderLayer.IslandLabels, RenderLayer.Settlements, RenderLayer.Accessibility, RenderLayer.LandValue, RenderLayer.Zones, RenderLayer.Blocks, RenderLayer.BlockLabels, RenderLayer.Roads, RenderLayer.Bridges, RenderLayer.BridgeLabels, RenderLayer.Ports, RenderLayer.PortLabels, RenderLayer.RoadLabels, RenderLayer.Anchors, RenderLayer.Authoring],
 };
 
 const pipeline = new GenerationPipeline();
@@ -2590,10 +2298,8 @@ function selectedTerrainShape(): TerrainShape { return terrainShapeSelect.value 
 function selectedClimatePreset(): ClimatePreset { return climatePresetSelect.value as ClimatePreset; }
 function selectedIslandCount(): number { return Math.max(2, Math.min(12, Math.round(Number(islandCountInput.value) || 5))); }
 function selectedIslandSpacing(): number { return Math.max(0.5, Math.min(12, Number(islandSpacingInput.value) || 4)); }
-function selectedSatelliteCount(): number { return 0; }
-
 function worldSignature(): string {
-  return `${seedInput.value.trim()}|${selectedTerrainSize()}|${selectedTownScale()}|${selectedTerrainShape()}|${selectedClimatePreset()}|${selectedIslandCount()}|${selectedIslandSpacing().toFixed(2)}|${selectedSatelliteCount()}`;
+  return `${seedInput.value.trim()}|${selectedTerrainSize()}|${selectedTownScale()}|${selectedTerrainShape()}|${selectedClimatePreset()}|${selectedIslandCount()}|${selectedIslandSpacing().toFixed(2)}|${SATELLITE_SETTLEMENT_COUNT}`;
 }
 
 function generationOptions(
@@ -2612,7 +2318,7 @@ function generationOptions(
     climatePreset: selectedClimatePreset(),
     islandCount: selectedIslandCount(),
     islandSpacingKilometers: selectedIslandSpacing(),
-    satelliteSettlementCount: selectedSatelliteCount(),
+    satelliteSettlementCount: SATELLITE_SETTLEMENT_COUNT,
     roadNameOverrides,
     blockNameOverrides,
     anchorPositionOverrides: candidateAnchorPositions,
@@ -3199,7 +2905,7 @@ function createAutosavePayload(): Record<string, unknown> {
   const profile: StoredProfile = {
     terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(),
     climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(),
-    islandSpacingKilometers: selectedIslandSpacing(), satelliteSettlementCount: selectedSatelliteCount(),
+    islandSpacingKilometers: selectedIslandSpacing(), satelliteSettlementCount: SATELLITE_SETTLEMENT_COUNT,
   };
   return {
     format: 'payaw-project',
@@ -3331,7 +3037,7 @@ function recordRecentProject(): void {
     seed: world.seed,
     terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(),
     climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(), islandSpacingKilometers: selectedIslandSpacing(),
-    satelliteSettlementCount: selectedSatelliteCount(), updatedAt: new Date().toISOString(),
+    satelliteSettlementCount: SATELLITE_SETTLEMENT_COUNT, updatedAt: new Date().toISOString(),
   };
   const entries = [entry, ...loadRecentProjects().filter((item) => item.seed !== entry.seed || item.terrainShape !== entry.terrainShape)].slice(0, 8);
   localStorage.setItem(RECENT_PROJECTS_STORAGE_KEY, JSON.stringify(entries));
@@ -3342,7 +3048,7 @@ function commandDefinitions(): CommandDefinition[] {
   return [
     { id: 'generate', label: 'Generate world', description: 'Regenerate using the current profile', shortcut: 'G', run: () => { void generateResponsive(customAnchors, builtInOverrides, true, true); } },
     { id: 'random-seed', label: 'Generate random world', description: 'Create a new random seed and generate', run: () => { seedInput.value = createCryptoSeed(); void generateResponsive(customAnchors, builtInOverrides, true, true); } },
-    { id: 'save-json', label: 'Save project JSON', description: 'Export the full PAYAW project', shortcut: 'Ctrl+S', run: () => downloadWorld(world, currentMapCustomization(), importedAssets, labelSettings, customStoryDefinitions) },
+    { id: 'save-json', label: 'Save compact World JSON', description: 'Export the reproducible world recipe without generated caches or NPC records', shortcut: 'Ctrl+S', run: () => downloadWorld(world, currentMapCustomization(), importedAssets, labelSettings, customStoryDefinitions) },
     { id: 'open-json', label: 'Open project JSON', description: 'Import a PAYAW project or override file', shortcut: 'Ctrl+O', run: () => projectImportFile.click() },
     { id: 'export-png', label: 'Export map PNG', description: 'Render the visible layer configuration', run: () => { void exportVisibleMapImage(); } },
     { id: 'fit', label: 'Fit entire world', description: 'Fit the regional map into the viewport', shortcut: 'F', run: fitCamera },
@@ -3818,12 +3524,18 @@ function createStoryListCard(item: World['storyObjects'][number]): HTMLElement {
     actions.append(focus, roll, remove);
     heading.append(title, source, actions);
     const wish = document.createElement('p');
-    wish.innerHTML = `<span>Wish</span> ${item.wish}`;
+    const wishLabel = document.createElement('span');
+    wishLabel.textContent = 'Wish';
+    wish.append(wishLabel, ` ${item.wish}`);
     const manifestation = document.createElement('p');
-    manifestation.innerHTML = `<span>Manifestation</span> ${item.manifestation}`;
+    const manifestationLabel = document.createElement('span');
+    manifestationLabel.textContent = 'Manifestation';
+    manifestation.append(manifestationLabel, ` ${item.manifestation}`);
     const zoning = document.createElement('p');
     const preferred = item.preferredZone === null ? 'none' : item.preferredZone;
-    zoning.innerHTML = `<span>Zone</span> ${item.zoneType ?? 'none'} · preferred ${preferred}`;
+    const zoningLabel = document.createElement('span');
+    zoningLabel.textContent = 'Zone';
+    zoning.append(zoningLabel, ` ${item.zoneType ?? 'none'} · preferred ${preferred}`);
     const encounterResult = document.createElement('div');
     encounterResult.className = 'encounter-result';
     encounterResult.hidden = true;
@@ -3984,7 +3696,12 @@ function renderCustomStoryList(): void {
     actions.append(edit, remove);
     heading.append(title, actions);
     const details = document.createElement('p');
-    details.innerHTML = `<span>${definition.type}</span> ${REGION_LABELS[definition.region]} · ${TERRAIN_LABELS[definition.terrain]} · ${definition.encounters.length || 'generated'} encounters`;
+    const type = document.createElement('span');
+    type.textContent = definition.type;
+    details.append(
+      type,
+      ` ${REGION_LABELS[definition.region]} · ${TERRAIN_LABELS[definition.terrain]} · ${definition.encounters.length || 'generated'} encounters`,
+    );
     card.append(heading, details);
     customStoryList.append(card);
   }
@@ -4265,12 +3982,11 @@ function exportCustomization(): void {
     format: 'payaw-world-overrides',
     version: 1,
     worldSignature: activeWorldSignature,
-    customization: currentMapCustomization(),
+    customization: worldCustomizationPayload(currentMapCustomization()),
     roadNames: roadNameOverrides,
     blockNames: blockNameOverrides,
     labelDisplay: labelSettings,
     customStoryPoints: customStoryDefinitions,
-    npcRosterSize: world.npcs.length,
     islandOverrides,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -4292,12 +4008,7 @@ async function importCustomizationFile(file: File): Promise<void> {
   };
   if (parsed.customization === undefined) throw new Error('The file does not contain PAYAW customization data.');
   const snapshot = captureEditorSnapshot();
-  const temporaryKey = `__import__${Date.now()}`;
-  saveMapCustomization(temporaryKey, parsed.customization);
-  const normalized = loadMapCustomization(temporaryKey);
-  const all = { ...loadAllMapCustomizations() } as Record<string, StoredMapCustomization>;
-  delete all[temporaryKey];
-  localStorage.setItem(MAP_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(all));
+  const normalized = normalizeMapCustomization(parsed.customization);
   anchorPositionOverrides = [...normalized.anchorPositions];
   settlementPositionOverrides = [...normalized.settlementPositions];
   storyPositionOverrides = [...normalized.storyPositions];
@@ -4329,18 +4040,6 @@ async function importCustomizationFile(file: File): Promise<void> {
   setStatus('Imported PAYAW overrides.', 'success');
 }
 
-function normalizeMapCustomizationValue(value: unknown): StoredMapCustomization {
-  if (typeof value !== 'object' || value === null) return emptyMapCustomization();
-  const temporaryKey = `__project_import__${createRuleId()}`;
-  const allBefore = { ...loadAllMapCustomizations() } as Record<string, StoredMapCustomization>;
-  try {
-    localStorage.setItem(MAP_CUSTOMIZATION_STORAGE_KEY, JSON.stringify({ ...allBefore, [temporaryKey]: value }));
-    return loadMapCustomization(temporaryKey);
-  } finally {
-    localStorage.setItem(MAP_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(allBefore));
-  }
-}
-
 function normalizeImportedAsset(value: unknown): ImportedImageAsset | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const item = value as Record<string, unknown>;
@@ -4365,20 +4064,6 @@ function normalizeImportedAsset(value: unknown): ImportedImageAsset | undefined 
   };
 }
 
-function projectProfileFrom(value: unknown): StoredProfile {
-  const defaults = defaultStoredProfile();
-  const item = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
-  return {
-    terrainSize: isEnumValue(Object.values(TerrainSize), item.terrainSize) ? item.terrainSize : defaults.terrainSize,
-    townScale: isEnumValue(Object.values(TownScale), item.townScale) ? item.townScale : defaults.townScale,
-    terrainShape: normalizeTerrainShapeValue(item.terrainShape) ?? defaults.terrainShape,
-    climatePreset: isEnumValue(Object.values(ClimatePreset), item.climatePreset) ? item.climatePreset : defaults.climatePreset,
-    islandCount: Math.round(finiteSetting(item.islandCount ?? item.targetIslandCount, defaults.islandCount, 2, 12)),
-    islandSpacingKilometers: finiteSetting(item.islandSpacingKilometers, defaults.islandSpacingKilometers, 0.5, 12),
-    satelliteSettlementCount: 0,
-  };
-}
-
 async function importPayawJsonFile(file: File): Promise<void> {
   if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json' && file.type !== '') {
     throw new Error('Select a JSON file exported by PAYAW.');
@@ -4387,6 +4072,10 @@ async function importPayawJsonFile(file: File): Promise<void> {
   const parsed: unknown = JSON.parse(await file.text());
   if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
   const root = parsed as Record<string, unknown>;
+  if (root.format === 'payaw-npcs') {
+    await importNpcJsonFile(file);
+    return;
+  }
   if (root.format === 'payaw-world-overrides') {
     await importCustomizationFile(file);
     return;
@@ -4468,9 +4157,9 @@ async function importProjectPayload(parsed: unknown, sourceLabel: string): Promi
     : {};
   const seed = typeof project.seed === 'string' ? project.seed : typeof root.seed === 'string' ? root.seed : '';
   if (seed.trim().length === 0) throw new Error('The project JSON does not contain a valid world seed.');
-  const profile = projectProfileFrom(project.profile ?? metadata);
+  const profile = normalizeStoredProfile(project.profile ?? metadata);
   const customizationSource = authoring.customization ?? root.customization;
-  let customization = normalizeMapCustomizationValue(customizationSource);
+  let customization = normalizeMapCustomization(customizationSource);
   if (authoring.npcLocationAuthoring !== undefined) customization = { ...customization, npcLocationAuthoring: normalizeNpcLocationAuthoring(authoring.npcLocationAuthoring) };
   const anchorState = normalizeAnchorState({
     customAnchors: authoring.customAnchors,
@@ -6131,13 +5820,178 @@ function npcSettlement(npc: NPC): string {
   return world.settlements[npc.settlementId]?.name ?? 'Unknown settlement';
 }
 
+function filteredNpcs(): readonly NPC[] {
+  const query = npcSearch.value.trim().toLocaleLowerCase();
+  return world.npcs.filter((npc) => [npc.name, npc.occupation, npc.personality, npcSettlement(npc), npc.status, ...(npc.tags ?? [])]
+    .join(' ').toLocaleLowerCase().includes(query));
+}
+
+function allowNonResidentialHomeForNpc(key: string): boolean {
+  const authored = npcLocationAuthoring.authoredNpcs.find((npc) => npc.key === key);
+  if (authored !== undefined) return authored.allowNonResidentialHome;
+  return npcLocationAuthoring.npcOverrides.find((npc) => npc.npcKey === key)?.allowNonResidentialHome === true;
+}
+
+function downloadNpcJson(npcs: readonly NPC[], name: string): void {
+  if (npcs.length === 0) {
+    setStatus('No NPCs are available for export.', 'warning');
+    return;
+  }
+  const bundle = withSettlementNames(
+    createNpcJsonBundle(
+      npcs,
+      world.npcs,
+      { seed: world.seed, generationVersion: world.metadata.generationVersion },
+      name,
+      allowNonResidentialHomeForNpc,
+    ),
+    (settlementId) => world.settlements.find((settlement) => settlement.id === settlementId)?.name ?? '',
+  );
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const safeName = bundle.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_') || (bundle.kind === 'npc' ? 'npc' : 'npc-group');
+  link.download = `${safeName}.${bundle.kind === 'npc' ? 'npc' : 'npc-group'}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  const omittedCount = Math.max(0, npcs.length - bundle.npcs.length);
+  setStatus(
+    `Exported ${bundle.npcs.length} NPC${bundle.npcs.length === 1 ? '' : 's'} separately from the world.${omittedCount === 0 ? '' : ` The ${omittedCount} records above the 500-NPC portability limit were omitted.`}`,
+    omittedCount === 0 ? 'success' : 'warning',
+  );
+}
+
+function importedNpcSettlementId(record: PortableNpcRecord, sameWorld: boolean): number {
+  const byName = record.settlementName.length === 0
+    ? undefined
+    : world.settlements.find((settlement) => settlement.name.toLocaleLowerCase() === record.settlementName.toLocaleLowerCase());
+  if (byName !== undefined) return byName.id;
+  if (sameWorld && world.settlements.some((settlement) => settlement.id === record.settlementId)) return record.settlementId;
+  return world.settlements[0]?.id ?? 0;
+}
+
+function importedNpcHomeId(record: PortableNpcRecord, sameWorld: boolean): number | null {
+  if (!sameWorld || record.homeBuildingId === null) return null;
+  return validateNpcHome(world, record.homeBuildingId, record.allowNonResidentialHome) === null ? record.homeBuildingId : null;
+}
+
+function importedNpcWorkplaceId(record: PortableNpcRecord, sameWorld: boolean): number | null {
+  if (!sameWorld || record.workplaceBuildingId === null) return null;
+  return world.buildings.some((building) => building.id === record.workplaceBuildingId) ? record.workplaceBuildingId : null;
+}
+
+function importedNpcSchedule(
+  record: PortableNpcRecord,
+  settlementId: number,
+  homeBuildingId: number | null,
+  sameWorld: boolean,
+): readonly NPCScheduleEntry[] {
+  const settlement = world.settlements.find((candidate) => candidate.id === settlementId) ?? world.settlements[0];
+  const home = homeBuildingId === null
+    ? undefined
+    : scheduleLocationFromRef(world, authoringLayer, `building:${homeBuildingId}`, 'Imported NPC home');
+  const fallbackTileIndex = home?.tileIndex ?? settlement?.tileIndex ?? 0;
+  return record.weeklySchedule.map((entry) => {
+    const resolved = sameWorld
+      ? scheduleLocationFromRef(world, authoringLayer, entry.location.ref, entry.location.label)
+      : undefined;
+    return {
+      ...entry,
+      id: `schedule:${createRuleId()}`,
+      location: resolved ?? {
+        kind: 'custom',
+        ref: `custom:imported:${createRuleId()}`,
+        label: entry.location.label || 'Imported location',
+        tileIndex: fallbackTileIndex,
+      },
+    };
+  });
+}
+
+function authoredDefinitionsFromNpcBundle(bundle: NpcJsonBundle): readonly AuthoredNPCDefinition[] {
+  const availableSlots = Math.max(0, 500 - npcLocationAuthoring.authoredNpcs.length);
+  if (availableSlots === 0) throw new Error('This world already has the maximum of 500 authored NPCs.');
+  const records = bundle.npcs.slice(0, availableSlots);
+  const sameWorld = bundle.sourceWorld.seed === world.seed
+    && bundle.sourceWorld.generationVersion === world.metadata.generationVersion;
+  const baseNpcId = world.npcs.length;
+  const prepared = records.map((record, index) => {
+    const settlementId = importedNpcSettlementId(record, sameWorld);
+    const homeBuildingId = importedNpcHomeId(record, sameWorld);
+    return {
+      record,
+      key: `npc:imported:${createRuleId()}`,
+      npcId: baseNpcId + index,
+      settlementId,
+      homeBuildingId,
+      workplaceBuildingId: importedNpcWorkplaceId(record, sameWorld),
+      weeklySchedule: importedNpcSchedule(record, settlementId, homeBuildingId, sameWorld),
+    };
+  });
+  const importedIdBySourceKey = new Map<string, number>();
+  for (const item of prepared) {
+    if (item.record.sourceKey.length > 0 && !importedIdBySourceKey.has(item.record.sourceKey)) {
+      importedIdBySourceKey.set(item.record.sourceKey, item.npcId);
+    }
+  }
+  const existingIdByKey = new Map(world.npcs.map((npc) => [npc.key, npc.id]));
+  return prepared.map((item): AuthoredNPCDefinition => ({
+    key: item.key,
+    name: item.record.name,
+    age: item.record.age,
+    occupation: item.record.occupation,
+    status: item.record.status,
+    settlementId: item.settlementId,
+    homeBuildingId: item.homeBuildingId,
+    allowNonResidentialHome: item.record.allowNonResidentialHome && item.homeBuildingId !== null,
+    workplaceBuildingId: item.workplaceBuildingId,
+    personality: item.record.personality,
+    wish: item.record.wish,
+    fear: item.record.fear,
+    secret: item.record.secret,
+    rumor: item.record.rumor,
+    weeklySchedule: item.weeklySchedule,
+    relationships: item.record.relationships.flatMap((relationship) => {
+      const targetId = importedIdBySourceKey.get(relationship.npcKey) ?? existingIdByKey.get(relationship.npcKey);
+      if (targetId === undefined || targetId === item.npcId) return [];
+      return [{
+        npcId: targetId,
+        kind: relationship.kind,
+        ...(relationship.label === null ? {} : { label: relationship.label }),
+        ...(relationship.notes === null ? {} : { notes: relationship.notes }),
+        hidden: relationship.hidden,
+      }];
+    }),
+    portraitAssetId: null,
+    portraitDataUrl: item.record.portraitDataUrl,
+    publicDescription: item.record.publicDescription,
+    gmNotes: item.record.gmNotes,
+    tags: item.record.tags,
+  }));
+}
+
+async function importNpcJsonFile(file: File): Promise<void> {
+  if (!file.name.toLocaleLowerCase().endsWith('.json') && file.type !== 'application/json' && file.type !== '') {
+    throw new Error('Select a PAYAW NPC JSON file.');
+  }
+  if (file.size > 64 * 1024 * 1024) throw new Error('NPC JSON is larger than the 64 MB import limit.');
+  const bundle = parseNpcJsonBundle(JSON.parse(await file.text()) as unknown);
+  const definitions = authoredDefinitionsFromNpcBundle(bundle);
+  selectedNpcKey = definitions[0]?.key ?? null;
+  updateNpcAuthoringState({
+    ...npcLocationAuthoring,
+    authoredNpcs: [...npcLocationAuthoring.authoredNpcs, ...definitions],
+  }, `Imported ${definitions.length} NPC${definitions.length === 1 ? '' : 's'} from ${bundle.kind === 'npc' ? 'an NPC file' : 'an NPC group'}.`);
+}
+
 function renderNPCList(): void {
   npcCount.textContent = String(world.npcs.length);
   npcRosterSize.value = String(world.npcs.length);
-  const query = npcSearch.value.trim().toLocaleLowerCase();
   npcList.replaceChildren();
-  const filtered = world.npcs.filter((npc) => [npc.name, npc.occupation, npc.personality, npcSettlement(npc), npc.status]
-    .join(' ').toLocaleLowerCase().includes(query));
+  const filtered = filteredNpcs();
+  npcExportSelected.disabled = selectedNpc() === undefined;
+  npcExportGroup.disabled = filtered.length === 0;
   if (filtered.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'helper-text';
@@ -6336,7 +6190,7 @@ function generate(
     if (recoveredOverrides.length > 0) saveMapCustomization(signature, mapCustomization);
 
     refreshWorldUi(fitAfter);
-    saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(), islandSpacingKilometers: selectedIslandSpacing(), satelliteSettlementCount: selectedSatelliteCount() });
+    saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(), islandSpacingKilometers: selectedIslandSpacing(), satelliteSettlementCount: SATELLITE_SETTLEMENT_COUNT });
     if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
     const duration = Object.values(world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
     const recoveryMessage = recoveredOverrides.length === 0
@@ -6457,7 +6311,7 @@ async function generateResponsive(
       climatePreset: selectedClimatePreset(),
       islandCount: selectedIslandCount(),
       islandSpacingKilometers: selectedIslandSpacing(),
-      satelliteSettlementCount: selectedSatelliteCount(),
+      satelliteSettlementCount: SATELLITE_SETTLEMENT_COUNT,
     });
     if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
     const duration = Object.values(world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
@@ -6610,7 +6464,7 @@ function setLayer(layer: RenderLayer, visible: boolean): void {
 }
 
 function applyViewPreset(name: string): void {
-  const visible = VIEW_PRESETS[name];
+  const visible = GM_MAP_VIEW_PRESETS[name];
   if (visible === undefined) return;
   const selected = new Set(visible);
   for (const layer of Object.values(RenderLayer)) setLayer(layer, selected.has(layer));
@@ -6827,6 +6681,26 @@ npcGenerateButton.addEventListener('click', regenerateNpcRoster);
 npcSearch.addEventListener('input', renderNPCList);
 npcViewToggleButton.addEventListener('click', toggleNpcView);
 npcCreateButton.addEventListener('click', createAuthoredNpc);
+npcExportSelected.addEventListener('click', () => {
+  const npc = selectedNpc();
+  if (npc === undefined) {
+    setStatus('Select an NPC before exporting it.', 'warning');
+    return;
+  }
+  downloadNpcJson([npc], npc.name);
+});
+npcExportGroup.addEventListener('click', () => {
+  const npcs = filteredNpcs();
+  const query = npcSearch.value.trim();
+  downloadNpcJson(npcs, query.length > 0 ? `${query} NPCs` : `${world.seed} NPC roster`);
+});
+npcImportFile.addEventListener('change', () => {
+  const file = npcImportFile.files?.[0];
+  if (file === undefined) return;
+  setStatus('Validating NPC JSON…', 'working');
+  void importNpcJsonFile(file).catch((error: unknown) => setStatus(error instanceof Error ? error.message : String(error), 'error'));
+  npcImportFile.value = '';
+});
 npcSaveButton.addEventListener('click', saveSelectedNpc);
 npcEditUnusualHome.addEventListener('change', () => renderNpcSelectors(selectedNpc()));
 npcEditSettlement.addEventListener('change', () => renderNpcSelectors(selectedNpc()));

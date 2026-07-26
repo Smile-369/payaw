@@ -8,7 +8,15 @@ import {
   type AtomicPlayerSlot,
   type CampaignSnapshotPublishResult,
 } from './SupabaseGateway';
-import type { CampaignCommandRecord, CampaignEventRecord, CampaignMemberRecord, PlayerPortalLoginRecord, PlayerSlotRecord, PresenceRecord } from './NetcodeTypes';
+import type {
+  CampaignCommandRecord,
+  CampaignEventRecord,
+  CampaignMemberRecord,
+  CampaignRoomRecord,
+  PlayerPortalLoginRecord,
+  PlayerSlotRecord,
+  PresenceRecord,
+} from './NetcodeTypes';
 import { parseSharedDiceRoll, showDiceRollBanner, type SharedDiceRoll } from './DiceRollBanner';
 
 export interface GmNetcodePanelOptions {
@@ -68,6 +76,7 @@ export class GmNetcodePanel {
   private readonly createAccount = element<HTMLButtonElement>('#netcode-create-account');
   private readonly signOut = element<HTMLButtonElement>('#netcode-sign-out');
   private readonly roomName = element<HTMLElement>('#netcode-room-name');
+  private readonly recentCampaigns = element<HTMLSelectElement>('#netcode-recent-campaigns');
   private readonly campaignIdInput = element<HTMLInputElement>('#netcode-campaign-id');
   private readonly loadCampaignButton = element<HTMLButtonElement>('#netcode-load-campaign');
   private readonly createRoomButton = element<HTMLButtonElement>('#netcode-create-room');
@@ -92,6 +101,7 @@ export class GmNetcodePanel {
   private readonly gateway = this.config.enabled ? new SupabaseGateway() : null;
   private roomId: string | null = null;
   private userId: string | null = null;
+  private recentRooms: readonly CampaignRoomRecord[] = [];
   private roster: CampaignMemberRecord[] = [];
   private slots: PlayerSlotRecord[] = [];
   private portalLogins: PlayerPortalLoginRecord[] = [];
@@ -110,6 +120,7 @@ export class GmNetcodePanel {
   private readonly uploadedAssetUrls = new Map<string, string>();
   private portalApiReady = true;
   private portalApiError: unknown = null;
+  private readonly announcedCommandIds = new Set<string>();
 
   public constructor(private readonly options: GmNetcodePanelOptions) {
     // The tray is authored inside the Players workspace for maintainability, but it
@@ -124,6 +135,13 @@ export class GmNetcodePanel {
     });
     this.signOut.addEventListener('click', () => void this.doSignOut());
     this.loadCampaignButton.addEventListener('click', () => void this.loadCampaignById());
+    this.recentCampaigns.addEventListener('change', () => {
+      const campaignId = this.recentCampaigns.value;
+      if (campaignId.length === 0) return;
+      this.campaignIdInput.value = campaignId;
+      const room = this.recentRooms.find((candidate) => candidate.id === campaignId);
+      this.setStatus('CAMPAIGN SELECTED', `${room?.name ?? 'Hosted campaign'} is ready to load.`);
+    });
     this.campaignIdInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') void this.loadCampaignById();
     });
@@ -183,9 +201,34 @@ export class GmNetcodePanel {
     return `${configured}/${players.length} logins ready · ${joined} joined · ${this.presence.length} online`;
   }
 
+  private renderRecentRooms(rooms: readonly CampaignRoomRecord[], selectedRoomId: string | null = null): void {
+    this.recentRooms = [...rooms];
+    if (rooms.length === 0) {
+      this.recentCampaigns.replaceChildren(option('', 'No hosted campaigns yet'));
+      this.recentCampaigns.disabled = true;
+      return;
+    }
+    this.recentCampaigns.replaceChildren(
+      option('', 'Choose a hosted campaign…'),
+      ...rooms.map((room) => option(
+        room.id,
+        `${room.name} · ${room.status} · ${room.id.slice(0, 8)}…${room.id.slice(-4)}`,
+      )),
+    );
+    this.recentCampaigns.disabled = this.userId === null;
+    if (selectedRoomId !== null && rooms.some((room) => room.id === selectedRoomId)) {
+      this.recentCampaigns.value = selectedRoomId;
+    }
+  }
+
+  private async refreshRecentRooms(selectedRoomId: string | null = this.roomId): Promise<void> {
+    const rooms = await this.gateway?.rooms() ?? [];
+    this.renderRecentRooms(rooms, selectedRoomId);
+  }
+
   private setEnabled(enabled: boolean): void {
     for (const control of [
-      this.email, this.password, this.signIn, this.createAccount, this.signOut, this.campaignIdInput, this.loadCampaignButton, this.createRoomButton, this.publishAllButton,
+      this.email, this.password, this.signIn, this.createAccount, this.signOut, this.recentCampaigns, this.campaignIdInput, this.loadCampaignButton, this.createRoomButton, this.publishAllButton,
       this.portalPlayer, this.createPlayerLoginButton, this.copyPlayerLoginButton, this.openDiceTrayButton, this.diceRollButton,
     ]) control.disabled = !enabled;
   }
@@ -202,6 +245,7 @@ export class GmNetcodePanel {
       if (session === undefined || session === null) {
         this.setStatus('SIGN IN REQUIRED', 'Sign in with the GM email and password. Players use persistent portal logins.');
         this.signOut.disabled = true;
+        this.recentCampaigns.disabled = true;
         this.campaignIdInput.disabled = true;
         this.loadCampaignButton.disabled = true;
         this.createRoomButton.disabled = true;
@@ -219,6 +263,7 @@ export class GmNetcodePanel {
       this.signIn.disabled = true;
       this.createAccount.disabled = true;
       this.signOut.disabled = false;
+      this.recentCampaigns.disabled = false;
       this.campaignIdInput.disabled = false;
       this.loadCampaignButton.disabled = false;
       this.createRoomButton.disabled = false;
@@ -228,6 +273,7 @@ export class GmNetcodePanel {
       const room = rooms.find((candidate) => candidate.id === stored)
         ?? rooms.find((candidate) => candidate.source_campaign_id === context.campaign.id)
         ?? null;
+      this.renderRecentRooms(rooms, room?.id ?? null);
       if (room === null) {
         this.openDiceTrayButton.disabled = true;
         this.diceRollButton.disabled = true;
@@ -236,6 +282,7 @@ export class GmNetcodePanel {
       }
       this.roomId = room.id;
       localStorage.setItem(this.roomStorageKey(), room.id);
+      this.recentCampaigns.value = room.id;
       this.campaignIdInput.value = room.id;
       this.roomName.textContent = `${room.name} · ${room.id}`;
       await this.refreshRoom();
@@ -316,6 +363,7 @@ export class GmNetcodePanel {
       await this.refreshRoom();
       await this.startRealtime();
       this.pruneHistoryOnce();
+      await this.refreshRecentRooms(this.roomId);
       this.schedulePublish();
       this.options.notify('Private campaign room is ready and automatic sync is on.', 'success');
     } catch (error) {
@@ -351,6 +399,7 @@ export class GmNetcodePanel {
       }
       this.roomId = campaignId;
       localStorage.setItem(this.roomStorageKey(), campaignId);
+      this.recentCampaigns.value = campaignId;
       this.campaignIdInput.value = campaignId;
       this.roomName.textContent = `${room.name} · ${campaignId}`;
       await this.refreshRoom();
@@ -358,6 +407,7 @@ export class GmNetcodePanel {
       this.lastPublishedFingerprint = this.currentSnapshotFingerprint();
       this.lastPublishCompletedAt = Date.now();
       this.pruneHistoryOnce();
+      await this.refreshRecentRooms(this.roomId);
       this.setStatus('CAMPAIGN LOADED', `${room.name} · revision ${authority.revision}`);
       this.options.notify('Hosted campaign state loaded from Supabase.', 'success');
     } catch (error) {
@@ -644,6 +694,7 @@ export class GmNetcodePanel {
       onCommand: (command) => {
         this.commands = [command, ...this.commands.filter((item) => item.id !== command.id)].slice(0, 40);
         this.announceDiceRoll(command);
+        this.announcePlayerMessage(command);
         this.renderCommands();
       },
       onSlot: (slot) => {
@@ -848,6 +899,20 @@ export class GmNetcodePanel {
     this.ingestDiceRoll(command.result.diceRoll, true);
   }
 
+  private playerLabel(sourcePlayerId: string): string {
+    return this.options.getState().players.find((player) => player.id === sourcePlayerId)?.displayName
+      ?? this.roster.find((member) => member.source_player_id === sourcePlayerId)?.display_name
+      ?? 'Player';
+  }
+
+  private announcePlayerMessage(command: CampaignCommandRecord): void {
+    if (command.status !== 'applied' || command.payload.kind !== 'message.send'
+      || this.announcedCommandIds.has(command.id)) return;
+    this.announcedCommandIds.add(command.id);
+    const audience = command.payload.privateToGm ? 'sent you a private message' : 'sent a party message';
+    this.options.notify(`${this.playerLabel(command.source_player_id)} ${audience}: ${command.payload.body.slice(0, 140)}`, 'success');
+  }
+
   private renderCommands(): void {
     this.commandsElement.replaceChildren();
     if (this.commands.length === 0) {
@@ -861,12 +926,30 @@ export class GmNetcodePanel {
       const diceRoll = command.kind === 'dice.roll' && command.result !== null
         ? parseSharedDiceRoll(command.result.diceRoll)
         : null;
-      title.textContent = diceRoll === null ? command.kind : `${diceRoll.rollerUsername} rolled ${diceRoll.total}`;
+      const payload = command.payload;
+      const playerLabel = this.playerLabel(command.source_player_id);
+      title.textContent = diceRoll !== null
+        ? `${diceRoll.rollerUsername} rolled ${diceRoll.total}`
+        : payload.kind === 'message.send'
+          ? `${playerLabel} → ${payload.privateToGm ? 'GM (private)' : 'Party'}`
+          : payload.kind === 'map.ping'
+            ? `${playerLabel} shared a map ping`
+            : `${playerLabel} · ${command.kind}`;
+      if (payload.kind === 'message.send') {
+        const message = document.createElement('p');
+        message.className = 'netcode-command-message';
+        message.textContent = payload.body;
+        copy.append(title, message);
+      } else {
+        copy.append(title);
+      }
       const detail = document.createElement('small');
       detail.textContent = diceRoll === null
-        ? `${command.source_player_id} · ${new Date(command.created_at).toLocaleTimeString()}`
+        ? payload.kind === 'map.ping'
+          ? `${payload.label || 'Ping'} · ${Math.round(payload.x)}, ${Math.round(payload.y)} · ${new Date(command.created_at).toLocaleTimeString()}`
+          : new Date(command.created_at).toLocaleTimeString()
         : `${diceRoll.notation} · ${new Date(command.created_at).toLocaleTimeString()}`;
-      copy.append(title, detail);
+      copy.append(detail);
       const status = document.createElement('small');
       status.textContent = command.status.toLocaleUpperCase();
       row.append(copy, status);

@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { readNetcodeConfig } from './NetcodeConfig';
+import { PAYAW_VERSION } from '../version';
 
 let singleton: SupabaseClient | null = null;
 
@@ -29,7 +30,7 @@ function clientOptions(storageKey: string, detectSessionInUrl: boolean) {
       storageKey,
     },
     realtime: { params: { eventsPerSecond: 10 } },
-    global: { headers: { 'X-Client-Info': 'payaw/0.24.0' } },
+    global: { headers: { 'X-Client-Info': `payaw/${PAYAW_VERSION}` } },
   } as const;
 }
 

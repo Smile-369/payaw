@@ -19,8 +19,15 @@ import { GenerationPipeline } from '../engine/generation/GenerationPipeline';
 import { Camera } from '../engine/renderer/Camera';
 import { CanvasRenderer } from '../engine/renderer/CanvasRenderer';
 import { RenderLayer } from '../engine/renderer/Layers';
+import {
+  PLAYER_MAP_PRESETS,
+  PLAYER_SAFE_MAP_LAYERS,
+  type PlayerMapPreset,
+} from '../engine/renderer/MapViewPresets';
 import type { World } from '../engine/world/World';
 import { hydratePlayerWorldGenerationOptions, type PlayerWorldGenerationRecipe } from './PlayerWorldRecipe';
+import { PAYAW_VERSION_LABEL } from '../version';
+import { preparePlayerRoot } from './PlayerRoot';
 import {
   createEmptyCharacterSheet,
   emptyUltimateSkill,
@@ -306,7 +313,20 @@ function renderScene(projection: PlayerProjection): HTMLElement {
 }
 
 const generatedPlayerWorlds = new Map<string, Promise<World>>();
-const playerMapViewports = new WeakMap<HTMLCanvasElement, { readonly camera: Camera; readonly worldWidth: number; readonly worldHeight: number }>();
+
+interface PlayerMapViewport {
+  readonly camera: Camera;
+  readonly renderer: CanvasRenderer;
+  readonly world: World;
+  readonly projection: PlayerProjection;
+  preset: PlayerMapPreset;
+  showGrid: boolean;
+  visibleLayers: Set<RenderLayer>;
+}
+
+const playerMapViewports = new WeakMap<HTMLCanvasElement, PlayerMapViewport>();
+const playerMapCleanups = new WeakMap<HTMLCanvasElement, () => void>();
+let playerMapDrawSequence = 0;
 
 function playerWorldRecipeKey(recipe: PlayerWorldGenerationRecipe): string {
   return JSON.stringify([recipe.generationVersion, recipe.seed, recipe.options]);
@@ -413,6 +433,52 @@ function drawProjectedMapFeatures(
   }
 }
 
+function applyPlayerMapLayers(viewport: PlayerMapViewport): void {
+  for (const layer of Object.values(RenderLayer)) viewport.renderer.layers.setVisible(layer, false);
+  for (const layer of viewport.visibleLayers) viewport.renderer.layers.setVisible(layer, true);
+  viewport.renderer.layers.setVisible(RenderLayer.Grid, viewport.showGrid);
+  // Recipient-safe projected markers replace these generated marker layers.
+  // Showing both was the source of the doubled labels in Player View.
+  viewport.renderer.layers.setVisible(RenderLayer.Settlements, false);
+  viewport.renderer.layers.setVisible(RenderLayer.Anchors, false);
+}
+
+function renderPlayerMapViewport(canvas: HTMLCanvasElement): void {
+  const viewport = playerMapViewports.get(canvas);
+  if (viewport === undefined || !canvas.isConnected) return;
+  const frame = preparePlayerCanvas(canvas);
+  if (frame === null) return;
+  applyPlayerMapLayers(viewport);
+  viewport.renderer.render(viewport.world, viewport.camera, {
+    width: frame.width,
+    height: frame.height,
+    pixelRatio: frame.density,
+  });
+  drawProjectedMapFeatures(
+    frame,
+    viewport.projection,
+    viewport.world.width,
+    viewport.world.height,
+    viewport.camera,
+  );
+}
+
+function fitPlayerMapViewport(canvas: HTMLCanvasElement): void {
+  const viewport = playerMapViewports.get(canvas);
+  if (viewport === undefined) return;
+  const rect = canvas.getBoundingClientRect();
+  viewport.camera.fit(viewport.world.width, viewport.world.height, rect.width, rect.height);
+  renderPlayerMapViewport(canvas);
+}
+
+function zoomPlayerMapViewport(canvas: HTMLCanvasElement, factor: number, screenX?: number, screenY?: number): void {
+  const viewport = playerMapViewports.get(canvas);
+  if (viewport === undefined) return;
+  const rect = canvas.getBoundingClientRect();
+  viewport.camera.zoomAt(screenX ?? rect.width / 2, screenY ?? rect.height / 2, factor);
+  renderPlayerMapViewport(canvas);
+}
+
 function clearPlayerMapCanvas(canvas: HTMLCanvasElement): void {
   playerMapViewports.delete(canvas);
   const frame = preparePlayerCanvas(canvas);
@@ -422,7 +488,13 @@ function clearPlayerMapCanvas(canvas: HTMLCanvasElement): void {
   context.fillRect(0, 0, width, height);
 }
 
-async function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection, status?: HTMLElement): Promise<void> {
+async function drawMap(
+  canvas: HTMLCanvasElement,
+  projection: PlayerProjection,
+  preset: PlayerMapPreset,
+  showGrid: boolean,
+  status?: HTMLElement,
+): Promise<void> {
   const recipe = projection.map.worldRecipe;
   if (recipe === null) {
     clearPlayerMapCanvas(canvas);
@@ -430,35 +502,27 @@ async function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection, 
     return;
   }
   clearPlayerMapCanvas(canvas);
-  const key = playerWorldRecipeKey(recipe);
-  canvas.dataset.playerWorldRecipe = key;
+  const drawId = String(++playerMapDrawSequence);
+  canvas.dataset.playerMapDraw = drawId;
   if (status !== undefined) status.textContent = `Generating ${recipe.seed} locally from the shared world seed…`;
   try {
     const world = await generatePlayerWorld(recipe);
-    if (!canvas.isConnected || canvas.dataset.playerWorldRecipe !== key) return;
-    const frame = preparePlayerCanvas(canvas);
-    if (frame === null) return;
-    frame.context.setTransform(1, 0, 0, 1, 0, 0);
-    frame.context.clearRect(0, 0, canvas.width, canvas.height);
+    if (!canvas.isConnected || canvas.dataset.playerMapDraw !== drawId) return;
     const renderer = new CanvasRenderer(canvas);
     renderer.setCustomization(EMPTY_RENDER_CUSTOMIZATION);
-    for (const layer of [
-      RenderLayer.Story,
-      RenderLayer.NPCs,
-      RenderLayer.HiddenPayaw,
-      RenderLayer.SupernaturalActivity,
-      RenderLayer.Travel,
-      RenderLayer.CustomImages,
-      RenderLayer.Authoring,
-      RenderLayer.LiveInfrastructure,
-      RenderLayer.VenueStatus,
-      RenderLayer.SettlementActivity,
-    ]) renderer.layers.setVisible(layer, false);
     const camera = new Camera();
-    camera.fit(world.width, world.height, frame.width, frame.height);
-    renderer.render(world, camera, { width: frame.width, height: frame.height, pixelRatio: frame.density });
-    playerMapViewports.set(canvas, { camera, worldWidth: world.width, worldHeight: world.height });
-    drawProjectedMapFeatures(frame, projection, world.width, world.height, camera);
+    const rect = canvas.getBoundingClientRect();
+    camera.fit(world.width, world.height, rect.width, rect.height);
+    playerMapViewports.set(canvas, {
+      camera,
+      renderer,
+      world,
+      projection,
+      preset,
+      showGrid,
+      visibleLayers: new Set(PLAYER_MAP_PRESETS[preset]),
+    });
+    renderPlayerMapViewport(canvas);
     if (status !== undefined) status.textContent = `Generated locally from seed “${recipe.seed}”. Click a revealed marker to inspect it.`;
   } catch (error) {
     if (status !== undefined) {
@@ -478,22 +542,63 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
   appendText(copy, 'strong', 'Campaign town map');
   appendText(copy, 'small', 'The player browser regenerates this map from the shared seed and public overrides. Story locations appear only after a GM reveal.');
   const controls = create('div', 'player-map-toolbar-controls');
+  const viewSelect = create('select');
+  viewSelect.setAttribute('aria-label', 'Map view');
+  for (const [value, label] of [
+    ['town', 'Town'],
+    ['region', 'Region'],
+    ['terrain', 'Terrain'],
+    ['hydrology', 'Hydrology'],
+    ['planning', 'Planning'],
+  ] as const) {
+    const item = create('option');
+    item.value = value;
+    item.textContent = label;
+    viewSelect.append(item);
+  }
+  const zoomOut = create('button', 'player-secondary', '−');
+  zoomOut.type = 'button';
+  zoomOut.setAttribute('aria-label', 'Zoom map out');
+  const zoomIn = create('button', 'player-secondary', '+');
+  zoomIn.type = 'button';
+  zoomIn.setAttribute('aria-label', 'Zoom map in');
+  const fitMap = create('button', 'player-secondary', 'Fit');
+  fitMap.type = 'button';
+  const gridToggle = create('button', 'player-secondary', 'Grid');
+  gridToggle.type = 'button';
+  gridToggle.setAttribute('aria-pressed', 'false');
+  const layerMenu = create('details', 'player-map-layer-menu');
+  const layerSummary = create('summary', '', 'Layers');
+  const layerList = create('div', 'player-map-layer-list');
+  const layerInputs = new Map<RenderLayer, HTMLInputElement>();
+  for (const item of PLAYER_SAFE_MAP_LAYERS) {
+    const label = create('label');
+    const input = create('input');
+    input.type = 'checkbox';
+    input.checked = PLAYER_MAP_PRESETS.town.includes(item.layer);
+    input.dataset.mapLayer = item.layer;
+    layerInputs.set(item.layer, input);
+    label.append(input, document.createTextNode(item.label));
+    layerList.append(label);
+  }
+  layerMenu.append(layerSummary, layerList);
   const pingLabel = create('input');
   pingLabel.placeholder = 'Ping label';
   pingLabel.setAttribute('aria-label', 'Map ping label');
   const pingMode = create('button', 'player-secondary', 'Place ping');
   pingMode.type = 'button';
   pingMode.disabled = !projection.capabilities.includes('map.ping');
-  controls.append(pingLabel, pingMode);
+  controls.append(viewSelect, layerMenu, zoomOut, zoomIn, fitMap, gridToggle, pingLabel, pingMode);
   toolbar.append(copy, controls);
   const stage = create('div', 'player-map-stage');
   const canvas = create('canvas');
   canvas.id = 'player-map-canvas';
   canvas.setAttribute('aria-label', 'Revealed campaign map');
+  canvas.tabIndex = 0;
   const status = create('div', 'player-map-status', 'Click a revealed marker to inspect it.');
   stage.append(canvas, status);
   const legend = create('div', 'player-map-legend');
-  for (const [label, color] of [['Buildings', '#cbc6b5'], ['Current scene', '#e7b56c'], ['Community', '#9bd7c6'], ['Known place', '#dce8df'], ['Your ping', '#e48781']] as const) {
+  for (const [label, color] of [['Buildings', '#cbc6b5'], ['Current scene', '#e7b56c'], ['Community', '#9bd7c6'], ['Known place', '#dce8df'], ['Party ping', '#e48781']] as const) {
     const item = create('span', '', label);
     item.style.setProperty('--legend', color);
     legend.append(item);
@@ -501,12 +606,115 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
   mapCard.append(toolbar, stage, legend);
   wrapper.append(mapCard);
   let placingPing = false;
+  let mapPreset: PlayerMapPreset = 'town';
+  let showGrid = false;
+  let draggingMap = false;
+  let pointerTravel = 0;
+  let lastPointerX = 0;
+  let lastPointerY = 0;
+  const renderCurrentMap = (): void => {
+    const viewport = playerMapViewports.get(canvas);
+    if (viewport === undefined) return;
+    viewport.showGrid = showGrid;
+    renderPlayerMapViewport(canvas);
+  };
+  const syncLayerInputs = (): void => {
+    const visible = new Set(PLAYER_MAP_PRESETS[mapPreset]);
+    for (const [layer, input] of layerInputs) input.checked = visible.has(layer);
+  };
+  viewSelect.addEventListener('change', () => {
+    mapPreset = viewSelect.value as PlayerMapPreset;
+    const viewport = playerMapViewports.get(canvas);
+    if (viewport !== undefined) {
+      viewport.preset = mapPreset;
+      viewport.visibleLayers = new Set(PLAYER_MAP_PRESETS[mapPreset]);
+    }
+    syncLayerInputs();
+    renderCurrentMap();
+    if (mapPreset === 'region') fitPlayerMapViewport(canvas);
+    status.textContent = `${viewSelect.selectedOptions[0]?.textContent ?? 'Town'} map view.`;
+  });
+  for (const [layer, input] of layerInputs) {
+    input.addEventListener('change', () => {
+      const viewport = playerMapViewports.get(canvas);
+      if (viewport === undefined) return;
+      if (input.checked) viewport.visibleLayers.add(layer);
+      else viewport.visibleLayers.delete(layer);
+      renderPlayerMapViewport(canvas);
+      status.textContent = `${PLAYER_SAFE_MAP_LAYERS.find((item) => item.layer === layer)?.label ?? 'Map layer'} ${input.checked ? 'shown' : 'hidden'}.`;
+    });
+  }
+  zoomOut.addEventListener('click', () => zoomPlayerMapViewport(canvas, 0.8));
+  zoomIn.addEventListener('click', () => zoomPlayerMapViewport(canvas, 1.25));
+  fitMap.addEventListener('click', () => {
+    fitPlayerMapViewport(canvas);
+    status.textContent = 'Map fitted to the available space.';
+  });
+  gridToggle.addEventListener('click', () => {
+    showGrid = !showGrid;
+    gridToggle.classList.toggle('player-primary', showGrid);
+    gridToggle.setAttribute('aria-pressed', String(showGrid));
+    renderCurrentMap();
+  });
   pingMode.addEventListener('click', () => {
     placingPing = !placingPing;
     pingMode.classList.toggle('player-primary', placingPing);
     status.textContent = placingPing ? 'Click the map to place a temporary ping.' : 'Ping placement cancelled.';
   });
+  canvas.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    draggingMap = true;
+    pointerTravel = 0;
+    lastPointerX = event.clientX;
+    lastPointerY = event.clientY;
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!draggingMap) return;
+    const deltaX = event.clientX - lastPointerX;
+    const deltaY = event.clientY - lastPointerY;
+    pointerTravel += Math.hypot(deltaX, deltaY);
+    lastPointerX = event.clientX;
+    lastPointerY = event.clientY;
+    const viewport = playerMapViewports.get(canvas);
+    if (viewport === undefined) return;
+    viewport.camera.pan(deltaX, deltaY);
+    renderPlayerMapViewport(canvas);
+  });
+  const endMapDrag = (event: PointerEvent): void => {
+    draggingMap = false;
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  };
+  canvas.addEventListener('pointerup', endMapDrag);
+  canvas.addEventListener('pointercancel', endMapDrag);
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    zoomPlayerMapViewport(
+      canvas,
+      Math.exp(-event.deltaY * 0.0015),
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+    );
+  }, { passive: false });
+  canvas.addEventListener('keydown', (event) => {
+    const viewport = playerMapViewports.get(canvas);
+    if (viewport === undefined) return;
+    const panStep = 40;
+    if (event.key === 'ArrowLeft') viewport.camera.pan(panStep, 0);
+    else if (event.key === 'ArrowRight') viewport.camera.pan(-panStep, 0);
+    else if (event.key === 'ArrowUp') viewport.camera.pan(0, panStep);
+    else if (event.key === 'ArrowDown') viewport.camera.pan(0, -panStep);
+    else if (event.key === '+' || event.key === '=') zoomPlayerMapViewport(canvas, 1.25);
+    else if (event.key === '-' || event.key === '_') zoomPlayerMapViewport(canvas, 0.8);
+    else if (event.key.toLocaleLowerCase() === 'f') fitPlayerMapViewport(canvas);
+    else return;
+    event.preventDefault();
+    renderPlayerMapViewport(canvas);
+  });
+  canvas.addEventListener('dblclick', () => fitPlayerMapViewport(canvas));
   canvas.addEventListener('click', (event) => {
+    if (pointerTravel > 5) return;
     const rect = canvas.getBoundingClientRect();
     const base = projection.map.base;
     if (base === null) return;
@@ -521,6 +729,8 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
     if (placingPing) {
       onCommand({ kind: 'map.ping', x, y, label: pingLabel.value });
       placingPing = false;
+      pingMode.classList.remove('player-primary');
+      status.textContent = 'Party ping shared.';
       return;
     }
     const nearest = projection.map.features.filter((feature) => feature.position !== null).map((feature) => ({ feature, distance: Math.hypot((feature.position?.x ?? 0) - x, (feature.position?.y ?? 0) - y) })).sort((left, right) => left.distance - right.distance)[0];
@@ -528,9 +738,32 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
       ? `${nearest.feature.label} · ${titleCase(nearest.feature.knowledge)} · ${nearest.feature.detail}`
       : `Map position ${Math.round(x)}, ${Math.round(y)}`;
   });
-  requestAnimationFrame(() => { void drawMap(canvas, projection, status); });
-  const observer = new ResizeObserver(() => { void drawMap(canvas, projection, status); });
+  requestAnimationFrame(() => {
+    void drawMap(canvas, projection, mapPreset, showGrid, status).then(() => {
+      const viewport = playerMapViewports.get(canvas);
+      if (viewport === undefined) return;
+      viewport.preset = mapPreset;
+      viewport.showGrid = showGrid;
+      viewport.visibleLayers = new Set(
+        [...layerInputs].filter(([, input]) => input.checked).map(([layer]) => layer),
+      );
+      if (mapPreset === 'region') fitPlayerMapViewport(canvas);
+      else renderPlayerMapViewport(canvas);
+    });
+  });
+  const observer = new ResizeObserver(() => {
+    if (!canvas.isConnected) {
+      observer.disconnect();
+      return;
+    }
+    renderPlayerMapViewport(canvas);
+  });
   observer.observe(stage);
+  playerMapCleanups.set(canvas, () => {
+    observer.disconnect();
+    delete canvas.dataset.playerMapDraw;
+    playerMapViewports.delete(canvas);
+  });
   const places = card('Map locations', 'Ordinary communities are public; rumors and story locations appear only after the GM reveals them.');
   const list = create('div', 'player-list');
   if (projection.map.features.length === 0) list.append(emptyState('No named locations on the map', 'The town geometry is still visible. Story locations appear when the GM reveals them.'));
@@ -1616,9 +1849,7 @@ function createAccountDialog(
 export function installPlayerApp(options: PlayerAppOptions = {}): void {
   const app = document.querySelector<HTMLElement>('#app');
   if (app === null) throw new Error('Player View requires the #app root.');
-  for (const child of [...document.body.children]) if (child !== app) child.remove();
-  document.body.classList.add('player-view-body');
-  document.title = 'PAYAW Player View';
+  preparePlayerRoot(app, 'PAYAW Player View', 'player-view-body');
   let loaded: { readonly projection: PlayerProjection; readonly key: string };
   try {
     loaded = options.session === undefined
@@ -1698,7 +1929,7 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
   const footer = create('footer', 'player-footer');
   const footerContext = create('span', '', `PLAYER · ${PANEL_INFO[activePanel].label}`);
   const footerRevision = create('span', '', `Projection v${projection.projectionVersion} · Revision ${projection.revision}`);
-  footer.append(footerContext, footerRevision, create('span', '', 'PAYAW 0.24.0'));
+  footer.append(footerContext, footerRevision, create('span', '', PAYAW_VERSION_LABEL));
   shell.append(header, layout, footer); app.append(shell);
   const searchResults = create('div', 'player-search-results'); searchResults.hidden = true; document.body.append(searchResults);
 
@@ -1710,6 +1941,8 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
     }
     footerContext.textContent = `PLAYER · ${PANEL_INFO[activePanel].label}`;
     footerRevision.textContent = `Projection v${projection.projectionVersion} · Revision ${projection.revision}`;
+    const activeMap = content.querySelector<HTMLCanvasElement>('#player-map-canvas');
+    if (activeMap !== null) playerMapCleanups.get(activeMap)?.();
     content.replaceChildren(renderPanel(activePanel, projection, applyCommand, options));
     main.scrollTop = 0;
   };

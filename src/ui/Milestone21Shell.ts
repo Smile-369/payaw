@@ -1,3 +1,5 @@
+import { PAYAW_VERSION_LABEL } from '../version';
+
 type Workspace = 'editor' | 'dm';
 type PanelKey =
   | 'generate' | 'map' | 'anchors' | 'story' | 'npcs' | 'project'
@@ -52,7 +54,12 @@ function makeButton(item: RailItem): HTMLButtonElement {
   button.dataset.ms21Panel = item.key;
   button.dataset.workspace = item.workspace;
   button.title = item.description;
-  button.innerHTML = `<span aria-hidden="true">${item.icon}</span><small>${item.label}</small>`;
+  const icon = document.createElement('span');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = item.icon;
+  const label = document.createElement('small');
+  label.textContent = item.label;
+  button.append(icon, label);
   return button;
 }
 
@@ -207,7 +214,13 @@ export function installMilestone21Shell(): void {
       <div class="ms21-brand"><span class="ms21-app-icon">P</span><div><strong>PAYAW Campaign Studio</strong><small>GM workspace · private player rooms</small></div></div>
       <div class="ms21-window-buttons" aria-hidden="true"><b>_</b><b>□</b><b>×</b></div>
     </div>
-    <div class="ms21-menubar"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Campaign</button><button type="button">Help</button></div>
+    <div class="ms21-menubar" aria-label="Application actions">
+      <button type="button" data-ms21-menu="project">Project</button>
+      <button type="button" data-ms21-menu="commands">Commands</button>
+      <button type="button" data-ms21-menu="view">View</button>
+      <button type="button" data-ms21-menu="campaign">Campaign</button>
+      <button type="button" data-ms21-menu="help">Help</button>
+    </div>
     <div class="ms21-commandbar">
       <div id="ms21-workspace-slot"></div>
       <label class="ms21-global-search"><span>Find</span><input id="ms21-global-search" type="search" placeholder="Search or run a command…" autocomplete="off"></label>
@@ -241,9 +254,42 @@ export function installMilestone21Shell(): void {
 
   const footer = document.createElement('footer');
   footer.className = 'ms21-footer';
-  footer.innerHTML = '<span>Ready</span><span id="ms21-footer-context">CAMPAIGN · Dashboard</span><span>PAYAW 0.24.0</span>';
+  footer.replaceChildren(
+    Object.assign(document.createElement('span'), { textContent: 'Ready' }),
+    Object.assign(document.createElement('span'), { id: 'ms21-footer-context', textContent: 'CAMPAIGN · Dashboard' }),
+    Object.assign(document.createElement('span'), { textContent: PAYAW_VERSION_LABEL }),
+  );
 
-  shell.append(topbar, body, footer);
+  const helpDialog = document.createElement('dialog');
+  helpDialog.className = 'ms21-help-dialog';
+  helpDialog.setAttribute('aria-labelledby', 'ms21-help-title');
+  helpDialog.innerHTML = `
+    <header class="titlebar-blue">
+      <strong id="ms21-help-title">PAYAW Quick Help</strong>
+      <button type="button" aria-label="Close help">×</button>
+    </header>
+    <div class="ms21-help-content">
+      <p><strong>WORLD</strong> generates and authors the setting. <strong>CAMPAIGN</strong> prepares scenes and runs sessions.</p>
+      <dl>
+        <dt>Ctrl/Cmd + P</dt><dd>Open commands</dd>
+        <dt>Ctrl/Cmd + S</dt><dd>Save project JSON</dd>
+        <dt>Ctrl/Cmd + O</dt><dd>Open project JSON</dd>
+        <dt>F</dt><dd>Fit the map or focus the selection</dd>
+        <dt>[ / ]</dt><dd>Toggle workspace panels</dd>
+      </dl>
+      <p>Keep a recent project export as your portable backup. Player credentials and hosted-room controls are under CAMPAIGN → Players.</p>
+    </div>`;
+
+  const narrowScreen = document.createElement('main');
+  narrowScreen.className = 'ms21-narrow-screen';
+  narrowScreen.innerHTML = `
+    <section>
+      <span class="ms21-app-icon" aria-hidden="true">P</span>
+      <h1>Open PAYAW Campaign Studio on a wider screen</h1>
+      <p>The GM workspace is designed for a desktop or tablet at least 760 pixels wide. The Player Portal remains available on phones.</p>
+    </section>`;
+
+  shell.append(topbar, body, footer, helpDialog, narrowScreen);
   app.replaceWith(shell);
 
   requireElement<HTMLElement>('#ms21-workspace-slot').append(workspaceSwitcher);
@@ -296,6 +342,33 @@ export function installMilestone21Shell(): void {
     dock.classList.remove('collapsed');
     document.querySelector<HTMLButtonElement>('#studio-tab-project')?.click();
   };
+
+  const closeHelp = helpDialog.querySelector<HTMLButtonElement>('header button');
+  closeHelp?.addEventListener('click', () => helpDialog.close());
+
+  for (const button of Array.from(topbar.querySelectorAll<HTMLButtonElement>('[data-ms21-menu]'))) {
+    button.addEventListener('click', () => {
+      switch (button.dataset.ms21Menu) {
+        case 'project':
+          showProjectDock();
+          break;
+        case 'commands':
+          document.querySelector<HTMLButtonElement>('#command-palette-button')?.click();
+          break;
+        case 'view':
+          document.querySelector<HTMLButtonElement>('#toggle-studio-dock-button')?.click();
+          break;
+        case 'campaign':
+          workspaceSwitcher.querySelector<HTMLButtonElement>('[data-workspace="dm"]')?.click();
+          setTimeout(() => applyPanel('dm', 'dashboard'), 0);
+          break;
+        case 'help':
+          helpDialog.showModal();
+          closeHelp?.focus();
+          break;
+      }
+    });
+  }
 
   const applyPanel = (workspace: Workspace, key: PanelKey): void => {
     activePanels[workspace] = key;
