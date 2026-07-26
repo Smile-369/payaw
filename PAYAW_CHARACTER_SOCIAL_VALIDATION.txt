@@ -1,0 +1,27 @@
+PAYAW Player Character Social Editor — Validation
+Date: 2026-07-26
+
+PASSED
+- Strict TypeScript (`tsc --noEmit`)
+- Character social/privacy behavior test
+- Milestone 22 test suite
+- Milestone 23 test suite
+- Edge Function TypeScript syntax transpilation
+- Dependency-independent static QA build
+
+FEATURE GATES VERIFIED
+- Complete Character-tab editing
+- Profile image and six-image gallery UI
+- Private Supabase Storage image tokens
+- Party character profile tabs
+- Sanitized public profiles
+- Private wish/taboo/consequence/risk/NPC ties/notes excluded
+- Locked Ultimate Skill excluded
+- Unlocked Ultimate Skill visible
+- Single full-sheet command
+- Atomic party projection synchronization
+- Older editable saves upgraded to the complete editor
+- Signed image URL cache refreshes before expiry
+
+ENVIRONMENT LIMITATION
+The normal Vite bundle could not be executed in this Linux container because the available copied node_modules contained a Windows-native Rolldown binding. The dependency-independent static build passed. Run a clean pnpm install and pnpm run build in the project environment.

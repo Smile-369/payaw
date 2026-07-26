@@ -921,69 +921,6 @@ textarea {
 }
 .player-dice-result small { color: #555; }
 
-
-/* Dice tray must remain an opaque application window over the map. Keep these
-   selectors dialog-specific so generic utility-panel changes cannot make it
-   translucent again. */
-#player-dice-dialog.player-dice-dialog {
-  background-color: rgb(31 59 91 / 68%);
-}
-#player-dice-dialog .player-dice-panel {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(120px, 1fr);
-  width: min(760px, calc(100vw - 24px));
-  max-height: min(720px, calc(100vh - 24px));
-  overflow: hidden;
-  padding: 7px;
-  color: #111;
-  background: linear-gradient(#d4d0c8, #d4d0c8) !important;
-  background-color: #d4d0c8 !important;
-  border: 2px outset #fff;
-  opacity: 1 !important;
-}
-#player-dice-dialog .player-utility-panel-head {
-  margin: 0 0 8px;
-  flex: 0 0 auto;
-}
-#player-dice-dialog .player-utility-panel-head h2 {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.2;
-}
-#player-dice-dialog .player-form-grid {
-  margin: 0 8px 8px;
-  padding: 8px;
-  background: #d4d0c8 !important;
-  border: 1px solid #808080;
-}
-#player-dice-dialog .player-dice-result {
-  margin: 0 8px 8px;
-  background: #fff !important;
-  opacity: 1 !important;
-}
-#player-dice-dialog .player-list {
-  min-height: 0;
-  margin: 0 8px 8px;
-  padding: 6px;
-  overflow: auto;
-  background: #fff !important;
-  border: 2px inset #ddd;
-  opacity: 1 !important;
-}
-#player-dice-dialog .player-list-item {
-  background: #fff !important;
-  opacity: 1 !important;
-}
-@media (max-width: 640px) {
-  #player-dice-dialog.player-dice-dialog { padding: 6px; }
-  #player-dice-dialog .player-dice-panel {
-    width: 100%;
-    max-height: calc(100vh - 12px);
-  }
-}
-
 .player-search-results {
   top: 52px;
   padding: 5px;
@@ -1142,4 +1079,939 @@ textarea {
   .player-header-account { min-height: 28px; padding: 4px 7px; }
   .player-account-form { grid-template-columns: 1fr; }
   .player-account-form .player-field { grid-column: 1; }
+}
+
+
+/* Player message history: fixed viewport, visible scrollbar, stable newest-first access. */
+.player-message-thread-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  max-height: calc(100dvh - 150px);
+  overflow: hidden;
+}
+
+.player-message-thread-card > .player-card-head {
+  flex: 0 0 auto;
+}
+
+.player-message-thread-card > .player-thread {
+  min-height: 160px;
+  max-height: clamp(260px, 58dvh, 680px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-content: start;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 2px 8px 2px 2px;
+}
+
+.player-message-thread-card > .player-form {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding-top: 8px;
+  background: #f4f4f4;
+  border-top: 1px solid #888;
+}
+
+.player-message-thread-card .player-message {
+  width: min(680px, 88%);
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.player-message-thread-card > .player-thread::-webkit-scrollbar {
+  width: 16px;
+}
+.player-message-thread-card > .player-thread::-webkit-scrollbar-track {
+  background: #d4d0c8;
+  border: 1px inset #eee;
+}
+.player-message-thread-card > .player-thread::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  background: #b7b7b7;
+  border: 2px outset #eee;
+}
+
+@media (max-width: 980px) {
+  .player-message-thread-card {
+    max-height: calc(100dvh - 132px);
+  }
+  .player-message-thread-card > .player-thread {
+    max-height: calc(100dvh - 285px);
+  }
+}
+
+/* Character tab only: early-2000s MySpace-style profile. */
+.player-character-myspace-page {
+  --myspace-blue: #003399;
+  --myspace-blue-mid: #336699;
+  --myspace-blue-light: #b1d0f0;
+  --myspace-blue-pale: #d5e8fb;
+  --myspace-orange: #ffcc99;
+  --myspace-orange-strong: #ff9933;
+  --myspace-border: #6699cc;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.player-myspace-profile {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #999;
+}
+
+.player-myspace-left,
+.player-myspace-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.player-myspace-identity {
+  color: #111;
+  background: #fff;
+}
+
+.player-myspace-identity h2 {
+  margin: 0 0 4px;
+  color: #111;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.player-myspace-network {
+  margin: 0 0 8px;
+  color: #444;
+  font-size: 11px;
+}
+
+.player-myspace-portrait {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(135deg, #2458a6, #7fa9d6);
+  border: 1px solid #333;
+  font-size: clamp(42px, 8vw, 78px);
+  font-weight: 700;
+}
+
+.player-myspace-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-myspace-online {
+  display: block;
+  margin-top: 5px;
+  color: #f60;
+  font-size: 15px;
+}
+
+.player-myspace-mood {
+  margin: 4px 0 0;
+  color: #333;
+  font-size: 11px;
+}
+
+.player-myspace-box {
+  min-width: 0;
+  padding: 0 6px 7px;
+  color: #111;
+  background: #fff;
+  border: 2px solid var(--myspace-border);
+}
+
+.player-myspace-box-title {
+  margin: 0 -6px 7px;
+  padding: 4px 6px;
+  color: #fff;
+  background: var(--myspace-blue-mid);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.player-myspace-main > .player-myspace-box > .player-myspace-box-title,
+.player-myspace-blurbs > .player-myspace-box-title,
+.player-myspace-skills > .player-myspace-box-title,
+.player-myspace-comments > .player-myspace-box-title {
+  color: #c60;
+  background: var(--myspace-orange);
+}
+
+.player-myspace-profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  color: #fff;
+  background: var(--myspace-blue);
+}
+
+.player-myspace-profile-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.player-myspace-profile-header span {
+  overflow: hidden;
+  color: #dcecff;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-myspace-contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  padding: 2px;
+}
+
+.player-myspace-contact-grid span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  color: var(--myspace-blue);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.player-myspace-contact-grid b {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  background: var(--myspace-blue-mid);
+  border: 1px solid #184b7a;
+  font-size: 10px;
+}
+
+.player-myspace-details {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid #fff;
+}
+
+.player-myspace-detail {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 6px;
+  padding: 5px 6px;
+  background: var(--myspace-blue-pale);
+  border-bottom: 1px solid #fff;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.player-myspace-detail strong {
+  color: var(--myspace-blue-mid);
+}
+
+.player-myspace-detail span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.player-myspace-import p {
+  margin: 6px 0;
+  color: #333;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.player-myspace-import button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.player-myspace-import-status {
+  padding: 5px;
+  color: #444 !important;
+  background: #ffffe1;
+  border: 1px solid #b7a86e;
+}
+
+.player-myspace-blurbs-body {
+  display: grid;
+  gap: 12px;
+  padding: 2px 4px 4px;
+}
+
+.player-myspace-blurb h3 {
+  margin: 0 0 3px;
+  color: #f60;
+  font-size: 13px;
+}
+
+.player-myspace-blurb p {
+  margin: 0;
+  color: #111;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.player-myspace-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.player-myspace-stat {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 6px 8px;
+  background: var(--myspace-blue-pale);
+  border: 1px solid #a3c1df;
+}
+
+.player-myspace-stat strong {
+  color: var(--myspace-blue-mid);
+  font-size: 11px;
+}
+
+.player-myspace-stat span {
+  color: #111;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.player-myspace-malas {
+  grid-column: 1 / -1;
+  background: #fff0e0;
+  border-color: #e0a35d;
+}
+
+.player-myspace-malas strong,
+.player-myspace-malas span {
+  color: #a33b00;
+}
+
+.player-myspace-skill-list {
+  display: grid;
+  gap: 7px;
+}
+
+.player-myspace-skill {
+  padding: 7px;
+  background: #f8fbff;
+  border: 1px solid #9db9d5;
+}
+
+.player-myspace-skill-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #c7d9eb;
+}
+
+.player-myspace-skill-head strong,
+.player-myspace-skill-head span {
+  display: block;
+}
+
+.player-myspace-skill-head strong {
+  color: var(--myspace-blue);
+  font-size: 13px;
+}
+
+.player-myspace-skill-head div > span {
+  margin-top: 2px;
+  color: #666;
+  font-size: 10px;
+}
+
+.player-myspace-pill {
+  flex: 0 0 auto;
+  padding: 3px 5px;
+  color: #fff !important;
+  background: var(--myspace-blue-mid);
+  border: 1px solid #17446f;
+  font-size: 9px !important;
+  font-weight: 700;
+}
+
+.player-myspace-skill p {
+  margin: 5px 0 0;
+  color: #222;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.player-myspace-table {
+  display: grid;
+  gap: 3px;
+}
+
+.player-myspace-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 8px;
+  padding: 6px 7px;
+  background: var(--myspace-blue-pale);
+  border-bottom: 1px solid #fff;
+  font-size: 11px;
+}
+
+.player-myspace-table-row strong {
+  color: var(--myspace-blue);
+}
+
+.player-myspace-table-row p {
+  margin: 3px 0 0;
+  color: #333;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.player-myspace-table-row > span {
+  color: #444;
+  text-align: right;
+}
+
+.player-myspace-comment {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 9px;
+  padding: 6px;
+  background: var(--myspace-blue-pale);
+}
+
+.player-myspace-comment-avatar {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  color: #fff;
+  background: var(--myspace-blue-mid);
+  border: 1px solid #123f6c;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.player-myspace-comment strong {
+  color: var(--myspace-blue);
+  font-size: 11px;
+}
+
+.player-myspace-comment p {
+  margin: 5px 0 0;
+  color: #111;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.player-myspace-editor {
+  margin-top: 10px;
+  border-color: #999;
+}
+
+.player-myspace-editor > .player-myspace-box-title {
+  color: #fff;
+  background: #777;
+}
+
+@media (max-width: 880px) {
+  .player-myspace-profile {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .player-myspace-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .player-myspace-profile {
+    grid-template-columns: 1fr;
+  }
+
+  .player-myspace-left {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .player-myspace-identity,
+  .player-myspace-import {
+    grid-column: 1 / -1;
+  }
+
+  .player-myspace-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .player-myspace-table-row > span {
+    text-align: left;
+  }
+}
+
+@media (max-width: 440px) {
+  .player-myspace-left,
+  .player-myspace-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .player-myspace-detail {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+}
+
+
+/* Party character directory, image gallery, and full sheet editor. */
+.player-character-profile-tabs {
+  display: flex;
+  gap: 3px;
+  margin: 8px 8px 0;
+  padding: 5px 5px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #d4d0c8;
+  border: 1px solid #808080;
+  border-bottom: 0;
+  scrollbar-width: thin;
+}
+
+.player-character-profile-tabs button {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 132px;
+  max-width: 240px;
+  padding: 7px 10px 6px 18px;
+  overflow: hidden;
+  color: #111;
+  background: #ece9d8;
+  border: 2px outset #fff;
+  font: 700 11px Arial, Helvetica, sans-serif;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.player-character-profile-tabs button::before {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 7px;
+  height: 7px;
+  background: var(--player-profile-color, #36a36a);
+  border: 1px solid #174d31;
+  transform: translateY(-50%);
+  content: '';
+}
+
+.player-character-profile-tabs button:hover,
+.player-character-profile-tabs button:focus-visible {
+  background: #fff;
+}
+
+.player-character-profile-tabs button.active {
+  z-index: 1;
+  color: #fff;
+  background: #24599b;
+  border-style: inset;
+}
+
+.player-character-profile-tabs button.active::before {
+  background: #8ee0a8;
+}
+
+.player-character-profile-host {
+  min-height: 360px;
+  margin: 0 8px 8px;
+  padding: 0;
+  overflow: visible;
+  background: #fff;
+  border: 1px solid #808080;
+}
+
+.player-character-own-page,
+.player-character-public-page {
+  min-width: 0;
+  padding: 8px;
+}
+
+.player-character-privacy-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  color: #172943;
+  background: #e8f3ff;
+  border: 1px solid #6699cc;
+  font: 11px/1.35 Arial, Helvetica, sans-serif;
+}
+
+.player-character-privacy-note strong {
+  flex: 0 0 auto;
+  color: #003399;
+}
+
+.player-character-image-loading {
+  opacity: .55;
+}
+
+.player-character-image-unavailable {
+  min-height: 80px;
+  background: repeating-linear-gradient(135deg, #eee 0 8px, #ddd 8px 16px);
+}
+
+.player-character-image-unavailable::after {
+  color: #555;
+  font-size: 10px;
+  content: 'Image unavailable';
+}
+
+.player-character-media-box {
+  display: grid;
+  gap: 5px;
+}
+
+.player-character-media-box button {
+  width: 100%;
+}
+
+.player-myspace-gallery-box {
+  min-width: 0;
+}
+
+.player-myspace-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.player-myspace-gallery-item {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 4 / 3;
+  margin: 0;
+  overflow: hidden;
+  background: #e5e5e5;
+  border: 1px solid #777;
+}
+
+.player-myspace-gallery-item img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-myspace-photo-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  color: #fff;
+  background: #9e1717;
+  border: 2px outset #f4b2b2;
+  font: 700 16px/1 Arial, Helvetica, sans-serif;
+  cursor: pointer;
+}
+
+.player-character-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 2px;
+}
+
+.player-myspace-ultimate {
+  border-color: #8a51b5;
+  box-shadow: inset 0 0 0 1px #e1caef;
+}
+
+.player-myspace-ultimate > .player-myspace-box-title {
+  color: #fff !important;
+  background: linear-gradient(#8a4fb0, #542270) !important;
+}
+
+.player-character-full-editor {
+  margin: 12px 8px 8px;
+  background: #f7f7f7;
+}
+
+.player-character-sheet-form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.player-character-editor-section {
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #8f8f8f;
+}
+
+.player-character-editor-section > legend {
+  padding: 2px 7px;
+  color: #003399;
+  background: #d5e8fb;
+  border: 1px solid #6699cc;
+  font: 700 12px Arial, Helvetica, sans-serif;
+}
+
+.player-character-editor-section .player-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.player-character-editor-section .player-field,
+.player-character-editor-section .player-field-wide {
+  min-width: 0;
+}
+
+.player-character-editor-section .player-field-wide {
+  grid-column: 1 / -1;
+}
+
+.player-character-editor-section input:not([type='checkbox']),
+.player-character-editor-section textarea,
+.player-character-editor-section select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.player-character-stat-editor {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.player-character-repeat-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.player-character-repeat-row {
+  min-width: 0;
+  padding: 7px;
+  background: #eef5fc;
+  border: 1px solid #9db9d5;
+}
+
+.player-character-repeat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #b8cade;
+}
+
+.player-character-repeat-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #003399;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-character-repeat-row > .player-secondary,
+.player-character-repeat-head > .player-secondary {
+  flex: 0 0 auto;
+}
+
+.player-character-gear-row > .player-form-grid {
+  margin-bottom: 6px;
+}
+
+.player-character-private-section {
+  background: #fff8df;
+  border-color: #b59a49;
+}
+
+.player-character-private-section > legend {
+  color: #5e4500;
+  background: #ffe9a6;
+  border-color: #c6a953;
+}
+
+.player-character-editor-help {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  color: #4e3d0c;
+  background: #fff3c7;
+  border: 1px solid #d4b75a;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.player-character-ultimate-editor {
+  background: #f8efff;
+  border-color: #8854aa;
+}
+
+.player-character-ultimate-editor > legend {
+  color: #4e1f6d;
+  background: #e7cdf7;
+  border-color: #9b68bb;
+}
+
+.player-character-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  color: #382044;
+  background: #fff;
+  border: 1px solid #b995ce;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.player-character-check input {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+}
+
+.player-character-save {
+  justify-self: start;
+  min-width: 240px;
+  min-height: 34px;
+  font-weight: 700;
+}
+
+@media (max-width: 880px) {
+  .player-character-stat-editor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-myspace-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .player-character-profile-tabs {
+    margin-inline: 4px;
+  }
+
+  .player-character-profile-host {
+    margin-inline: 4px;
+  }
+
+  .player-character-own-page,
+  .player-character-public-page {
+    padding: 5px;
+  }
+
+  .player-character-privacy-note {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .player-character-editor-section .player-form-grid,
+  .player-character-stat-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .player-character-editor-section .player-field-wide {
+    grid-column: auto;
+  }
+
+  .player-character-save {
+    justify-self: stretch;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 440px) {
+  .player-myspace-gallery {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Preserve the opaque Player Dice Tray while this character-tab patch is applied. */
+#player-dice-dialog.player-dice-dialog {
+  background-color: rgb(31 59 91 / 68%);
+}
+#player-dice-dialog .player-dice-panel {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(120px, 1fr);
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(720px, calc(100vh - 24px));
+  overflow: hidden;
+  padding: 7px;
+  color: #111;
+  background: linear-gradient(#d4d0c8, #d4d0c8) !important;
+  background-color: #d4d0c8 !important;
+  border: 2px outset #fff;
+  opacity: 1 !important;
+}
+#player-dice-dialog .player-utility-panel-head {
+  margin: 0 0 8px;
+  flex: 0 0 auto;
+}
+#player-dice-dialog .player-utility-panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+#player-dice-dialog .player-form-grid {
+  margin: 0 8px 8px;
+  padding: 8px;
+  background: #d4d0c8 !important;
+  border: 1px solid #808080;
+}
+#player-dice-dialog .player-dice-result {
+  margin: 0 8px 8px;
+  background: #fff !important;
+  opacity: 1 !important;
+}
+#player-dice-dialog .player-list {
+  min-height: 0;
+  margin: 0 8px 8px;
+  padding: 6px;
+  overflow: auto;
+  background: #fff !important;
+  border: 2px inset #ddd;
+  opacity: 1 !important;
+}
+#player-dice-dialog .player-list-item {
+  background: #fff !important;
+  opacity: 1 !important;
+}
+@media (max-width: 640px) {
+  #player-dice-dialog.player-dice-dialog { padding: 6px; }
+  #player-dice-dialog .player-dice-panel {
+    width: 100%;
+    max-height: calc(100vh - 12px);
+  }
 }

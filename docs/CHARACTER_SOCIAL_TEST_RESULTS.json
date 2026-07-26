@@ -1,0 +1,16 @@
+{
+  "characterTabOnly": true,
+  "atomicSheetUpdate": true,
+  "privateStorageImages": true,
+  "sanitizedPartyProfiles": true,
+  "signedUrlRefresh": true,
+  "behavior": {
+    "fullPlayerEditing": true,
+    "partyProfiles": true,
+    "hiddenFieldsExcluded": true,
+    "characterImages": true,
+    "ultimateSkillPrepared": true,
+    "lockedUltimateHidden": true,
+    "oldSaveUpgrade": true
+  }
+}
