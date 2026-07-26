@@ -880,10 +880,6 @@
     </section>
     <section class="player-preview-block">
       <div class="subsection-heading"><strong>Permitted actions</strong><span>Denied by default unless the projection includes a capability.</span></div>
-      <div class="campaign-form-grid player-capability-batch-controls">
-        <label class="form-field full-width"><span>Apply permissions to</span><select id="player-capability-target"><option value="current">Current player only</option><option value="all">All active players</option></select></label>
-      </div>
-      <div class="button-row player-capability-quick-actions"><button id="player-capability-check-all" type="button">Check all</button><button id="player-capability-clear-all" type="button">Clear all</button></div>
       <div class="player-capability-grid" id="player-capability-grid">
         <label class="check-row"><input data-player-capability="character.edit.self" type="checkbox"/><span>Edit approved character fields</span></label>
         <label class="check-row"><input data-player-capability="journal.write.private" type="checkbox"/><span>Write private journal</span></label>
@@ -892,10 +888,9 @@
         <label class="check-row"><input data-player-capability="message.send.private" type="checkbox"/><span>Send private messages</span></label>
         <label class="check-row"><input data-player-capability="dice.roll" type="checkbox"/><span>Use dice tray</span></label>
         <label class="check-row"><input data-player-capability="map.ping" type="checkbox"/><span>Place map pings</span></label>
-        <label class="check-row"><input data-player-capability="objective.view" type="checkbox"/><span>View Objectives tab</span></label>
         <label class="check-row"><input data-player-capability="objective.propose" type="checkbox"/><span>Propose objectives</span></label>
       </div>
-      <button id="player-preview-save-capabilities" type="button">Save capabilities to current player</button>
+      <button id="player-preview-save-capabilities" type="button">Save capabilities</button>
     </section>
     <section class="player-preview-block">
       <div class="subsection-heading"><strong>Player map baseline</strong><span>The town itself is public; story knowledge is controlled below.</span></div>

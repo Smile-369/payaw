@@ -1,4 +1,4 @@
-import type { Capability, CharacterEditableField, KnowledgeLevel } from './PlayerViewState';
+import type { Capability, KnowledgeLevel } from './PlayerViewState';
 import { parsePlayerWorldGenerationRecipe, type PlayerWorldGenerationRecipe } from './PlayerWorldRecipe';
 
 export const PLAYER_PROJECTION_VERSION = 1 as const;
@@ -152,67 +152,17 @@ export interface MessageThreadProjection {
   readonly canReply: boolean;
 }
 
-export interface CharacterSkillProjection {
-  readonly slot: string;
-  readonly name: string;
-  readonly type: string;
-  readonly role: string;
-  readonly useCase: string;
-  readonly roll: string;
-  readonly combatEffect: string;
-  readonly utility: string;
-  readonly costRisk: string;
-}
-
-export interface CharacterGearProjection {
-  readonly item: string;
-  readonly use: string;
-  readonly notes: string;
-}
-
-export interface CharacterUltimateSkillProjection extends CharacterSkillProjection {
-  readonly unlocked: boolean;
-}
-
-export interface PublicCharacterProfileProjection {
-  readonly ownerId: string;
-  readonly playerDisplayName: string;
-  readonly color: string;
-  readonly name: string;
-  readonly pronouns: string;
-  readonly background: string;
-  readonly portraitUri: string | null;
-  readonly galleryUris: readonly string[];
-  readonly handle: string;
-  readonly ageYear: string;
-  readonly connectionToGroup: string;
-  readonly schoolWork: string;
-  readonly homeArea: string;
-  readonly startingItem: string;
-  readonly currentSituation: string;
-  readonly stats: Readonly<Record<string, string>>;
-  readonly malasCurrent: string;
-  readonly malasState: string;
-  readonly conditions: readonly string[];
-  readonly inventory: readonly string[];
-  readonly skills: readonly CharacterSkillProjection[];
-  readonly gear: readonly CharacterGearProjection[];
-  /** Only unlocked ultimate skills are projected to other players. */
-  readonly ultimateSkill: CharacterUltimateSkillProjection | null;
-}
-
 export interface CharacterProjection {
   readonly id: string;
   readonly name: string;
   readonly pronouns: string;
   readonly background: string;
   readonly portraitUri: string | null;
-  readonly galleryUris: readonly string[];
   readonly stats: Readonly<Record<string, string>>;
   readonly conditions: readonly string[];
   readonly inventory: readonly string[];
   readonly privateNotes: string;
-  readonly editableFields: readonly CharacterEditableField[];
+  readonly editableFields: readonly ('name' | 'pronouns' | 'background' | 'conditions' | 'inventory' | 'privateNotes')[];
 }
 
 export interface JournalEntryProjection {
@@ -271,7 +221,6 @@ export interface PlayerProjection {
   readonly handouts: readonly AssetProjection[];
   readonly messages: readonly MessageThreadProjection[];
   readonly character?: CharacterProjection;
-  readonly partyCharacters: readonly PublicCharacterProfileProjection[];
   readonly journal: JournalProjection;
   readonly objectives: readonly ObjectiveProjection[];
   readonly diceRolls: readonly DiceRollProjection[];
@@ -472,7 +421,6 @@ export function parsePlayerProjection(value: unknown): PlayerProjection {
         }),
       } satisfies MessageThreadProjection;
     }),
-    partyCharacters: array(value.partyCharacters, normalizePublicCharacterProfile),
     journal: {
       personal: array(value.journal.personal, normalizeJournal),
       shared: array(value.journal.shared, normalizeJournal),
@@ -545,65 +493,6 @@ function normalizeScene(value: Record<string, unknown>): SceneProjection {
   };
 }
 
-function normalizeCharacterSkill(value: unknown): CharacterSkillProjection | undefined {
-  if (!isRecord(value)) return undefined;
-  return {
-    slot: stringValue(value.slot).slice(0, 40),
-    name: stringValue(value.name).slice(0, 120),
-    type: stringValue(value.type).slice(0, 80),
-    role: stringValue(value.role).slice(0, 80),
-    useCase: stringValue(value.useCase).slice(0, 700),
-    roll: stringValue(value.roll).slice(0, 160),
-    combatEffect: stringValue(value.combatEffect).slice(0, 700),
-    utility: stringValue(value.utility).slice(0, 700),
-    costRisk: stringValue(value.costRisk).slice(0, 700),
-  };
-}
-
-function normalizeCharacterGear(value: unknown): CharacterGearProjection | undefined {
-  if (!isRecord(value)) return undefined;
-  return {
-    item: stringValue(value.item).slice(0, 120),
-    use: stringValue(value.use).slice(0, 300),
-    notes: stringValue(value.notes).slice(0, 700),
-  };
-}
-
-function normalizePublicCharacterProfile(value: unknown): PublicCharacterProfileProjection | undefined {
-  if (!isRecord(value) || typeof value.ownerId !== 'string') return undefined;
-  const stats = isRecord(value.stats)
-    ? Object.fromEntries(Object.entries(value.stats).filter((entry): entry is [string, string] => typeof entry[1] === 'string').slice(0, 40))
-    : {};
-  const ultimate = normalizeCharacterSkill(value.ultimateSkill);
-  return {
-    ownerId: value.ownerId,
-    playerDisplayName: stringValue(value.playerDisplayName, 'Player').slice(0, 80),
-    color: stringValue(value.color, '#73b7a4').slice(0, 20),
-    name: stringValue(value.name, 'Character').slice(0, 120),
-    pronouns: stringValue(value.pronouns).slice(0, 80),
-    background: stringValue(value.background).slice(0, 2000),
-    portraitUri: typeof value.portraitUri === 'string' ? value.portraitUri.slice(0, 1000) : null,
-    galleryUris: stringArray(value.galleryUris).slice(0, 6).map((uri) => uri.slice(0, 1000)),
-    handle: stringValue(value.handle).slice(0, 120),
-    ageYear: stringValue(value.ageYear).slice(0, 120),
-    connectionToGroup: stringValue(value.connectionToGroup).slice(0, 1200),
-    schoolWork: stringValue(value.schoolWork).slice(0, 700),
-    homeArea: stringValue(value.homeArea).slice(0, 500),
-    startingItem: stringValue(value.startingItem).slice(0, 500),
-    currentSituation: stringValue(value.currentSituation).slice(0, 1200),
-    stats,
-    malasCurrent: stringValue(value.malasCurrent).slice(0, 40),
-    malasState: stringValue(value.malasState).slice(0, 160),
-    conditions: stringArray(value.conditions).slice(0, 40),
-    inventory: stringArray(value.inventory).slice(0, 100),
-    skills: array(value.skills, normalizeCharacterSkill).slice(0, 10),
-    gear: array(value.gear, normalizeCharacterGear).slice(0, 30),
-    ultimateSkill: ultimate === undefined || !isRecord(value.ultimateSkill) || value.ultimateSkill.unlocked !== true
-      ? null
-      : { ...ultimate, unlocked: true },
-  };
-}
-
 function normalizeCharacter(value: Record<string, unknown>): CharacterProjection {
   const stats = isRecord(value.stats) ? Object.fromEntries(Object.entries(value.stats).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
   return {
@@ -612,14 +501,11 @@ function normalizeCharacter(value: Record<string, unknown>): CharacterProjection
     pronouns: stringValue(value.pronouns),
     background: stringValue(value.background),
     portraitUri: typeof value.portraitUri === 'string' ? value.portraitUri : null,
-    galleryUris: stringArray(value.galleryUris).slice(0, 6),
     stats,
     conditions: stringArray(value.conditions),
     inventory: stringArray(value.inventory),
-    privateNotes: stringValue(value.privateNotes).slice(0, 32000),
-    editableFields: stringArray(value.editableFields).filter((field): field is CharacterProjection['editableFields'][number] =>
-      ['name', 'pronouns', 'background', 'portraitUri', 'galleryUris', 'stats', 'conditions', 'inventory', 'privateNotes'].includes(field),
-    ),
+    privateNotes: stringValue(value.privateNotes),
+    editableFields: stringArray(value.editableFields).filter((field): field is CharacterProjection['editableFields'][number] => ['name', 'pronouns', 'background', 'conditions', 'inventory', 'privateNotes'].includes(field)),
   };
 }
 

@@ -38,110 +38,6 @@ function list(value: unknown, maximum: number): string[] {
     : [];
 }
 
-function stats(value: unknown): JsonRecord {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value as JsonRecord).slice(0, 40).flatMap(([key, item]) => {
-    const cleanKey = text(key, 20);
-    return typeof item === 'string' && cleanKey.length > 0 ? [[cleanKey, text(item, 80)]] : [];
-  }));
-}
-
-function safeImageUri(value: unknown): string | null {
-  const uri = text(value, 1000);
-  if (uri.length === 0) return null;
-  if (/^https:\/\//i.test(uri) || /^data:image\/(?:png|jpeg|webp|gif);/i.test(uri)) return uri;
-  if (/^payaw-player-asset:[0-9a-f-]{36}\/[0-9a-f-]{36}\/character\/[a-z0-9_.-]{1,180}$/i.test(uri)) return uri;
-  return null;
-}
-
-function storedCharacterSheet(privateNotes: unknown): JsonRecord | null {
-  const notes = typeof privateNotes === 'string' ? privateNotes : '';
-  const beginToken = '[[PAYAW_CHARACTER_SHEET_V1]]';
-  const endToken = '[[/PAYAW_CHARACTER_SHEET_V1]]';
-  const begin = notes.indexOf(beginToken);
-  const end = notes.indexOf(endToken);
-  if (begin < 0 || end < begin) return null;
-  try {
-    const parsed = JSON.parse(notes.slice(begin + beginToken.length, end).trim());
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && (parsed as JsonRecord).version === 1
-      ? parsed as JsonRecord
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function publicSkill(value: unknown): JsonRecord | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  const skill = value as JsonRecord;
-  const name = text(skill.name, 120);
-  if (name.length === 0) return null;
-  return {
-    slot: text(skill.slot, 40),
-    name,
-    type: text(skill.type, 80),
-    role: text(skill.role, 80),
-    useCase: text(skill.useCase, 700),
-    roll: text(skill.roll, 160),
-    combatEffect: text(skill.combatEffect, 700),
-    utility: text(skill.utility, 700),
-    costRisk: text(skill.costRisk, 700),
-  };
-}
-
-function publicCharacterProfile(projection: JsonRecord): JsonRecord {
-  const viewer = record(projection.viewer);
-  const character = record(projection.character);
-  const sheet = storedCharacterSheet(character.privateNotes);
-  const sheetStats = sheet === null ? {} : stats(sheet.stats);
-  const skills = sheet === null || !Array.isArray(sheet.skills)
-    ? []
-    : sheet.skills.flatMap((item) => publicSkill(item) ?? []).slice(0, 10);
-  const gear = sheet === null || !Array.isArray(sheet.gear)
-    ? []
-    : sheet.gear.flatMap((item) => {
-        if (typeof item !== 'object' || item === null || Array.isArray(item)) return [];
-        const entry = item as JsonRecord;
-        const itemName = text(entry.item, 120);
-        return itemName.length === 0 ? [] : [{ item: itemName, use: text(entry.use, 300), notes: text(entry.notes, 700) }];
-      }).slice(0, 30);
-  const ultimateSource = sheet !== null && typeof sheet.ultimateSkill === 'object' && sheet.ultimateSkill !== null && !Array.isArray(sheet.ultimateSkill)
-    ? sheet.ultimateSkill as JsonRecord
-    : null;
-  const ultimateBase = ultimateSource?.unlocked === true ? publicSkill(ultimateSource) : null;
-  return {
-    ownerId: text(viewer.id, 200),
-    playerDisplayName: text(viewer.displayName, 80, 'Player'),
-    color: text(viewer.color, 20, '#73b7a4'),
-    name: text(sheet?.characterName, 120, text(character.name, 120, 'Character')),
-    pronouns: text(character.pronouns, 80),
-    background: text(sheet?.background, 2000, text(character.background, 2000)),
-    portraitUri: safeImageUri(character.portraitUri),
-    galleryUris: list(character.galleryUris, 6).flatMap((uri) => safeImageUri(uri) ?? []),
-    handle: text(sheet?.handle, 120),
-    ageYear: text(sheet?.ageYear, 120),
-    connectionToGroup: text(sheet?.connectionToGroup, 1200),
-    schoolWork: text(sheet?.schoolWork, 700),
-    homeArea: text(sheet?.homeArea, 500),
-    startingItem: text(sheet?.startingItem, 500),
-    currentSituation: text(sheet?.currentSituation, 1200),
-    stats: Object.keys(sheetStats).length > 0 ? sheetStats : stats(character.stats),
-    malasCurrent: text(sheet?.malasCurrent, 40),
-    malasState: text(sheet?.malasState, 160),
-    conditions: list(character.conditions, 40),
-    inventory: list(character.inventory, 100),
-    skills,
-    gear,
-    ultimateSkill: ultimateBase === null ? null : { ...ultimateBase, unlocked: true },
-  };
-}
-
-function syncOwnPublicProfile(projection: JsonRecord): void {
-  const profile = publicCharacterProfile(projection);
-  const party = Array.isArray(projection.partyCharacters) ? projection.partyCharacters : [];
-  projection.partyCharacters = [profile, ...party.filter((item) => record(item).ownerId !== profile.ownerId)];
-}
-
 function id(prefix: string): string {
   return `${prefix}:${crypto.randomUUID()}`;
 }
@@ -210,27 +106,9 @@ function applyCommand(projectionValue: unknown, kind: string, payloadValue: unkn
     if (!editable.includes(field)) throw new Error('CHARACTER_FIELD_DENIED');
     if (field === 'conditions') character[field] = list(payload.value, 40);
     else if (field === 'inventory') character[field] = list(payload.value, 100);
-    else if (field === 'galleryUris') character[field] = list(payload.value, 6).flatMap((uri) => safeImageUri(uri) ?? []);
-    else if (field === 'stats') character[field] = stats(payload.value);
-    else if (field === 'portraitUri') character[field] = safeImageUri(payload.value);
     else if (['name', 'pronouns', 'background', 'privateNotes'].includes(field)) {
-      character[field] = text(payload.value, field === 'privateNotes' ? 32000 : field === 'background' ? 2000 : 160);
+      character[field] = text(payload.value, field === 'privateNotes' ? 8000 : field === 'background' ? 2000 : 160);
     } else throw new Error('CHARACTER_FIELD_DENIED');
-    syncOwnPublicProfile(projection);
-  } else if (kind === 'character.sheet.update') {
-    const character = record(projection.character);
-    const update = record(payload.character);
-    const editable = new Set(Array.isArray(character.editableFields) ? character.editableFields.filter((item): item is string => typeof item === 'string') : []);
-    if (editable.has('name')) character.name = text(update.name, 120, text(character.name, 120, 'Character'));
-    if (editable.has('pronouns')) character.pronouns = text(update.pronouns, 80);
-    if (editable.has('background')) character.background = text(update.background, 2000);
-    if (editable.has('portraitUri')) character.portraitUri = safeImageUri(update.portraitUri);
-    if (editable.has('galleryUris')) character.galleryUris = list(update.galleryUris, 6).flatMap((uri) => safeImageUri(uri) ?? []);
-    if (editable.has('stats')) character.stats = stats(update.stats);
-    if (editable.has('conditions')) character.conditions = list(update.conditions, 40);
-    if (editable.has('inventory')) character.inventory = list(update.inventory, 100);
-    if (editable.has('privateNotes')) character.privateNotes = text(update.privateNotes, 32000);
-    syncOwnPublicProfile(projection);
   } else if (kind === 'message.send') {
     const threadId = text(payload.threadId, 200);
     const body = text(payload.body, 4000);
@@ -276,9 +154,6 @@ function partyDelta(projection: JsonRecord, kind: string, payload: JsonRecord): 
     const ping = (Array.isArray(map.features) ? map.features : []).map(record).filter((item) => item.kind === 'ping').at(-1);
     return ping === undefined ? null : { kind, ping };
   }
-  if (kind === 'character.update' || kind === 'character.sheet.update') {
-    return { kind: 'character.party', profile: publicCharacterProfile(projection) };
-  }
   if (kind === 'journal.create' && payload.sharedWithParty === true || kind === 'journal.share') {
     const journal = record(projection.journal);
     const entryId = text(payload.entryId, 200);
@@ -304,10 +179,6 @@ function applyPartyDelta(projectionValue: unknown, delta: JsonRecord, now: strin
   } else if (delta.kind === 'map.ping') {
     const map = record(projection.map); const ping = record(delta.ping); const features = Array.isArray(map.features) ? map.features : [];
     map.features = features.some((candidate) => record(candidate).id === ping.id) ? features : [...features, ping];
-  } else if (delta.kind === 'character.party') {
-    const profile = record(delta.profile);
-    const party = Array.isArray(projection.partyCharacters) ? projection.partyCharacters : [];
-    projection.partyCharacters = [profile, ...party.filter((candidate) => record(candidate).ownerId !== profile.ownerId)];
   } else if (delta.kind === 'journal.party') {
     const journal = record(projection.journal); const entry = record(delta.entry); const shared = Array.isArray(journal.shared) ? journal.shared : [];
     journal.shared = entry.sharedWithParty === true
@@ -382,9 +253,7 @@ Deno.serve(async (request) => {
     const partyVisible = body.kind === 'message.send' && body.payload.privateToGm !== true
       || body.kind === 'map.ping'
       || body.kind === 'journal.share'
-      || body.kind === 'journal.create' && body.payload.sharedWithParty === true
-      || body.kind === 'character.update'
-      || body.kind === 'character.sheet.update';
+      || body.kind === 'journal.create' && body.payload.sharedWithParty === true;
     const gmOnly = body.kind === 'message.send' && body.payload.privateToGm === true;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {

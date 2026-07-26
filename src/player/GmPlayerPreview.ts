@@ -65,20 +65,8 @@ function structuralSafetyErrors(value: unknown, path = 'projection'): string[] {
   return errors;
 }
 
-const CAPABILITY_LABELS: Readonly<Record<Capability, string>> = {
-  'character.edit.self': 'Edit own character sheet',
-  'journal.write.private': 'Write private journal',
-  'journal.share.party': 'Share journal entries with party',
-  'message.send.party': 'Send party messages',
-  'message.send.private': 'Send private messages to GM',
-  'dice.roll': 'Use dice tray',
-  'map.ping': 'Place map pings',
-  'objective.view': 'View Objectives tab',
-  'objective.propose': 'Propose objectives',
-};
-
 function labelForCapability(capability: Capability): string {
-  return CAPABILITY_LABELS[capability];
+  return capability.replaceAll('.', ' ').replaceAll('self', 'own character').replaceAll('party', 'party');
 }
 
 export class GmPlayerPreview {
@@ -88,10 +76,7 @@ export class GmPlayerPreview {
   private readonly displayName = element<HTMLInputElement>('#player-preview-display-name');
   private readonly characterName = element<HTMLInputElement>('#player-preview-character-name');
   private readonly saveIdentity = element<HTMLButtonElement>('#player-preview-save-identity');
-  private readonly capabilityTarget = element<HTMLSelectElement>('#player-capability-target');
   private readonly capabilityGrid = element<HTMLElement>('#player-capability-grid');
-  private readonly checkAllCapabilities = element<HTMLButtonElement>('#player-capability-check-all');
-  private readonly clearAllCapabilities = element<HTMLButtonElement>('#player-capability-clear-all');
   private readonly saveCapabilities = element<HTMLButtonElement>('#player-preview-save-capabilities');
   private readonly grantType = element<HTMLSelectElement>('#player-grant-type');
   private readonly grantEntitySearch = element<HTMLInputElement>('#player-grant-entity-search');
@@ -114,9 +99,6 @@ export class GmPlayerPreview {
     this.grantType.addEventListener('change', () => this.renderCandidates());
     this.grantEntitySearch.addEventListener('input', () => this.renderCandidates());
     this.saveIdentity.addEventListener('click', () => this.updateIdentity());
-    this.capabilityTarget.addEventListener('change', () => this.renderCapabilities());
-    this.checkAllCapabilities.addEventListener('click', () => this.setAllCapabilityCheckboxes(true));
-    this.clearAllCapabilities.addEventListener('click', () => this.setAllCapabilityCheckboxes(false));
     this.saveCapabilities.addEventListener('click', () => this.updateCapabilities());
     this.saveGrant.addEventListener('click', () => this.addGrant());
     this.openPreview.addEventListener('click', () => this.publish(true));
@@ -191,67 +173,25 @@ export class GmPlayerPreview {
     document.dispatchEvent(new CustomEvent('payaw:player-slots-changed', { detail: { playerCount: requested } }));
   }
 
-  private capabilityTargetPlayerIds(): string[] {
-    const state = this.options.getState();
-    if (this.capabilityTarget.value === 'all') {
-      return state.players.filter((player) => player.active).map((player) => player.id);
-    }
-    return [this.selectedPlayerId()];
-  }
-
   private renderCapabilities(): void {
     const state = this.options.getState();
-    const targetIds = this.capabilityTargetPlayerIds();
+    const enabled = new Set(state.capabilitiesByPlayer[this.viewer.value] ?? []);
     this.capabilityGrid.replaceChildren();
     for (const capability of ALL_PLAYER_CAPABILITIES) {
-      const enabledCount = targetIds.reduce(
-        (count, playerId) => count + ((state.capabilitiesByPlayer[playerId] ?? []).includes(capability) ? 1 : 0),
-        0,
-      );
       const label = document.createElement('label');
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.value = capability;
-      input.checked = targetIds.length > 0 && enabledCount === targetIds.length;
-      input.indeterminate = enabledCount > 0 && enabledCount < targetIds.length;
+      input.checked = enabled.has(capability);
       input.dataset.playerCapability = capability;
-      input.addEventListener('change', () => {
-        input.indeterminate = false;
-        if (capability === 'objective.propose' && input.checked) {
-          const viewObjectives = this.capabilityGrid.querySelector<HTMLInputElement>('input[value="objective.view"]');
-          if (viewObjectives !== null) { viewObjectives.indeterminate = false; viewObjectives.checked = true; }
-        }
-        if (capability === 'objective.view' && !input.checked) {
-          const proposeObjectives = this.capabilityGrid.querySelector<HTMLInputElement>('input[value="objective.propose"]');
-          if (proposeObjectives !== null) { proposeObjectives.indeterminate = false; proposeObjectives.checked = false; }
-        }
-      });
       label.append(input, document.createTextNode(labelForCapability(capability)));
       this.capabilityGrid.append(label);
-    }
-    this.saveCapabilities.textContent = this.capabilityTarget.value === 'all'
-      ? `Save capabilities to ${targetIds.length} active players`
-      : 'Save capabilities to current player';
-    this.saveCapabilities.disabled = targetIds.length === 0;
-  }
-
-  private setAllCapabilityCheckboxes(checked: boolean): void {
-    for (const input of this.capabilityGrid.querySelectorAll<HTMLInputElement>('input[data-player-capability]')) {
-      input.indeterminate = false;
-      input.checked = checked;
     }
   }
 
   private updateCapabilities(): void {
-    const capabilities = [...this.capabilityGrid.querySelectorAll<HTMLInputElement>('input[data-player-capability]:checked')]
-      .map((input) => input.value as Capability);
-    const targetIds = this.capabilityTargetPlayerIds();
-    let state = this.options.getState();
-    for (const playerId of targetIds) state = setPlayerCapabilities(state, playerId, capabilities);
-    const message = targetIds.length === 1
-      ? 'Player permissions saved.'
-      : `Permissions saved for ${targetIds.length} active players.`;
-    this.commit(state, message);
+    const capabilities = [...this.capabilityGrid.querySelectorAll<HTMLInputElement>('input[data-player-capability]:checked')].map((input) => input.value as Capability);
+    this.commit(setPlayerCapabilities(this.options.getState(), this.selectedPlayerId(), capabilities), 'Player permissions saved.');
   }
 
   private candidates(type = this.grantType.value as KnowledgeSubjectType): Candidate[] {

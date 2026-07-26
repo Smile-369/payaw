@@ -348,38 +348,6 @@ export class SupabaseGateway {
     return signed.data.signedUrl;
   }
 
-  public async uploadCharacterImage(campaignId: string, userId: string, blob: Blob): Promise<string> {
-    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(blob.type)) {
-      throw new Error('Character images must be PNG, JPEG, WebP, or GIF.');
-    }
-    if (blob.size > 5 * 1024 * 1024) throw new Error('Character images must be 5 MB or smaller.');
-    const extension = blob.type === 'image/jpeg' ? 'jpg'
-      : blob.type === 'image/webp' ? 'webp'
-        : blob.type === 'image/gif' ? 'gif' : 'png';
-    const filename = `${uuid()}.${extension}`;
-    const path = `${campaignId}/${userId}/character/${filename}`;
-    const { error } = await this.client.storage.from('payaw-player-assets').upload(path, blob, {
-      upsert: false,
-      contentType: blob.type,
-      cacheControl: '3600',
-    });
-    if (error !== null) throw failure(error, 'Could not upload the character image. Apply the character-image storage migration first.');
-    return `payaw-player-asset:${path}`;
-  }
-
-  public async resolveCharacterImage(uri: string): Promise<string> {
-    if (/^https:\/\//i.test(uri) || /^data:image\//i.test(uri)) return uri;
-    const prefix = 'payaw-player-asset:';
-    if (!uri.startsWith(prefix)) throw new Error('This character image reference is invalid.');
-    const path = uri.slice(prefix.length);
-    if (!/^[0-9a-f-]{36}\/[0-9a-f-]{36}\/character\/[a-z0-9_.-]{1,180}$/i.test(path)) {
-      throw new Error('This character image path is invalid.');
-    }
-    const { data, error } = await this.client.storage.from('payaw-player-assets').createSignedUrl(path, 60 * 60);
-    if (error !== null || data.signedUrl.length === 0) throw failure(error, 'Could not open the character image.');
-    return data.signedUrl;
-  }
-
   public async playerPortalLogins(campaignId: string): Promise<readonly PlayerPortalLoginRecord[]> {
     const { data, error } = await this.client.rpc('list_player_portal_logins', { p_campaign_id: campaignId });
     if (error !== null) throw failure(error, 'Could not load player portal logins.');

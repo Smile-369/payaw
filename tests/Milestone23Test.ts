@@ -1,7 +1,7 @@
 import { isOfflineSafeCommand } from '../src/netcode/NetcodeTypes';
 import { mergePlayerOwnedProjection } from '../src/netcode/ProjectionMerge';
 import { parsePlayerProjection, type PlayerProjection } from '../src/player/PlayerProjection';
-import { createDefaultPlayerViewState, resizePlayerViewState, setPlayerCapabilities, setPlayerMapPolicy } from '../src/player/PlayerViewState';
+import { createDefaultPlayerViewState, resizePlayerViewState, setPlayerMapPolicy } from '../src/player/PlayerViewState';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -13,7 +13,7 @@ function baseProjection(revision: number): PlayerProjection {
     generatedAt: '2026-07-23T00:00:00.000Z',
     campaign: { id: 'campaign:safe', name: 'Hidden Payaw', status: 'active', campaignTime: '2026-07-23T00:00:00.000Z', timezone: 'Asia/Manila', weather: 'Rain', publicConditions: [] },
     viewer: { id: 'viewer:safe', displayName: 'Player 1', characterId: 'character:safe', characterName: 'Ana', color: '#73b7a4' },
-    capabilities: ['character.edit.self', 'journal.write.private', 'map.ping', 'dice.roll', 'objective.view', 'objective.propose', 'message.send.party'],
+    capabilities: ['character.edit.self', 'journal.write.private', 'map.ping', 'dice.roll', 'objective.propose', 'message.send.party'],
     map: { base: { columns: 1, rows: 1, worldWidth: 100, worldHeight: 100, terrainRows: ['L'] }, worldRecipe: null, unexploredTreatment: 'paper', roads: [], buildings: [], features: [], partyPosition: null, tileSizeMeters: 125 },
     knownNpcs: [], knownLocations: [], clues: [], handouts: [], messages: [{ id: 'thread:one', name: 'Friends', medium: 'Messenger', canReply: true, messages: [] }],
     character: { id: 'character:safe', name: 'Ana', pronouns: '', background: '', portraitUri: null, stats: {}, conditions: [], inventory: [], privateNotes: '', editableFields: ['privateNotes'] },
@@ -42,9 +42,6 @@ function main(): void {
   assert(merged.map.features.some((feature) => feature.id === 'ping:one'), 'Unexpired player ping was overwritten.');
   assert(merged.messages[0]?.messages.some((message) => message.id === 'message:player'), 'Player message was overwritten.');
   assert(merged.objectives.some((objective) => objective.playerCreated), 'Player objective proposal was overwritten.');
-  const hiddenGenerated = parsePlayerProjection({ ...generated, capabilities: generated.capabilities.filter((capability) => capability !== 'objective.view' && capability !== 'objective.propose'), objectives: [] });
-  const hiddenMerged = mergePlayerOwnedProjection(hiddenGenerated, parsePlayerProjection(hosted));
-  assert(hiddenMerged.objectives.length === 0, 'Player objectives survived after the GM disabled objective visibility.');
   assert(merged.diceRolls.length === 0, 'Legacy dice history was copied back into the durable player slot.');
   assert(merged.revision === 15, 'Projection merge moved the revision backwards.');
   assert(isOfflineSafeCommand({ kind: 'journal.create', title: 'x', body: '', sharedWithParty: false }), 'Private journal write should be offline-safe.');
@@ -53,15 +50,12 @@ function main(): void {
   const originalTable = createDefaultPlayerViewState(6);
   assert(originalTable.capabilitiesByPlayer['player-1']?.includes('journal.write.private') === true, 'Private journal should be enabled by default.');
   assert(originalTable.capabilitiesByPlayer['player-1']?.includes('message.send.party') === false, 'Shared messages must be denied by default.');
-  assert(originalTable.capabilitiesByPlayer['player-1']?.includes('objective.view') === false, 'Objectives must be hidden until the GM enables them.');
   assert(
     originalTable.mapPolicy.includeBaseGeography
       && originalTable.mapPolicy.includePublicRoads
       && originalTable.mapPolicy.includeBuildingFootprints,
     'Ordinary town geometry must be public in new player views.',
   );
-  const objectiveProposalEnabled = setPlayerCapabilities(originalTable, 'player-1', ['objective.propose']);
-  assert(objectiveProposalEnabled.capabilitiesByPlayer['player-1']?.includes('objective.view') === true, 'Objective proposals did not automatically enable the objective view.');
   const attemptedHide = setPlayerMapPolicy(originalTable, {
     includeBaseGeography: false,
     includePublicRoads: false,

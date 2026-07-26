@@ -27,7 +27,6 @@ export class PlayerNetworkSession {
   private queue: QueuedPlayerCommand[];
   private readonly queueKey: string;
   private readonly cacheKey: string;
-  private readonly characterImageUrls = new Map<string, { readonly expiresAt: number; readonly value: Promise<string> }>();
 
   public constructor(
     private readonly campaignId: string,
@@ -70,25 +69,6 @@ export class PlayerNetworkSession {
   public onDiceRoll(listener: (roll: SharedDiceRoll) => void): () => void {
     this.diceRollListeners.add(listener);
     return () => this.diceRollListeners.delete(listener);
-  }
-
-  public async uploadCharacterImage(file: File): Promise<string> {
-    if (this.state.state !== 'online' || !navigator.onLine) throw new Error('Character images require a live connection.');
-    return this.gateway.uploadCharacterImage(this.campaignId, this.userId, file);
-  }
-
-  public resolveCharacterImage(uri: string): Promise<string> {
-    const cached = this.characterImageUrls.get(uri);
-    if (cached !== undefined && cached.expiresAt > Date.now()) return cached.value;
-    if (cached !== undefined) this.characterImageUrls.delete(uri);
-    const operation = this.gateway.resolveCharacterImage(uri).catch((error) => {
-      this.characterImageUrls.delete(uri);
-      throw error;
-    });
-    // Signed URLs last one hour. Refresh a little early so a long-running
-    // session never keeps handing newly rendered profiles an expired URL.
-    this.characterImageUrls.set(uri, { expiresAt: Date.now() + 50 * 60 * 1000, value: operation });
-    return operation;
   }
 
   public async start(): Promise<void> {
