@@ -241,7 +241,7 @@ export function installMilestone21Shell(): void {
 
   const footer = document.createElement('footer');
   footer.className = 'ms21-footer';
-  footer.innerHTML = '<span>Ready</span><span id="ms21-footer-context">CAMPAIGN · Dashboard</span><span>PAYAW 0.23.2</span>';
+  footer.innerHTML = '<span>Ready</span><span id="ms21-footer-context">CAMPAIGN · Dashboard</span><span>PAYAW 0.24.0</span>';
 
   shell.append(topbar, body, footer);
   app.replaceWith(shell);

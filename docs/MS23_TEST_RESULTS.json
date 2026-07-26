@@ -1,9 +1,11 @@
 {
-  "release": "0.23.2",
+  "release": "0.24.0",
   "hostedAuthority": true,
   "rowLevelSecurity": true,
   "privateRealtime": true,
-  "hashedInvitations": true,
+  "persistentPlayerPortal": true,
+  "oneTimeInvitationsDisabled": true,
+  "locallyGeneratedPlayerMap": true,
   "protectedAssets": true,
   "serverCommands": true,
   "reconnectQueue": true,

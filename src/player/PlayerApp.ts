@@ -28,8 +28,17 @@ export interface PlayerAppSession {
   stop(): void;
 }
 
+export interface PlayerCredentialUpdate {
+  readonly currentPassword: string;
+  readonly newUsername: string;
+  readonly newPassword: string;
+}
+
 export interface PlayerAppOptions {
   readonly session?: PlayerAppSession;
+  readonly playerUsername?: string;
+  readonly onChangeCredentials?: (update: PlayerCredentialUpdate) => Promise<void>;
+  readonly onSignOut?: () => Promise<void>;
 }
 
 type PlayerPanel = 'map' | 'scene' | 'journal' | 'messages' | 'character' | 'home' | 'people' | 'places' | 'clues' | 'handouts' | 'objectives';
@@ -385,76 +394,23 @@ function drawProjectedMapFeatures(
   }
 }
 
-function drawProjectedMapFallback(canvas: HTMLCanvasElement, projection: PlayerProjection): PlayerCanvasFrame | null {
+function clearPlayerMapCanvas(canvas: HTMLCanvasElement): void {
   playerMapViewports.delete(canvas);
   const frame = preparePlayerCanvas(canvas);
-  if (frame === null) return null;
+  if (frame === null) return;
   const { context, width, height } = frame;
-  context.fillStyle = projection.map.unexploredTreatment === 'blank' ? '#0a0e0c' : projection.map.unexploredTreatment === 'fog' ? '#131b17' : '#18221b';
+  context.fillStyle = '#0a0e0c';
   context.fillRect(0, 0, width, height);
-  const base = projection.map.base;
-  if (base !== null && base.columns > 0 && base.rows > 0) {
-    const cellWidth = width / base.columns;
-    const cellHeight = height / base.rows;
-    const colors: Readonly<Record<string, string>> = { W: '#183443', w: '#285567', R: '#3d91b9', L: '#596d4d', F: '#294a35', H: '#665f4d', S: '#877a55', B: '#8b8570' };
-    for (let row = 0; row < base.rows; row += 1) {
-      const encoded = base.terrainRows[row] ?? '';
-      for (let column = 0; column < base.columns; column += 1) {
-        context.fillStyle = colors[encoded[column] ?? 'W'] ?? '#2a342d';
-        context.fillRect(column * cellWidth, row * cellHeight, Math.ceil(cellWidth + .5), Math.ceil(cellHeight + .5));
-      }
-    }
-  }
-  const worldWidth = base?.worldWidth ?? 1;
-  const worldHeight = base?.worldHeight ?? 1;
-  const mapPoint = (x: number, y: number): readonly [number, number] => [x / worldWidth * width, y / worldHeight * height];
-  context.lineJoin = 'round';
-  context.lineCap = 'round';
-  for (const building of projection.map.buildings) {
-    const first = building.footprint[0];
-    if (first === undefined) continue;
-    context.beginPath();
-    const [startX, startY] = mapPoint(first.x, first.y);
-    context.moveTo(startX, startY);
-    for (let index = 1; index < building.footprint.length; index += 1) {
-      const point = building.footprint[index];
-      if (point === undefined) continue;
-      const [x, y] = mapPoint(point.x, point.y);
-      context.lineTo(x, y);
-    }
-    context.closePath();
-    context.fillStyle = 'rgb(203 198 181 / 76%)';
-    context.strokeStyle = 'rgb(83 79 68 / 72%)';
-    context.lineWidth = .65;
-    context.fill();
-    context.stroke();
-  }
-  for (const road of projection.map.roads) {
-    if (road.points.length < 2) continue;
-    context.beginPath();
-    road.points.forEach((point, index) => {
-      const [x, y] = mapPoint(point.x, point.y);
-      if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-    });
-    context.strokeStyle = road.classification === 'main'
-      ? 'rgb(231 218 178 / 86%)'
-      : road.classification === 'secondary'
-        ? 'rgb(215 208 177 / 64%)'
-        : 'rgb(207 201 177 / 46%)';
-    context.lineWidth = road.classification === 'main' ? 2.1 : road.classification === 'secondary' ? 1.25 : .75;
-    context.stroke();
-  }
-  drawProjectedMapFeatures(frame, projection, worldWidth, worldHeight);
-  return frame;
 }
 
 async function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection, status?: HTMLElement): Promise<void> {
-  drawProjectedMapFallback(canvas, projection);
   const recipe = projection.map.worldRecipe;
   if (recipe === null) {
-    if (status !== undefined) status.textContent = 'Legacy projection: using the lightweight public map geometry.';
+    clearPlayerMapCanvas(canvas);
+    if (status !== undefined) status.textContent = 'This hosted projection is outdated. Ask the GM to sync player views again.';
     return;
   }
+  clearPlayerMapCanvas(canvas);
   const key = playerWorldRecipeKey(recipe);
   canvas.dataset.playerWorldRecipe = key;
   if (status !== undefined) status.textContent = `Generating ${recipe.seed} locally from the shared world seed…`;
@@ -463,6 +419,8 @@ async function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection, 
     if (!canvas.isConnected || canvas.dataset.playerWorldRecipe !== key) return;
     const frame = preparePlayerCanvas(canvas);
     if (frame === null) return;
+    frame.context.setTransform(1, 0, 0, 1, 0, 0);
+    frame.context.clearRect(0, 0, canvas.width, canvas.height);
     const renderer = new CanvasRenderer(canvas);
     renderer.setCustomization(EMPTY_RENDER_CUSTOMIZATION);
     for (const layer of [
@@ -486,7 +444,8 @@ async function drawMap(canvas: HTMLCanvasElement, projection: PlayerProjection, 
   } catch (error) {
     if (status !== undefined) {
       const message = error instanceof Error ? error.message : String(error);
-      status.textContent = `Local generation failed; showing the lightweight public fallback. ${message}`;
+      status.textContent = `Local map generation failed. ${message}`;
+      clearPlayerMapCanvas(canvas);
     }
   }
 }
@@ -973,6 +932,133 @@ function createDiceDialog(getProjection: () => PlayerProjection, onCommand: (com
   return backdrop;
 }
 
+
+function createAccountDialog(
+  username: string,
+  onChangeCredentials: (update: PlayerCredentialUpdate) => Promise<void>,
+): HTMLElement {
+  const backdrop = create('div', 'player-utility-dialog player-account-dialog');
+  backdrop.setAttribute('role', 'dialog');
+  backdrop.setAttribute('aria-modal', 'true');
+  backdrop.setAttribute('aria-label', 'Player account settings');
+
+  const panel = create('section', 'player-utility-panel player-account-panel');
+  const header = create('div', 'player-utility-panel-head');
+  const headerCopy = create('div');
+  appendText(headerCopy, 'h2', 'Account Settings');
+  appendText(headerCopy, 'p', 'Change the username or password used for this campaign.');
+  const close = create('button', '', '×');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Close account settings');
+  header.append(headerCopy, close);
+
+  const form = create('form', 'player-form player-account-form');
+  const usernameLabel = create('label', 'player-field player-field-wide');
+  usernameLabel.append(create('span', '', 'Username'));
+  const usernameInput = create('input');
+  usernameInput.required = true;
+  usernameInput.minLength = 3;
+  usernameInput.maxLength = 24;
+  usernameInput.autocomplete = 'username';
+  usernameInput.autocapitalize = 'characters';
+  usernameInput.spellcheck = false;
+  usernameInput.value = username;
+  usernameLabel.append(usernameInput);
+
+  const currentPasswordLabel = create('label', 'player-field player-field-wide');
+  currentPasswordLabel.append(create('span', '', 'Current password'));
+  const currentPassword = create('input');
+  currentPassword.type = 'password';
+  currentPassword.required = true;
+  currentPassword.minLength = 8;
+  currentPassword.maxLength = 128;
+  currentPassword.autocomplete = 'current-password';
+  currentPasswordLabel.append(currentPassword);
+
+  const newPasswordLabel = create('label', 'player-field');
+  newPasswordLabel.append(create('span', '', 'New password'));
+  const newPassword = create('input');
+  newPassword.type = 'password';
+  newPassword.minLength = 8;
+  newPassword.maxLength = 128;
+  newPassword.autocomplete = 'new-password';
+  newPassword.placeholder = 'Leave blank to keep it';
+  newPasswordLabel.append(newPassword);
+
+  const confirmPasswordLabel = create('label', 'player-field');
+  confirmPasswordLabel.append(create('span', '', 'Confirm new password'));
+  const confirmPassword = create('input');
+  confirmPassword.type = 'password';
+  confirmPassword.minLength = 8;
+  confirmPassword.maxLength = 128;
+  confirmPassword.autocomplete = 'new-password';
+  confirmPasswordLabel.append(confirmPassword);
+
+  const status = create('p', 'player-account-status', 'You will be signed out after the credentials are changed.');
+  const actions = create('div', 'player-account-actions');
+  const cancel = create('button', 'player-secondary', 'Cancel');
+  cancel.type = 'button';
+  const submit = create('button', 'player-primary', 'Save credentials');
+  submit.type = 'submit';
+  actions.append(cancel, submit);
+  form.append(usernameLabel, currentPasswordLabel, newPasswordLabel, confirmPasswordLabel, status, actions);
+  panel.append(header, form);
+  backdrop.append(panel);
+
+  const closeDialog = (): void => {
+    backdrop.dataset.open = 'false';
+    currentPassword.value = '';
+    newPassword.value = '';
+    confirmPassword.value = '';
+    status.textContent = 'You will be signed out after the credentials are changed.';
+  };
+
+  usernameInput.addEventListener('input', () => {
+    usernameInput.value = usernameInput.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
+  });
+  close.addEventListener('click', closeDialog);
+  cancel.addEventListener('click', closeDialog);
+  backdrop.addEventListener('click', (event) => { if (event.target === backdrop) closeDialog(); });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const normalizedUsername = usernameInput.value.trim().toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,23}$/.test(normalizedUsername)) {
+      status.textContent = 'Username must be 3–24 characters using letters, numbers, underscores, or hyphens.';
+      return;
+    }
+    if (newPassword.value.length > 0 && newPassword.value.length < 8) {
+      status.textContent = 'The new password must contain at least 8 characters.';
+      return;
+    }
+    if (newPassword.value !== confirmPassword.value) {
+      status.textContent = 'The new passwords do not match.';
+      return;
+    }
+    if (normalizedUsername === username && newPassword.value.length === 0) {
+      status.textContent = 'Enter a new username or a new password.';
+      return;
+    }
+
+    submit.disabled = true;
+    cancel.disabled = true;
+    status.textContent = 'Updating player credentials…';
+    try {
+      await onChangeCredentials({
+        currentPassword: currentPassword.value,
+        newUsername: normalizedUsername,
+        newPassword: newPassword.value,
+      });
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : String(error);
+      submit.disabled = false;
+      cancel.disabled = false;
+    }
+  });
+
+  return backdrop;
+}
+
 export function installPlayerApp(options: PlayerAppOptions = {}): void {
   const app = document.querySelector<HTMLElement>('#app');
   if (app === null) throw new Error('Player View requires the #app root.');
@@ -1001,9 +1087,21 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
   const search = create('label', 'player-search');
   const searchInput = create('input'); searchInput.type = 'search'; searchInput.placeholder = 'Search what your character knows…'; searchInput.autocomplete = 'off'; search.append(searchInput);
   const headerActions = create('div', 'player-header-actions');
-  const previewBadge = create('span', 'player-preview-badge', options.session === undefined ? 'Local preview' : 'Private campaign room');
+  const previewBadge = create('span', 'player-preview-badge', options.session === undefined ? 'Local preview' : 'Player portal');
   const connectionBadge = create('span', 'player-connection-badge', options.session === undefined ? 'Local preview' : 'Connecting…');
   headerActions.append(previewBadge, connectionBadge);
+  let accountButton: HTMLButtonElement | null = null;
+  if (options.onChangeCredentials !== undefined && options.playerUsername !== undefined) {
+    accountButton = create('button', 'player-header-account', 'Account');
+    accountButton.type = 'button';
+    headerActions.append(accountButton);
+  }
+  if (options.onSignOut !== undefined) {
+    const signOut = create('button', 'player-header-sign-out', 'Sign out');
+    signOut.type = 'button';
+    signOut.addEventListener('click', () => { void options.onSignOut?.(); });
+    headerActions.append(signOut);
+  }
   header.append(brand, search, headerActions);
 
   const layout = create('div', 'player-layout');
@@ -1037,7 +1135,7 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
   const footer = create('footer', 'player-footer');
   const footerContext = create('span', '', `PLAYER · ${PANEL_INFO[activePanel].label}`);
   const footerRevision = create('span', '', `Projection v${projection.projectionVersion} · Revision ${projection.revision}`);
-  footer.append(footerContext, footerRevision, create('span', '', 'PAYAW 0.23.2'));
+  footer.append(footerContext, footerRevision, create('span', '', 'PAYAW 0.24.0'));
   shell.append(header, layout, footer); app.append(shell);
   const searchResults = create('div', 'player-search-results'); searchResults.hidden = true; document.body.append(searchResults);
 
@@ -1071,6 +1169,9 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
 
   const travelDialog = createTravelDialog(getProjection);
   const diceDialog = createDiceDialog(getProjection, applyCommand);
+  const accountDialog = options.onChangeCredentials !== undefined && options.playerUsername !== undefined
+    ? createAccountDialog(options.playerUsername, options.onChangeCredentials)
+    : null;
   const mobileMenu = create('div', 'player-utility-dialog player-mobile-menu');
   mobileMenu.id = 'player-mobile-menu';
   mobileMenu.setAttribute('role', 'dialog');
@@ -1093,8 +1194,22 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
   const mobileDice = create('button'); mobileDice.type = 'button'; mobileDice.append(create('span', '', '◇'), create('strong', '', 'Dice'));
   mobileDice.addEventListener('click', () => { mobileMenu.dataset.open = 'false'; (diceDialog as HTMLElement & { refresh?: () => void }).refresh?.(); diceDialog.dataset.open = 'true'; });
   mobileMenuGrid.append(mobileTravel, mobileDice);
+  if (accountDialog !== null) {
+    const mobileAccount = create('button');
+    mobileAccount.type = 'button';
+    mobileAccount.append(create('span', '', '⚙'), create('strong', '', 'Account'));
+    mobileAccount.addEventListener('click', () => {
+      mobileMenu.dataset.open = 'false';
+      accountDialog.dataset.open = 'true';
+    });
+    mobileMenuGrid.append(mobileAccount);
+  }
   mobileMenuPanel.append(mobileMenuHead, mobileMenuGrid); mobileMenu.append(mobileMenuPanel);
   document.body.append(travelDialog, diceDialog, mobileMenu);
+  if (accountDialog !== null) document.body.append(accountDialog);
+  accountButton?.addEventListener('click', () => {
+    if (accountDialog !== null) accountDialog.dataset.open = 'true';
+  });
   travelButton.addEventListener('click', () => { (travelDialog as HTMLElement & { refresh?: () => void }).refresh?.(); travelDialog.dataset.open = 'true'; });
   diceButton.addEventListener('click', () => { (diceDialog as HTMLElement & { refresh?: () => void }).refresh?.(); diceDialog.dataset.open = 'true'; });
   mobileMoreButton.addEventListener('click', () => { mobileMenu.dataset.open = 'true'; });

@@ -22,6 +22,15 @@ export interface CampaignRoomRecord {
   readonly schema_version: number;
 }
 
+export interface CampaignAuthorityRecord {
+  readonly campaign_id: string;
+  readonly revision: number;
+  readonly schema_version: number;
+  readonly campaign_document: Readonly<Record<string, unknown>>;
+  readonly updated_by: string;
+  readonly updated_at: string;
+}
+
 export interface CampaignMemberRecord {
   readonly campaign_id: string;
   readonly user_id: string;
@@ -44,6 +53,21 @@ export interface PlayerSlotRecord {
   readonly revision: number;
   readonly projection: PlayerProjection;
   readonly generated_at: string;
+}
+
+
+export interface PlayerPortalLoginRecord {
+  readonly source_player_id: string;
+  readonly login_id: string;
+  readonly enabled: boolean;
+  readonly updated_at: string;
+}
+
+export interface PlayerPortalResolution {
+  readonly authEmail: string;
+  readonly campaignId: string;
+  readonly sourcePlayerId: string;
+  readonly displayName: string;
 }
 
 export interface CampaignCommandRecord {

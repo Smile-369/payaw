@@ -1029,3 +1029,54 @@ textarea {
   .player-map-stage { min-height: 330px; aspect-ratio: 4 / 3; }
   .player-scene-hero { min-height: 260px; }
 }
+.player-header-sign-out {
+  min-height: 30px;
+  padding: 5px 9px;
+  color: var(--player-muted);
+  background: transparent;
+  border-color: var(--player-border);
+  font-size: 10px;
+}
+.player-header-sign-out:hover:not(:disabled) { color: var(--player-text); }
+@media (max-width: 760px) {
+  .player-header-sign-out { min-height: 28px; padding: 4px 7px; }
+}
+
+.player-header-account {
+  min-height: 30px;
+  padding: 5px 9px;
+  color: #0a246a;
+  background: #d4d0c8;
+  border: 2px outset #fff;
+  font-size: 10px;
+}
+.player-header-account:active:not(:disabled) { border-style: inset; }
+.player-account-panel { width: min(560px, 100%); }
+.player-account-panel .player-utility-panel-head p {
+  margin: 4px 0 0;
+  color: var(--player-muted);
+  font-size: 10px;
+}
+.player-account-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.player-account-status {
+  grid-column: 1 / -1;
+  min-height: 34px;
+  margin: 0;
+  padding: 8px;
+  color: var(--player-muted);
+  background: #0c1310;
+  border: 1px solid var(--player-border-soft);
+  font-size: 10px;
+  white-space: pre-wrap;
+}
+.player-account-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 760px) {
+  .player-header-account { min-height: 28px; padding: 4px 7px; }
+  .player-account-form { grid-template-columns: 1fr; }
+  .player-account-form .player-field { grid-column: 1; }
+}

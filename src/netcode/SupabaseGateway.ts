@@ -2,15 +2,45 @@ import type { RealtimeChannel, Session, SupabaseClient, User } from '@supabase/s
 import { parsePlayerProjection, type PlayerProjection } from '../player/PlayerProjection';
 import type { PlayerCommand } from '../player/PlayerCommands';
 import type {
-  CampaignCommandRecord, CampaignMemberRecord, CampaignRole, CampaignRoomRecord,
-  PlayerSlotRecord, PresenceRecord,
+  CampaignAuthorityRecord, CampaignCommandRecord, CampaignMemberRecord, CampaignRole, CampaignRoomRecord,
+  PlayerPortalLoginRecord, PlayerPortalResolution, PlayerSlotRecord, PresenceRecord,
 } from './NetcodeTypes';
 import { getSupabaseClient } from './SupabaseClient';
 
-function failure(error: { readonly message: string } | null, fallback: string): Error {
+interface SupabaseErrorLike {
+  readonly message?: unknown;
+  readonly code?: unknown;
+  readonly details?: unknown;
+  readonly hint?: unknown;
+  readonly status?: unknown;
+  readonly statusCode?: unknown;
+}
+
+function textField(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function numberField(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function failure(error: SupabaseErrorLike | null, fallback: string): Error {
   if (error === null) return new Error(fallback);
-  const value = error.message.replace(/^.*message[=:]\s*/i, '').trim();
-  return new Error(value || fallback);
+
+  const message = textField(error.message) ?? fallback;
+  const code = textField(error.code);
+  const details = textField(error.details);
+  const hint = textField(error.hint);
+  const status = numberField(error.status) ?? numberField(error.statusCode);
+  const parts = [
+    code === null ? null : `[${code}]`,
+    message,
+    details === null ? null : `Details: ${details}`,
+    hint === null ? null : `Hint: ${hint}`,
+    status === null ? null : `HTTP ${status}`,
+  ].filter((part): part is string => part !== null);
+
+  return new Error(parts.join(' | '), { cause: error });
 }
 
 function uuid(): string {
@@ -75,20 +105,68 @@ export class SupabaseGateway {
     return data.session;
   }
 
-  public async ensureAnonymousSession(displayName: string, captchaToken?: string): Promise<Session> {
-    const existing = await this.session();
-    if (existing !== null) return existing;
-    const { data, error } = await this.client.auth.signInAnonymously({ options: {
-      data: { display_name: displayName.slice(0, 80) },
-      ...(captchaToken === undefined ? {} : { captchaToken }),
-    } });
-    if (error !== null || data.session === null) throw failure(error, 'Could not start a player session.');
-    return data.session;
+  public async signInOrCreatePlayerAccount(
+    authEmail: string,
+    password: string,
+    displayName: string,
+    captchaToken?: string,
+  ): Promise<Session> {
+    const signedIn = await this.client.auth.signInWithPassword({ email: authEmail, password });
+    if (signedIn.error === null && signedIn.data.session !== null) return signedIn.data.session;
+
+    const created = await this.client.auth.signUp({
+      email: authEmail,
+      password,
+      options: {
+        data: { display_name: displayName.slice(0, 80), account_type: 'payaw-player' },
+        ...(captchaToken === undefined ? {} : { captchaToken }),
+      },
+    });
+    if (created.error !== null) throw failure(created.error, 'Could not sign in to the player portal.');
+    if (created.data.session === null) {
+      throw new Error('Player account created, but Supabase email confirmation is enabled. Disable Confirm email in Authentication settings, then try again.');
+    }
+    return created.data.session;
   }
 
   public async signOut(): Promise<void> {
     const { error } = await this.client.auth.signOut();
     if (error !== null) throw failure(error, 'Could not sign out.');
+  }
+
+
+  public async verifyPlayerPortalPassword(campaignId: string, password: string): Promise<void> {
+    const { data, error } = await this.client.rpc('verify_player_portal_password', {
+      p_campaign_id: campaignId,
+      p_password: password,
+    });
+    if (error !== null || data !== true) throw failure(error, 'The current player password is incorrect.');
+  }
+
+  public async updateCurrentUserPassword(password: string): Promise<void> {
+    const { error } = await this.client.auth.updateUser({ password });
+    if (error !== null) throw failure(error, 'Could not update the player authentication password.');
+  }
+
+  public async changePlayerPortalCredentials(
+    campaignId: string,
+    currentPassword: string,
+    newLoginId: string,
+    newPassword: string,
+  ): Promise<string> {
+    const { data, error } = await this.client.rpc('change_player_portal_credentials', {
+      p_campaign_id: campaignId,
+      p_current_password: currentPassword,
+      p_new_login_id: newLoginId,
+      p_new_password: newPassword.length === 0 ? null : newPassword,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error !== null || row === null || typeof row !== 'object') {
+      throw failure(error, 'Could not update the player portal credentials.');
+    }
+    const value = row as { login_id?: unknown };
+    if (typeof value.login_id !== 'string') throw new Error('The server did not return the updated player username.');
+    return value.login_id;
   }
 
   public async createRoom(name: string, sourceCampaignId: string): Promise<string> {
@@ -101,6 +179,23 @@ export class SupabaseGateway {
     const { data, error } = await this.client.from('campaign_rooms').select('*').order('updated_at', { ascending: false });
     if (error !== null) throw failure(error, 'Could not load campaign rooms.');
     return (data ?? []) as CampaignRoomRecord[];
+  }
+
+  public async room(campaignId: string): Promise<CampaignRoomRecord> {
+    const { data, error } = await this.client.from('campaign_rooms').select('*').eq('id', campaignId).maybeSingle();
+    if (error !== null) throw failure(error, 'Could not load the campaign room.');
+    if (data === null) throw new Error('CAMPAIGN_ROOM_NOT_FOUND');
+    return data as CampaignRoomRecord;
+  }
+
+  public async campaignAuthority(campaignId: string): Promise<CampaignAuthorityRecord> {
+    const { data, error } = await this.client.from('campaign_authority').select('*').eq('campaign_id', campaignId).maybeSingle();
+    if (error !== null) throw failure(error, 'Could not load the hosted campaign state.');
+    if (data === null) throw new Error('CAMPAIGN_AUTHORITY_NOT_FOUND');
+    if (typeof data.campaign_document !== 'object' || data.campaign_document === null || Array.isArray(data.campaign_document)) {
+      throw new Error('The hosted campaign state is invalid.');
+    }
+    return data as CampaignAuthorityRecord;
   }
 
   public async roster(campaignId: string): Promise<readonly CampaignMemberRecord[]> {
@@ -175,10 +270,75 @@ export class SupabaseGateway {
     return signed.data.signedUrl;
   }
 
+  public async playerPortalLogins(campaignId: string): Promise<readonly PlayerPortalLoginRecord[]> {
+    const { data, error } = await this.client.rpc('list_player_portal_logins', { p_campaign_id: campaignId });
+    if (error !== null) throw failure(error, 'Could not load player portal logins.');
+    return (data ?? []) as PlayerPortalLoginRecord[];
+  }
+
+  public async configurePlayerPortal(campaignId: string, sourcePlayerId: string): Promise<{ readonly loginId: string; readonly password: string }> {
+    const { data, error } = await this.client.rpc('configure_player_portal', {
+      p_campaign_id: campaignId,
+      p_source_player_id: sourcePlayerId,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error !== null || row === null || typeof row !== 'object') throw failure(error, 'Could not create the persistent player login.');
+    const value = row as { login_id?: unknown; portal_password?: unknown };
+    if (typeof value.login_id !== 'string' || typeof value.portal_password !== 'string') {
+      throw new Error('The server did not return valid player portal credentials.');
+    }
+    return { loginId: value.login_id, password: value.portal_password };
+  }
+
+  public async disablePlayerPortal(campaignId: string, sourcePlayerId: string): Promise<void> {
+    const { error } = await this.client.rpc('disable_player_portal', {
+      p_campaign_id: campaignId,
+      p_source_player_id: sourcePlayerId,
+    });
+    if (error !== null) throw failure(error, 'Could not disable this player login.');
+  }
+
+  public async resolvePlayerPortal(campaignId: string, loginId: string, password: string): Promise<PlayerPortalResolution> {
+    const { data, error } = await this.client.rpc('resolve_player_portal_login', {
+      p_campaign_id: campaignId,
+      p_login_id: loginId,
+      p_password: password,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error !== null || row === null || typeof row !== 'object') throw failure(error, 'The player login ID or password is incorrect.');
+    const value = row as { auth_email?: unknown; campaign_id?: unknown; source_player_id?: unknown; display_name?: unknown };
+    if (typeof value.auth_email !== 'string' || typeof value.campaign_id !== 'string'
+      || typeof value.source_player_id !== 'string' || typeof value.display_name !== 'string') {
+      throw new Error('The player portal response is incomplete.');
+    }
+    return {
+      authEmail: value.auth_email,
+      campaignId: value.campaign_id,
+      sourcePlayerId: value.source_player_id,
+      displayName: value.display_name,
+    };
+  }
+
+  public async claimPlayerPortal(campaignId: string, loginId: string, password: string): Promise<{ readonly campaignId: string; readonly sourcePlayerId: string; readonly role: CampaignRole }> {
+    const { data, error } = await this.client.rpc('claim_player_portal', {
+      p_campaign_id: campaignId,
+      p_login_id: loginId,
+      p_password: password,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error !== null || row === null || typeof row !== 'object') throw failure(error, 'Could not open this player portal account.');
+    const value = row as { campaign_id?: unknown; source_player_id?: unknown; role?: unknown };
+    if (typeof value.campaign_id !== 'string' || typeof value.source_player_id !== 'string' || typeof value.role !== 'string') {
+      throw new Error('The player portal did not resolve to a player slot.');
+    }
+    return { campaignId: value.campaign_id, sourcePlayerId: value.source_player_id, role: value.role as CampaignRole };
+  }
+
   public async assignedSlot(campaignId: string, userId: string): Promise<PlayerSlotRecord> {
     const { data, error } = await this.client.from('campaign_player_slots').select('*')
-      .eq('campaign_id', campaignId).eq('assigned_user_id', userId).single();
-    if (error !== null || data === null) throw failure(error, 'No player slot is assigned to this account.');
+      .eq('campaign_id', campaignId).eq('assigned_user_id', userId).maybeSingle();
+    if (error !== null) throw failure(error, 'Could not verify this player portal session.');
+    if (data === null) throw new Error('PLAYER_PORTAL_ACCESS_REVOKED');
     return { ...data, projection: parsePlayerProjection(data.projection) } as PlayerSlotRecord;
   }
 
@@ -199,24 +359,6 @@ export class SupabaseGateway {
     });
     if (error !== null || typeof data !== 'number') throw failure(error, 'Could not synchronize the hosted player slots.');
     return data;
-  }
-
-  public async createInvitation(campaignId: string, role: Exclude<CampaignRole, 'owner-gm'>, sourcePlayerId: string | null, assignedCharacterId: string | null, expiresHours = 168): Promise<string> {
-    const { data, error } = await this.client.rpc('create_campaign_invitation', {
-      p_campaign_id: campaignId, p_role: role, p_source_player_id: sourcePlayerId,
-      p_assigned_character_id: assignedCharacterId, p_expires_hours: expiresHours,
-    });
-    if (error !== null || typeof data !== 'string') throw failure(error, 'Could not create an invitation.');
-    return data;
-  }
-
-  public async claimInvitation(token: string, displayName: string): Promise<{ readonly campaignId: string; readonly sourcePlayerId: string; readonly role: CampaignRole }> {
-    const { data, error } = await this.client.rpc('claim_campaign_invitation', { p_token: token, p_display_name: displayName });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (error !== null || row === null || typeof row !== 'object') throw failure(error, 'The invitation is invalid, expired, or already claimed.');
-    const value = row as { campaign_id?: unknown; source_player_id?: unknown; role?: unknown };
-    if (typeof value.campaign_id !== 'string' || typeof value.source_player_id !== 'string' || typeof value.role !== 'string') throw new Error('The invitation did not resolve to a player slot.');
-    return { campaignId: value.campaign_id, sourcePlayerId: value.source_player_id, role: value.role as CampaignRole };
   }
 
   public async submitCommand(campaignId: string, command: PlayerCommand, expectedRevision: number, offlineSafe: boolean, idempotencyKey = uuid()): Promise<{ readonly projection: PlayerProjection; readonly idempotencyKey: string }> {

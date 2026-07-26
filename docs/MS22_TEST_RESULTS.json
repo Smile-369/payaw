@@ -1,5 +1,5 @@
 {
-  "release": "0.23.2",
+  "release": "0.24.0",
   "typecheck": "passed",
   "playerProjection": {
     "projectionVersion": 1,
@@ -10,7 +10,7 @@
     "safeBuildingSilhouettes": 81,
     "publicRivers": true,
     "storyLocationsRevealGated": true,
-    "sharedGmRendererMap": true,
+    "clientGeneratedSeedMap": true,
     "knownPeople": 2,
     "privateKnowledgeIsolated": true,
     "capabilityBoundary": true,

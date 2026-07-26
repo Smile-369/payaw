@@ -817,7 +817,7 @@ input, textarea, select {
 .netcode-grid > section,
 .netcode-room-grid > section { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--line); background: var(--surface-soft); }
 .netcode-room-name { min-height: 34px; padding: 8px; border: 1px solid var(--line); background: var(--field); overflow-wrap: anywhere; }
-.netcode-invite-link { width: 100%; min-width: 0; }
+.netcode-portal-url { width: 100%; min-width: 0; }
 .netcode-room-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .netcode-roster { display: grid; gap: 5px; min-height: 44px; }
 .netcode-roster article { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); background: var(--field); }
@@ -888,3 +888,6 @@ body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-templa
   body[data-studio-dock="open"] .ms21-body { grid-template-columns: 62px 280px minmax(0, 1fr); }
   body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-template-columns: 62px 0 minmax(0, 1fr); }
 }
+.netcode-portal-credentials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.netcode-portal-credentials input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .06em; }
+@media (max-width: 720px) { .netcode-portal-credentials { grid-template-columns: 1fr; } }

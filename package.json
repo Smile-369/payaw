@@ -1,7 +1,7 @@
 {
   "name": "payaw-procgen",
   "private": true,
-  "version": "0.23.2",
+  "version": "0.24.0",
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "engines": {

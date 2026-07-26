@@ -929,13 +929,19 @@
       <section>
         <strong>Room authority</strong>
         <div class="netcode-room-name" id="netcode-room-name">No hosted room linked</div>
-        <div class="button-row"><button class="primary" id="netcode-create-room" type="button">Create / link room</button><button id="netcode-publish-all" type="button">Sync player views now</button></div>
+        <label class="form-field"><span>Campaign ID</span><input id="netcode-campaign-id" autocomplete="off" spellcheck="false" maxlength="36" placeholder="Paste the hosted campaign UUID"/></label>
+        <div class="button-row"><button class="primary" id="netcode-load-campaign" type="button">Load campaign</button><button id="netcode-create-room" type="button">Create / link room</button><button id="netcode-publish-all" type="button">Sync player views now</button></div>
       </section>
       <section>
-        <strong>Invite a player</strong>
-        <label class="form-field"><span>Player slot</span><select id="netcode-invite-player"></select></label>
-        <div class="button-row"><button id="netcode-create-invite" type="button">Create single-use link</button><button id="netcode-copy-invite" type="button">Copy link</button></div>
-        <input id="netcode-invite-link" class="netcode-invite-link" readonly aria-label="Player invitation link" placeholder="Publish the safe views, then create an invite."/>
+        <strong>Player portal login</strong>
+        <span class="muted-copy">Players enter the Campaign ID, username, and password in the permanent Player Portal. Resetting credentials signs out the old account.</span>
+        <label class="form-field"><span>Player slot</span><select id="netcode-portal-player"></select></label>
+        <div class="button-row"><button id="netcode-create-player-login" type="button">Create / reset login</button><button id="netcode-copy-player-login" type="button">Copy credentials</button></div>
+        <label class="form-field"><span>Player portal URL</span><input id="netcode-player-portal-url" class="netcode-portal-url" readonly aria-label="Player portal URL"/></label>
+        <div class="netcode-portal-credentials">
+          <label class="form-field"><span>Username</span><input id="netcode-player-login-id" readonly autocomplete="off" placeholder="Create a player username"/></label>
+          <label class="form-field"><span>Password</span><input id="netcode-player-login-password" readonly autocomplete="off" placeholder="Shown only after create/reset"/></label>
+        </div>
       </section>
     </div>
     <div class="netcode-room-grid">

@@ -1,6 +1,22 @@
 # Changelog
-- Replaced GM magic-link/OTP authentication with email/password sign-in and first-time account creation.
 
+## 0.24.0
+
+### Changed
+- Replaced single-use player invitation links with one permanent Player Portal URL.
+- Added persistent per-player login IDs and passwords that survive refreshes and later browser sessions until the GM resets or disables them.
+- Isolated GM and player Supabase auth storage while retaining separate player identities for multi-tab testing.
+- Player View now regenerates the public world from the shared seed and public generation recipe.
+
+### Fixed
+- Removed the remaining baked PNG map path and cleared the map canvas before local rendering so old image text cannot bleed through the generated world.
+- Revoked all legacy campaign invitations and removed the old invitation RPCs from the exposed API.
+- Resetting or disabling a player login now clears its slot assignment and membership.
+- A revoked player session can no longer reopen a cached projection as though it still had access.
+
+### Deployment
+- Apply `202607230006_player_portal_login.sql` after the previous PAYAW Supabase migrations.
+- Keep Email/password authentication and new-user signup enabled, disable Confirm email, and anonymous sign-in may be disabled.
 ## 0.23.2
 
 ### Fixed

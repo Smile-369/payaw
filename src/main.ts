@@ -255,6 +255,48 @@ function createProjectPayload(
   };
 }
 
+function createHostedCampaignPayload(): Readonly<Record<string, unknown>> {
+  const profile: StoredProfile = {
+    terrainSize: world.metadata.terrainSize,
+    townScale: world.metadata.townScale,
+    terrainShape: world.metadata.terrainShape,
+    climatePreset: world.metadata.climatePreset,
+    islandCount: world.metadata.targetIslandCount,
+    islandSpacingKilometers: world.metadata.islandSpacingKilometers,
+    satelliteSettlementCount: world.metadata.satelliteSettlementCount,
+  };
+  const customization = currentMapCustomization();
+  return {
+    format: 'payaw-hosted-campaign',
+    projectVersion: 1,
+    metadata: {
+      schemaVersion: 20,
+      generationVersion: world.metadata.generationVersion,
+    },
+    project: {
+      seed: world.seed,
+      profile,
+      authoring: {
+        customAnchors,
+        builtInAnchorOverrides: builtInOverrides,
+        roadNames: roadNameOverrides,
+        blockNames: blockNameOverrides,
+        labelDisplay: labelSettings,
+        customStoryPoints: customStoryDefinitions,
+        npcRosterSize: world.npcs.length,
+        npcLocationAuthoring,
+        campaign: campaignState,
+        playerView: playerViewState,
+        simulation: simulation?.serialize(),
+        customization,
+      },
+    },
+    campaign: campaignState,
+    playerView: playerViewState,
+    checkpointedAt: new Date().toISOString(),
+  };
+}
+
 function downloadWorld(
   world: World,
   customization: StoredMapCustomization,
@@ -4341,7 +4383,7 @@ async function importPayawJsonFile(file: File): Promise<void> {
   if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json' && file.type !== '') {
     throw new Error('Select a JSON file exported by PAYAW.');
   }
-  if (file.size > 256 * 1024 * 1024) throw new Error('PAYAW JSON is larger than the 256 MB import limit.');
+  if (file.size > 64 * 1024 * 1024) throw new Error('PAYAW JSON is larger than the 64 MB import limit.');
   const parsed: unknown = JSON.parse(await file.text());
   if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
   const root = parsed as Record<string, unknown>;
@@ -4413,9 +4455,7 @@ function normalizeStoredSimulation(value: unknown): Partial<StoredSimulationStat
   };
 }
 
-async function importProjectFile(file: File): Promise<void> {
-  if (file.size > 256 * 1024 * 1024) throw new Error('Project JSON is larger than the 256 MB import limit.');
-  const parsed: unknown = JSON.parse(await file.text());
+async function importProjectPayload(parsed: unknown, sourceLabel: string): Promise<void> {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
   const root = parsed as Record<string, unknown>;
   const metadata = typeof root.metadata === 'object' && root.metadata !== null ? root.metadata as Record<string, unknown> : {};
@@ -4516,7 +4556,45 @@ async function importProjectFile(file: File): Promise<void> {
   }
   campaignStudio?.refreshExternalReferences();
   playerPreview?.refresh();
-  setStatus(`Imported PAYAW project JSON${assets.length > 0 ? ` with ${assets.length} embedded asset${assets.length === 1 ? '' : 's'}` : ''}.`, 'success');
+  setStatus(`Imported ${sourceLabel}${assets.length > 0 ? ` with ${assets.length} embedded asset${assets.length === 1 ? '' : 's'}` : ''}.`, 'success');
+}
+
+async function loadHostedAuthorityDocument(value: Readonly<Record<string, unknown>>): Promise<void> {
+  const project = typeof value.project === 'object' && value.project !== null
+    ? value.project as Record<string, unknown>
+    : null;
+  if (project !== null && typeof project.seed === 'string' && project.seed.trim().length > 0) {
+    await importProjectPayload(value, 'hosted campaign state');
+    return;
+  }
+
+  const campaignSource = value.campaign;
+  const playerViewSource = value.playerView;
+  if (typeof campaignSource !== 'object' || campaignSource === null) {
+    throw new Error('The hosted campaign authority does not contain a campaign state or world recipe.');
+  }
+  campaignState = normalizeCampaignState(campaignSource, currentCampaignWorldRef());
+  campaignStudio?.replaceState(campaignState);
+  const campaignTimestamp = Date.parse(campaignState.runState.campaignTime);
+  if (Number.isFinite(campaignTimestamp)) simulation?.setTimestamp(campaignTimestamp);
+  simulation?.setWeatherOverride(campaignState.runState.weatherOverride === 'auto'
+    ? null
+    : campaignState.runState.weatherOverride as WeatherCondition);
+
+  const playerCount = typeof playerViewSource === 'object' && playerViewSource !== null
+    && Array.isArray((playerViewSource as Record<string, unknown>).players)
+    ? (playerViewSource as { readonly players: readonly unknown[] }).players.length
+    : playerViewState.players.length || 6;
+  playerViewState = normalizePlayerViewState(playerViewSource, playerCount);
+  campaignStudio?.refreshExternalReferences();
+  playerPreview?.refresh();
+  setStatus('Loaded hosted campaign state. This older snapshot did not contain a world recipe, so the current local map was retained.', 'success');
+}
+
+async function importProjectFile(file: File): Promise<void> {
+  if (file.size > 64 * 1024 * 1024) throw new Error('Project JSON is larger than the 64 MB import limit.');
+  const parsed: unknown = JSON.parse(await file.text());
+  await importProjectPayload(parsed, 'PAYAW project JSON');
 }
 
 function appendAssetCategoryOptions(select: HTMLSelectElement, selected: AssetTargetCategory): void {
@@ -7228,6 +7306,12 @@ function loadNetcodePanel(): void {
     new GmNetcodePanel({
       getContext: () => ({ campaign: campaignState, world, authoringLayer, npcLocationAuthoring, generationOptions: generationOptions() }),
       getState: () => playerViewState,
+      getAuthorityDocument: () => createHostedCampaignPayload(),
+      loadAuthorityDocument: async (authorityDocument) => {
+        await loadHostedAuthorityDocument(authorityDocument);
+        scheduleAutosave();
+        document.dispatchEvent(new CustomEvent('payaw:project-state-changed'));
+      },
       getAssetData: (assetId) => {
         const asset = importedAssets.find((candidate) => candidate.id === assetId);
         return asset === undefined ? null : { dataUrl: asset.dataUrl, mimeType: asset.mimeType };
