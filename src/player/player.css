@@ -921,6 +921,69 @@ textarea {
 }
 .player-dice-result small { color: #555; }
 
+
+/* Dice tray must remain an opaque application window over the map. Keep these
+   selectors dialog-specific so generic utility-panel changes cannot make it
+   translucent again. */
+#player-dice-dialog.player-dice-dialog {
+  background-color: rgb(31 59 91 / 68%);
+}
+#player-dice-dialog .player-dice-panel {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(120px, 1fr);
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(720px, calc(100vh - 24px));
+  overflow: hidden;
+  padding: 7px;
+  color: #111;
+  background: linear-gradient(#d4d0c8, #d4d0c8) !important;
+  background-color: #d4d0c8 !important;
+  border: 2px outset #fff;
+  opacity: 1 !important;
+}
+#player-dice-dialog .player-utility-panel-head {
+  margin: 0 0 8px;
+  flex: 0 0 auto;
+}
+#player-dice-dialog .player-utility-panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+#player-dice-dialog .player-form-grid {
+  margin: 0 8px 8px;
+  padding: 8px;
+  background: #d4d0c8 !important;
+  border: 1px solid #808080;
+}
+#player-dice-dialog .player-dice-result {
+  margin: 0 8px 8px;
+  background: #fff !important;
+  opacity: 1 !important;
+}
+#player-dice-dialog .player-list {
+  min-height: 0;
+  margin: 0 8px 8px;
+  padding: 6px;
+  overflow: auto;
+  background: #fff !important;
+  border: 2px inset #ddd;
+  opacity: 1 !important;
+}
+#player-dice-dialog .player-list-item {
+  background: #fff !important;
+  opacity: 1 !important;
+}
+@media (max-width: 640px) {
+  #player-dice-dialog.player-dice-dialog { padding: 6px; }
+  #player-dice-dialog .player-dice-panel {
+    width: 100%;
+    max-height: calc(100vh - 12px);
+  }
+}
+
 .player-search-results {
   top: 52px;
   padding: 5px;

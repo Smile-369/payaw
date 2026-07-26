@@ -18,10 +18,12 @@ const gateway = read('src', 'netcode', 'SupabaseGateway.ts');
 const supabaseClient = read('src', 'netcode', 'SupabaseClient.ts');
 const networkBootstrap = read('src', 'netcode', 'NetworkPlayerBootstrap.ts');
 const session = read('src', 'netcode', 'PlayerNetworkSession.ts');
+const diceBanner = read('src', 'netcode', 'DiceRollBanner.ts');
 const gmPanel = read('src', 'netcode', 'GmNetcodePanel.ts');
 const migration = read('supabase', 'migrations', '202607230001_milestone_23_netcode.sql');
 const atomicMigration = read('supabase', 'migrations', '202607230003_atomic_campaign_publish.sql');
 const portalMigration = read('supabase', 'migrations', '202607230006_player_portal_login.sql');
+const optimizationMigration = read('supabase', 'migrations', '202607260010_netcode_write_reduction.sql');
 const edgeFunction = read('supabase', 'functions', 'campaign-command', 'index.ts');
 const envExample = read('.env.example');
 
@@ -49,13 +51,20 @@ assert(gateway.includes("config: { private: true"), 'Realtime channel is not pri
 assert(supabaseClient.includes('createPlayerSupabaseClient') && supabaseClient.includes('payaw-player-auth-'), 'Persistent player auth namespaces are missing.');
 assert(supabaseClient.includes("clientOptions('payaw-gm-auth'"), 'GM authentication is not isolated from player sessions.');
 assert(networkBootstrap.includes('PLAYER_PORTAL_SESSION_KEY') && networkBootstrap.includes('readStoredPortalSession'), 'Player portal session is not persisted across portal visits.');
+assert(networkBootstrap.includes('displayName: projection.viewer.displayName'), 'Player presence still exposes the opaque portal login ID instead of the projected display name.');
+assert(diceBanner.includes('right: 14px') && diceBanner.includes('bottom: 14px') && !diceBanner.includes('inset: 0;'), 'Shared dice notification regressed into a full-screen overlay.');
+assert(diceBanner.includes('payaw-party-dice-titlebar') && diceBanner.includes('MAX_QUEUED_ROLLS'), 'Compact dice toast styling or queue bounding is missing.');
 assert(networkBootstrap.includes('resolvePlayerPortal') && networkBootstrap.includes('claimPlayerPortal'), 'Player portal login flow is incomplete.');
 assert(networkBootstrap.includes("url.searchParams.delete('invite')") && networkBootstrap.includes("url.searchParams.delete('device')"), 'Legacy invitation parameters are not cleared.');
 assert(session.includes('QUEUE_LIMIT') && session.includes('isOfflineSafeCommand') && session.includes('idempotencyKey'), 'Bounded offline-safe command queue is missing.');
 assert(session.includes('projection.revision > this.projectionValue.revision + 1'), 'Revision gap recovery is missing.');
 assert(session.includes('cachedProjection') && session.includes('connectRealtime'), 'Cold-start offline recovery is missing.');
+assert(session.includes('hydrateDiceHistory') && session.includes('acceptDiceRoll'), 'Event-only dice history hydration is missing.');
+assert(!session.includes('.acknowledge('), 'Player session still writes an ACK for routine snapshots or events.');
 assert(gmPanel.includes('mergePlayerOwnedProjection') && gmPanel.includes('publishCampaignSnapshot'), 'Atomic GM publish does not preserve player-owned changes.');
 assert(gmPanel.includes('payaw:campaign-state-changed') && gmPanel.includes('schedulePublish'), 'Automatic debounced host synchronization is missing.');
+assert(gmPanel.includes('lastPublishedFingerprint') && gmPanel.includes('lastPublishCompletedAt'), 'Identical snapshot suppression or publish coalescing is missing.');
+assert(gmPanel.includes('applyPublishedSlots(published)') && gmPanel.includes('changedSlots'), 'GM publish still requires a full post-publish room refresh.');
 assert(gmPanel.includes('configurePlayerPortal') && gmPanel.includes('Reset login') && gmPanel.includes('disablePlayerPortal'), 'Persistent player-login management controls are missing.');
 assert(!gmPanel.includes('createInvitation') && !gmPanel.includes('Replace device'), 'Legacy one-time invitation/device UI remains.');
 assert(gmPanel.includes('uploadPlayerAsset') && gateway.includes("from('payaw-player-assets')"), 'Protected handout upload is not connected.');
@@ -75,7 +84,23 @@ for (const fn of ['configure_player_portal', 'list_player_portal_logins', 'resol
 }
 assert(portalMigration.includes('update public.campaign_invitations') && portalMigration.includes('revoke all on function public.claim_campaign_invitation'), 'Legacy invitation access is not revoked.');
 assert(portalMigration.includes("projection #- '{baseImageDataUrl}' #- '{map,baseImageDataUrl}'"), 'Legacy baked-map fields are not removed from hosted projections.');
-assert(edgeFunction.includes('SUPABASE_SERVICE_ROLE_KEY') && edgeFunction.includes("status: 'processing'") && edgeFunction.includes('REVISION_CONFLICT'), 'Privileged command processor is incomplete.');
+for (const token of [
+  'record_campaign_dice_roll',
+  'finalize_campaign_projection_command',
+  'publish_campaign_snapshot_optimized',
+  'prune_campaign_netcode_history',
+  'campaign_commands_user_rate_idx',
+  'campaign_commands_history_idx',
+  'campaign_events_dice_history_idx',
+]) assert(optimizationMigration.includes(token), `Netcode optimization migration is missing: ${token}`);
+assert(gateway.includes('publish_campaign_snapshot_optimized'), 'Gateway still uses the write-heavy snapshot RPC.');
+assert(gateway.includes("missingRpc(optimized.error, 'publish_campaign_snapshot_optimized')") && gateway.includes("this.client.rpc('publish_campaign_snapshot', parameters)"), 'Schema-cache compatibility fallback for snapshot publishing is missing.');
+assert(gateway.includes('prune_campaign_netcode_history'), 'Transport-history retention cleanup is not connected.');
+assert(!gateway.includes("{ event: '*', schema: 'public', table: 'campaign_commands'"), 'Command retention deletes still fan out through GM Realtime.');
+assert(edgeFunction.includes('record_campaign_dice_roll'), 'Dice rolls still fan out through player projection updates.');
+assert(edgeFunction.includes('finalize_campaign_projection_command'), 'Shared projection commands still use one PostgREST update per player.');
+assert(!edgeFunction.includes("service.from('campaign_player_slots').update"), 'The Edge Function still performs per-player projection update requests.');
+assert(edgeFunction.includes('SUPABASE_SERVICE_ROLE_KEY') && edgeFunction.includes('REVISION_CONFLICT'), 'Privileged command processor is incomplete.');
 assert(!supabaseClient.includes('SERVICE_ROLE'), 'Service-role key leaked into the browser client.');
 assert(!envExample.includes('VITE_SUPABASE_SERVICE'), 'Service-role variable was exposed as VITE configuration.');
 
@@ -95,6 +120,12 @@ const result = {
   protectedAssets: true,
   serverCommands: true,
   reconnectQueue: true,
+  eventOnlyDice: true,
+  routineClientAcksRemoved: true,
+  changedSlotOnlySnapshots: true,
+  coalescedSnapshotPublishing: true,
+  atomicCommandFinalization: true,
+  netcodeHistoryRetention: true,
   behavior,
 };
 const output = `${JSON.stringify(result, null, 2)}\n`;

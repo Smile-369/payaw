@@ -24,15 +24,6 @@ function numberField(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function missingRpc(error: SupabaseErrorLike | null, functionName: string): boolean {
-  if (error === null || textField(error.code) !== 'PGRST202') return false;
-  const haystack = [error.message, error.details, error.hint]
-    .filter((value): value is string => typeof value === 'string')
-    .join(' ')
-    .toLowerCase();
-  return haystack.length === 0 || haystack.includes(functionName.toLowerCase());
-}
-
 function failure(error: SupabaseErrorLike | null, fallback: string): Error {
   if (error === null) return new Error(fallback);
 
@@ -78,24 +69,6 @@ export interface AtomicPlayerSlot {
   readonly projectionVersion: 1;
   readonly expectedRevision: number;
   readonly projection: PlayerProjection;
-}
-
-export interface PublishedSlotRevision {
-  readonly sourcePlayerId: string;
-  readonly revision: number;
-  readonly changed: boolean;
-}
-
-export interface CampaignSnapshotPublishResult {
-  readonly revision: number;
-  readonly changedSlots: number;
-  readonly slots: readonly PublishedSlotRevision[];
-}
-
-export interface CommandSubmissionResult {
-  readonly projection: PlayerProjection | null;
-  readonly diceRoll: unknown | null;
-  readonly idempotencyKey: string;
 }
 
 export class SupabaseGateway {
@@ -240,21 +213,18 @@ export class SupabaseGateway {
   }
 
   public async commands(campaignId: string): Promise<readonly CampaignCommandRecord[]> {
-    const { data, error } = await this.client.from('campaign_commands')
-      .select('id,campaign_id,user_id,source_player_id,idempotency_key,kind,payload,expected_revision,offline_safe,status,result,error_code,created_at,resolved_at')
-      .eq('campaign_id', campaignId)
-      .order('created_at', { ascending: false }).limit(30);
+    const { data, error } = await this.client.from('campaign_commands').select('*').eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false }).limit(40);
     if (error !== null) throw failure(error, 'Could not load player commands.');
     return (data ?? []) as CampaignCommandRecord[];
   }
 
-  public async diceEvents(campaignId: string, limit = 30): Promise<readonly CampaignEventRecord[]> {
-    const { data, error } = await this.client.from('campaign_events')
-      .select('sequence,id,campaign_id,audience,audience_user_id,event_type,revision,safe_payload,occurred_at')
-      .eq('campaign_id', campaignId).eq('event_type', 'command.dice.roll')
-      .order('sequence', { ascending: false }).limit(Math.max(1, Math.min(100, Math.round(limit))));
-    if (error !== null) throw failure(error, 'Could not load the shared dice history.');
-    return (data ?? []) as CampaignEventRecord[];
+  public async publishAuthority(campaignId: string, revision: number, campaignDocument: Readonly<Record<string, unknown>>, userId: string): Promise<void> {
+    const { error } = await this.client.from('campaign_authority').upsert({
+      campaign_id: campaignId, revision: Math.max(0, Math.round(revision)), schema_version: 23,
+      campaign_document: campaignDocument, updated_by: userId, updated_at: new Date().toISOString(),
+    }, { onConflict: 'campaign_id' });
+    if (error !== null) throw failure(error, 'Could not checkpoint the authoritative campaign state.');
   }
 
   public async publishCampaignSnapshot(
@@ -262,61 +232,15 @@ export class SupabaseGateway {
     revision: number,
     authority: Readonly<Record<string, unknown>>,
     slots: readonly AtomicPlayerSlot[],
-  ): Promise<CampaignSnapshotPublishResult> {
-    const parameters = {
+  ): Promise<number> {
+    const { data, error } = await this.client.rpc('publish_campaign_snapshot', {
       p_campaign_id: campaignId,
       p_revision: Math.max(0, Math.round(revision)),
       p_authority: authority,
       p_slots: slots,
-    };
-    const optimized = await this.client.rpc('publish_campaign_snapshot_optimized', parameters);
-
-    // A frontend can reach Cloudflare before the Supabase migration has finished
-    // propagating through PostgREST's schema cache. Keep create/reset/login usable
-    // by temporarily falling back to the already-deployed atomic writer.
-    if (missingRpc(optimized.error, 'publish_campaign_snapshot_optimized')) {
-      const legacy = await this.client.rpc('publish_campaign_snapshot', parameters);
-      const legacyRevision = Number(legacy.data);
-      if (legacy.error !== null || !Number.isFinite(legacyRevision)) {
-        throw failure(legacy.error, 'Could not publish the complete campaign snapshot.');
-      }
-      return {
-        revision: legacyRevision,
-        changedSlots: slots.length,
-        slots: slots.map((slot) => ({
-          sourcePlayerId: slot.sourcePlayerId,
-          revision: legacyRevision,
-          changed: true,
-        })),
-      };
-    }
-
-    const { data, error } = optimized;
-    if (error !== null || data === null || typeof data !== 'object' || Array.isArray(data)) {
-      throw failure(error, 'Could not publish the complete campaign snapshot.');
-    }
-    const value = data as { revision?: unknown; changedSlots?: unknown; slots?: unknown };
-    if (typeof value.revision !== 'number' || typeof value.changedSlots !== 'number' || !Array.isArray(value.slots)) {
-      throw new Error('The optimized campaign snapshot response was incomplete.');
-    }
-    const publishedSlots = value.slots.flatMap((item): PublishedSlotRevision[] => {
-      if (typeof item !== 'object' || item === null || Array.isArray(item)) return [];
-      const row = item as { sourcePlayerId?: unknown; revision?: unknown; changed?: unknown };
-      if (typeof row.sourcePlayerId !== 'string' || typeof row.revision !== 'number' || typeof row.changed !== 'boolean') return [];
-      return [{ sourcePlayerId: row.sourcePlayerId, revision: row.revision, changed: row.changed }];
     });
-    if (publishedSlots.length !== value.slots.length) throw new Error('The optimized player-slot revision list was invalid.');
-    return { revision: value.revision, changedSlots: value.changedSlots, slots: publishedSlots };
-  }
-
-  public async pruneNetcodeHistory(campaignId: string): Promise<void> {
-    const { error } = await this.client.rpc('prune_campaign_netcode_history', {
-      p_campaign_id: campaignId,
-      p_event_days: 30,
-      p_command_days: 90,
-    });
-    if (missingRpc(error, 'prune_campaign_netcode_history')) return;
-    if (error !== null) throw failure(error, 'Could not prune old campaign transport history.');
+    if (error !== null || typeof data !== 'number') throw failure(error, 'Could not publish the complete campaign snapshot.');
+    return data;
   }
 
   public async revokeMember(campaignId: string, userId: string): Promise<void> {
@@ -420,30 +344,39 @@ export class SupabaseGateway {
     return { ...data, projection: parsePlayerProjection(data.projection) } as PlayerSlotRecord;
   }
 
-  public async submitCommand(campaignId: string, command: PlayerCommand, expectedRevision: number, offlineSafe: boolean, idempotencyKey = uuid()): Promise<CommandSubmissionResult> {
+  public async publishProjection(campaignId: string, sourcePlayerId: string, assignedCharacterId: string, displayName: string, projection: PlayerProjection): Promise<number> {
+    const { data, error } = await this.client.rpc('publish_player_projection', {
+      p_campaign_id: campaignId, p_source_player_id: sourcePlayerId, p_assigned_character_id: assignedCharacterId,
+      p_display_name: displayName, p_projection_version: projection.projectionVersion,
+      p_revision: projection.revision, p_projection: projection,
+    });
+    if (error !== null || typeof data !== 'number') throw failure(error, 'Could not publish the player projection.');
+    return data;
+  }
+
+  public async prunePlayerSlots(campaignId: string, retainedSourcePlayerIds: readonly string[]): Promise<number> {
+    const { data, error } = await this.client.rpc('prune_campaign_player_slots', {
+      p_campaign_id: campaignId,
+      p_keep_source_player_ids: [...retainedSourcePlayerIds],
+    });
+    if (error !== null || typeof data !== 'number') throw failure(error, 'Could not synchronize the hosted player slots.');
+    return data;
+  }
+
+  public async submitCommand(campaignId: string, command: PlayerCommand, expectedRevision: number, offlineSafe: boolean, idempotencyKey = uuid()): Promise<{ readonly projection: PlayerProjection; readonly idempotencyKey: string }> {
     const { data, error } = await this.client.functions.invoke('campaign-command', { body: {
       campaignId, idempotencyKey, kind: command.kind, payload: command, expectedRevision, offlineSafe,
     } });
     if (error !== null) throw failure(error, 'The campaign command could not be processed.');
     if (data?.error !== undefined) throw new Error(String(data.error));
-    const projection = data?.projection === undefined || data?.projection === null
-      ? null
-      : parsePlayerProjection(data.projection);
-    return { projection, diceRoll: data?.diceRoll ?? null, idempotencyKey };
+    return { projection: parsePlayerProjection(data.projection), idempotencyKey };
   }
 
-  public async rollGmDice(campaignId: string, notation: string, rollerUsername = 'GM'): Promise<unknown> {
-    const { data, error } = await this.client.functions.invoke('campaign-command', { body: {
-      campaignId,
-      idempotencyKey: uuid(),
-      kind: 'dice.roll',
-      payload: { kind: 'dice.roll', notation, visibility: 'party', rollerUsername },
-      expectedRevision: 0,
-      offlineSafe: true,
-    } });
-    if (error !== null) throw failure(error, 'The GM dice roll could not be processed.');
-    if (data?.error !== undefined) throw new Error(String(data.error));
-    return data?.diceRoll;
+  public async acknowledge(campaignId: string, projectionRevision: number, eventSequence = 0): Promise<void> {
+    const { error } = await this.client.rpc('ack_campaign_state', {
+      p_campaign_id: campaignId, p_revision: projectionRevision, p_event_sequence: eventSequence,
+    });
+    if (error !== null) throw failure(error, 'Could not acknowledge campaign state.');
   }
 
   private presenceRecords(channel: RealtimeChannel): PresenceRecord[] {
@@ -477,8 +410,7 @@ export class SupabaseGateway {
     const session = await this.session();
     if (session !== null) await this.client.realtime.setAuth(session.access_token);
     const channel = this.client.channel(`room:${campaignId}:live`, { config: { private: true, presence: { key: userId } } });
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_commands', filter: `campaign_id=eq.${campaignId}` }, (event) => handlers.onCommand(event.new as unknown as CampaignCommandRecord));
-    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_commands', filter: `campaign_id=eq.${campaignId}` }, (event) => handlers.onCommand(event.new as unknown as CampaignCommandRecord));
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_commands', filter: `campaign_id=eq.${campaignId}` }, (event) => handlers.onCommand(event.new as unknown as CampaignCommandRecord));
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_events', filter: `campaign_id=eq.${campaignId}` }, (event) => {
       handlers.onEvent?.(event.new as unknown as CampaignEventRecord);
     });

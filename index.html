@@ -930,7 +930,7 @@
         <strong>Room authority</strong>
         <div class="netcode-room-name" id="netcode-room-name">No hosted room linked</div>
         <label class="form-field"><span>Campaign ID</span><input id="netcode-campaign-id" autocomplete="off" spellcheck="false" maxlength="36" placeholder="Paste the hosted campaign UUID"/></label>
-        <div class="button-row"><button class="primary" id="netcode-load-campaign" type="button">Load campaign</button><button id="netcode-create-room" type="button">Create / link room</button><button id="netcode-publish-all" type="button">Sync player views now</button></div>
+        <div class="button-row"><button class="primary" id="netcode-load-campaign" type="button">Load campaign</button><button id="netcode-create-room" type="button">Create / link room</button><button id="netcode-publish-all" type="button">Sync player views now</button><button id="netcode-open-dice-tray" type="button">Open dice tray</button></div>
       </section>
       <section>
         <strong>Player portal login</strong>
@@ -949,6 +949,21 @@
       <section><strong>Recent player commands</strong><div id="netcode-commands" class="netcode-roster"><span>No commands received.</span></div></section>
     </div>
   </section>
+
+  <div class="netcode-dice-dialog" id="netcode-dice-dialog" data-open="false" role="dialog" aria-modal="true" aria-label="GM dice tray">
+    <section class="netcode-dice-panel">
+      <header class="netcode-dice-head">
+        <div><strong>Dice tray</strong><small>GM and player rolls are visible to everyone in the campaign.</small></div>
+        <button id="netcode-dice-close" type="button" aria-label="Close dice tray">×</button>
+      </header>
+      <form class="netcode-dice-form" id="netcode-dice-form">
+        <label class="form-field"><span>Notation</span><input id="netcode-dice-notation" value="1d20" autocomplete="off" spellcheck="false" placeholder="2d6+1"/></label>
+        <button class="primary" id="netcode-dice-roll" type="submit">Roll for everyone</button>
+      </form>
+      <div class="netcode-dice-result" id="netcode-dice-result"><strong>—</strong><small>Party-wide rolls will appear here.</small></div>
+      <div class="netcode-dice-history" id="netcode-dice-history"><span>No party rolls yet.</span></div>
+    </section>
+  </div>
 </section>
 
 <details class="card disclosure campaign-prep-card" open>

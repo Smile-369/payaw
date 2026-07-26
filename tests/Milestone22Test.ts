@@ -153,8 +153,10 @@ function main(): void {
   assert(permissionDenied, 'Default-deny command boundary did not reject a disabled action.');
   const diceState = setPlayerCapabilities(playerView, 'player-1', ['dice.roll']);
   const diceProjection = createPlayerProjection({ ...context, playerView: diceState, viewerId: 'player-1' });
-  const rolled = applyPlayerCommand(diceProjection, { kind: 'dice.roll', notation: '2d6+1', visibility: 'private' }, { random: () => 0.5, now });
+  const rolled = applyPlayerCommand(diceProjection, { kind: 'dice.roll', notation: '2d6+1', visibility: 'private', rollerUsername: 'PLAYER_ONE' }, { random: () => 0.5, now });
   assert(rolled.diceRolls[0]?.total === 9, 'Capability-approved dice command did not execute deterministically.');
+  assert(rolled.diceRolls[0]?.visibility === 'party', 'Dice visibility was not forced to the whole party.');
+  assert(rolled.diceRolls[0]?.rollerUsername === 'PLAYER_ONE', 'Dice roll did not retain the player username.');
 
   const parsed = parsePlayerProjection(JSON.parse(firstJson));
   assert(parsed.viewer.displayName === first.viewer.displayName, 'Safe projection could not round-trip through its parser.');

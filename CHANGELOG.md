@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Added party-wide dice announcements in both GM and Player View: `USERNAME rolled XX` appears as a large temporary banner on every connected screen.
+- Added campaign-event Realtime delivery and bounded history hydration for resolved dice results.
+- Added an atomic event-only dice RPC, an optimized campaign snapshot RPC, transport-history retention cleanup, and supporting hot-path indexes.
+
+### Changed
+- Dice rolls are now always party-visible. The private and GM-only visibility selector was removed from the player dice tray.
+- Player presence now uses the current player-portal username so roll announcements follow self-service username changes.
+- Dice rolls no longer rewrite every player's full projection JSON. One applied command and one party event now carry the durable result.
+- Legacy per-slot dice histories are dropped during later projection publication instead of being copied forward forever.
+- Removed routine client ACK writes for projection and event delivery; revision-gap recovery remains the source of truth.
+- GM autosync now coalesces bursts, suppresses identical snapshots, writes only changed player slots, and updates local revision tokens without a five-query post-publish refresh.
+- Automatic snapshot saves no longer append an audit-log row on every autosave.
+- Non-dice player commands now finalize all affected projections, their event, and command status in one database transaction instead of issuing one PostgREST update request per player.
+- Unsharing a party journal entry now removes it from the other player projections instead of leaving a stale copy.
+- The GM performs bounded best-effort cleanup of old transient events and commands when opening a hosted room.
+
+### Deployment
+- Apply `202607260010_netcode_write_reduction.sql`, redeploy the `campaign-command` Supabase Edge Function, then deploy the frontend.
+
 ## 0.24.0
 
 ### Changed

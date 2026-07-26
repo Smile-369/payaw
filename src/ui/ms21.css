@@ -891,3 +891,120 @@ body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-templa
 .netcode-portal-credentials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .netcode-portal-credentials input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .06em; }
 @media (max-width: 720px) { .netcode-portal-credentials { grid-template-columns: 1fr; } }
+
+/* Shared GM dice tray. Player tray uses its own player-view stylesheet. */
+.netcode-dice-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: none;
+  place-items: center;
+  padding: 20px;
+  background-color: rgba(0, 0, 0, 0.34);
+}
+.netcode-dice-dialog[data-open="true"] { display: grid; }
+
+/* Keep the GM tray fully opaque even when theme surface variables are transparent. */
+.netcode-dice-panel {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 40px));
+  display: grid;
+  grid-template-rows: auto auto auto minmax(120px, 1fr);
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+  opacity: 1 !important;
+  color: #111;
+  border: 2px solid #173f7b;
+  background: #c0c0c0 !important;
+  box-shadow:
+    0 0 0 1px #ffffff,
+    0 18px 60px rgba(0, 0, 0, 0.45);
+}
+.netcode-dice-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: #c0c0c0;
+}
+.netcode-dice-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  opacity: 1 !important;
+  color: #fff;
+  background: linear-gradient(90deg, #143b7c, #3976b4) !important;
+}
+.netcode-dice-head > div { display: grid; gap: 2px; }
+.netcode-dice-head strong { font-size: 22px; }
+.netcode-dice-head small { color: rgba(255, 255, 255, 0.82); }
+.netcode-dice-head button { min-width: 36px; min-height: 32px; font-size: 18px; }
+.netcode-dice-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: end;
+  gap: 10px;
+  padding: 12px;
+  opacity: 1 !important;
+  border-bottom: 1px solid #777;
+  background: #c0c0c0 !important;
+}
+.netcode-dice-form label,
+.netcode-dice-form div {
+  background: transparent;
+}
+.netcode-dice-form input,
+.netcode-dice-form select,
+.netcode-dice-form textarea {
+  opacity: 1 !important;
+  color: #111;
+  background: #fff !important;
+}
+.netcode-dice-form button { min-height: 34px; }
+.netcode-dice-result {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  padding: 18px;
+  opacity: 1 !important;
+  border-bottom: 1px solid #777;
+  background: #fff !important;
+  text-align: center;
+}
+.netcode-dice-result strong {
+  color: #123a78;
+  font-size: clamp(28px, 5vw, 52px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.netcode-dice-result small { margin-top: 6px; color: #555; }
+.netcode-dice-history {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  opacity: 1 !important;
+  background: #c0c0c0 !important;
+}
+.netcode-dice-history article {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  opacity: 1 !important;
+  color: #111;
+  border: 1px solid #777;
+  background: #fff !important;
+}
+.netcode-dice-history article + article { margin-top: 6px; }
+.netcode-dice-history article > span { display: grid; gap: 3px; min-width: 0; }
+.netcode-dice-history strong { overflow-wrap: anywhere; }
+.netcode-dice-history small { color: #555; overflow-wrap: anywhere; }
+.netcode-dice-history .player-card-badge { align-self: start; }
+@media (max-width: 620px) {
+  .netcode-dice-form { grid-template-columns: 1fr; }
+  .netcode-dice-form button { width: 100%; }
+}

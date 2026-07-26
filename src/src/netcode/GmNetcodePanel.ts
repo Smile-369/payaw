@@ -1,15 +1,10 @@
 import { createPlayerProjection, type PlayerProjectionContext } from '../player/ProjectionService';
-import { parsePlayerProjection } from '../player/PlayerProjection';
 import type { PlayerViewState } from '../player/PlayerViewState';
 import { mergePlayerOwnedProjection } from './ProjectionMerge';
 import { readNetcodeConfig } from './NetcodeConfig';
-import {
-  SupabaseGateway,
-  type AtomicPlayerSlot,
-  type CampaignSnapshotPublishResult,
-} from './SupabaseGateway';
-import type { CampaignCommandRecord, CampaignEventRecord, CampaignMemberRecord, PlayerPortalLoginRecord, PlayerSlotRecord, PresenceRecord } from './NetcodeTypes';
-import { parseSharedDiceRoll, showDiceRollBanner, type SharedDiceRoll } from './DiceRollBanner';
+import { SupabaseGateway } from './SupabaseGateway';
+import type { CampaignCommandRecord, CampaignMemberRecord, PlayerPortalLoginRecord, PlayerSlotRecord, PresenceRecord } from './NetcodeTypes';
+import { parseSharedDiceRoll, showDiceRollBanner } from './DiceRollBanner';
 
 export interface GmNetcodePanelOptions {
   readonly getContext: () => Omit<PlayerProjectionContext, 'playerView' | 'viewerId'>;
@@ -44,21 +39,6 @@ function isSchemaCacheError(value: unknown): boolean {
     || message.includes('could not find the function');
 }
 
-function fingerprint(value: unknown): string {
-  const serialized = JSON.stringify(value);
-  let hash = 2166136261;
-  for (let index = 0; index < serialized.length; index += 1) {
-    hash ^= serialized.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `${serialized.length.toString(36)}:${(hash >>> 0).toString(36)}`;
-}
-
-interface PreparedSnapshotPublish {
-  readonly result: CampaignSnapshotPublishResult;
-  readonly slots: readonly AtomicPlayerSlot[];
-}
-
 export class GmNetcodePanel {
   private readonly status = element<HTMLElement>('#netcode-status');
   private readonly statusDetail = element<HTMLElement>('#netcode-status-detail');
@@ -80,14 +60,6 @@ export class GmNetcodePanel {
   private readonly playerLoginPassword = element<HTMLInputElement>('#netcode-player-login-password');
   private readonly rosterElement = element<HTMLElement>('#netcode-roster');
   private readonly commandsElement = element<HTMLElement>('#netcode-commands');
-  private readonly openDiceTrayButton = element<HTMLButtonElement>('#netcode-open-dice-tray');
-  private readonly diceDialog = element<HTMLElement>('#netcode-dice-dialog');
-  private readonly diceCloseButton = element<HTMLButtonElement>('#netcode-dice-close');
-  private readonly diceForm = element<HTMLFormElement>('#netcode-dice-form');
-  private readonly diceNotation = element<HTMLInputElement>('#netcode-dice-notation');
-  private readonly diceRollButton = element<HTMLButtonElement>('#netcode-dice-roll');
-  private readonly diceResult = element<HTMLElement>('#netcode-dice-result');
-  private readonly diceHistory = element<HTMLElement>('#netcode-dice-history');
   private readonly config = readNetcodeConfig();
   private readonly gateway = this.config.enabled ? new SupabaseGateway() : null;
   private roomId: string | null = null;
@@ -96,16 +68,11 @@ export class GmNetcodePanel {
   private slots: PlayerSlotRecord[] = [];
   private portalLogins: PlayerPortalLoginRecord[] = [];
   private commands: CampaignCommandRecord[] = [];
-  private diceEvents: CampaignEventRecord[] = [];
-  private diceRolls: SharedDiceRoll[] = [];
   private presence: PresenceRecord[] = [];
   private unsubscribeRealtime: (() => void) | null = null;
   private publishTimer: number | null = null;
   private publishRunning = false;
   private publishPending = false;
-  private lastPublishedFingerprint: string | null = null;
-  private lastPublishCompletedAt = 0;
-  private readonly prunedRoomIds = new Set<string>();
   private loadingAuthority = false;
   private readonly uploadedAssetUrls = new Map<string, string>();
   private portalApiReady = true;
@@ -126,15 +93,6 @@ export class GmNetcodePanel {
     this.publishAllButton.addEventListener('click', () => void this.publishAll(true));
     this.createPlayerLoginButton.addEventListener('click', () => void this.createPlayerLogin());
     this.copyPlayerLoginButton.addEventListener('click', () => void this.copyPlayerLogin());
-    this.openDiceTrayButton.addEventListener('click', () => this.openDiceTray());
-    this.diceCloseButton.addEventListener('click', () => this.closeDiceTray());
-    this.diceDialog.addEventListener('click', (event) => {
-      if (event.target === this.diceDialog) this.closeDiceTray();
-    });
-    this.diceForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      void this.rollGmDice();
-    });
     this.portalPlayer.addEventListener('change', () => this.showSelectedPortalLogin());
     document.addEventListener('payaw:player-slots-changed', () => {
       this.populatePlayers();
@@ -145,7 +103,6 @@ export class GmNetcodePanel {
     document.addEventListener('payaw:player-state-changed', () => this.schedulePublish());
     document.addEventListener('payaw:project-state-changed', () => this.schedulePublish());
     this.populatePlayers();
-    this.renderDiceTray();
     if (!this.config.enabled) {
       this.setStatus('LOCAL ONLY', 'Hosting is off. Add the Supabase public URL and publishable key in your deployment settings.');
       this.setEnabled(false);
@@ -181,7 +138,7 @@ export class GmNetcodePanel {
   private setEnabled(enabled: boolean): void {
     for (const control of [
       this.email, this.password, this.signIn, this.createAccount, this.signOut, this.campaignIdInput, this.loadCampaignButton, this.createRoomButton, this.publishAllButton,
-      this.portalPlayer, this.createPlayerLoginButton, this.copyPlayerLoginButton, this.openDiceTrayButton, this.diceRollButton,
+      this.portalPlayer, this.createPlayerLoginButton, this.copyPlayerLoginButton,
     ]) control.disabled = !enabled;
   }
 
@@ -202,8 +159,6 @@ export class GmNetcodePanel {
         this.createRoomButton.disabled = true;
         this.publishAllButton.disabled = true;
         this.createPlayerLoginButton.disabled = true;
-        this.openDiceTrayButton.disabled = true;
-        this.diceRollButton.disabled = true;
         return;
       }
       this.userId = session.user.id;
@@ -224,8 +179,6 @@ export class GmNetcodePanel {
         ?? rooms.find((candidate) => candidate.source_campaign_id === context.campaign.id)
         ?? null;
       if (room === null) {
-        this.openDiceTrayButton.disabled = true;
-        this.diceRollButton.disabled = true;
         this.setStatus('SIGNED IN', 'Create a private room. Future local changes will synchronize automatically.');
         return;
       }
@@ -235,7 +188,6 @@ export class GmNetcodePanel {
       this.roomName.textContent = `${room.name} · ${room.id}`;
       await this.refreshRoom();
       await this.startRealtime();
-      this.pruneHistoryOnce();
       this.setStatus('ROOM LINKED', 'Enter the Campaign ID and press Load campaign to restore the hosted state into the GM editor.');
     } catch (error) { this.fail(error); }
   }
@@ -310,7 +262,6 @@ export class GmNetcodePanel {
       this.roomName.textContent = `${campaign.name} · ${this.roomId}`;
       await this.refreshRoom();
       await this.startRealtime();
-      this.pruneHistoryOnce();
       this.schedulePublish();
       this.options.notify('Private campaign room is ready and automatic sync is on.', 'success');
     } catch (error) {
@@ -350,9 +301,6 @@ export class GmNetcodePanel {
       this.roomName.textContent = `${room.name} · ${campaignId}`;
       await this.refreshRoom();
       await this.startRealtime();
-      this.lastPublishedFingerprint = this.currentSnapshotFingerprint();
-      this.lastPublishCompletedAt = Date.now();
-      this.pruneHistoryOnce();
       this.setStatus('CAMPAIGN LOADED', `${room.name} · revision ${authority.revision}`);
       this.options.notify('Hosted campaign state loaded from Supabase.', 'success');
     } catch (error) {
@@ -368,36 +316,10 @@ export class GmNetcodePanel {
     this.publishPending = true;
     if (this.publishTimer !== null) window.clearTimeout(this.publishTimer);
     this.setStatus('SYNC PENDING', 'Local changes are saved. Updating every player view shortly.');
-    const minimumIntervalRemaining = Math.max(0, this.lastPublishCompletedAt + 5_000 - Date.now());
-    const delay = Math.max(2_000, minimumIntervalRemaining);
     this.publishTimer = window.setTimeout(() => {
       this.publishTimer = null;
       void this.publishAll(false);
-    }, delay);
-  }
-
-  private currentSnapshotFingerprint(): string {
-    const context = this.options.getContext();
-    return fingerprint({
-      authority: this.options.getAuthorityDocument(),
-      playerView: this.options.getState(),
-      campaignRevision: context.campaign.runState.revision,
-    });
-  }
-
-  private pruneHistoryOnce(): void {
-    if (this.gateway === null || this.roomId === null || this.prunedRoomIds.has(this.roomId)) return;
-    const roomId = this.roomId;
-    const storageKey = `payaw:netcode:last-pruned:${roomId}`;
-    const lastPrunedAt = Number(localStorage.getItem(storageKey) ?? 0);
-    if (Number.isFinite(lastPrunedAt) && Date.now() - lastPrunedAt < 24 * 60 * 60 * 1_000) {
-      this.prunedRoomIds.add(roomId);
-      return;
-    }
-    this.prunedRoomIds.add(roomId);
-    void this.gateway.pruneNetcodeHistory(roomId)
-      .then(() => localStorage.setItem(storageKey, String(Date.now())))
-      .catch(() => this.prunedRoomIds.delete(roomId));
+    }, 650);
   }
 
   private async playerSafeContext(): Promise<Omit<PlayerProjectionContext, 'playerView' | 'viewerId'>> {
@@ -417,14 +339,14 @@ export class GmNetcodePanel {
     return { ...context, campaign: { ...context.campaign, assets } };
   }
 
-  private async publishSnapshotWithRetry(): Promise<PreparedSnapshotPublish> {
+  private async publishSnapshotWithRetry(): Promise<number> {
     if (this.gateway === null || this.roomId === null) throw new Error('Create or link the room first.');
     const state = this.options.getState();
     const context = await this.playerSafeContext();
     const authority = this.options.getAuthorityDocument();
-    let existing = [...this.slots];
+    let existing = await this.gateway.slots(this.roomId);
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const slots: AtomicPlayerSlot[] = state.players.filter((candidate) => candidate.active).map((player) => {
+      const slots = state.players.filter((candidate) => candidate.active).map((player) => {
         const generated = createPlayerProjection({ ...context, playerView: state, viewerId: player.id });
         const hosted = existing.find((slot) => slot.source_player_id === player.id);
         return {
@@ -437,54 +359,24 @@ export class GmNetcodePanel {
         };
       });
       try {
-        const result = await this.gateway.publishCampaignSnapshot(
+        return await this.gateway.publishCampaignSnapshot(
           this.roomId,
           context.campaign.runState.revision,
           authority,
           slots,
         );
-        return { result, slots };
       } catch (error) {
         if (attempt === 1 || !cleanError(error).includes('SNAPSHOT_CONFLICT')) throw error;
-        existing = [...await this.gateway.slots(this.roomId)];
+        existing = await this.gateway.slots(this.roomId);
       }
     }
     throw new Error('The room changed during synchronization.');
-  }
-
-  private applyPublishedSlots(published: PreparedSnapshotPublish): void {
-    if (this.roomId === null) return;
-    const previous = new Map(this.slots.map((slot) => [slot.source_player_id, slot]));
-    const revisions = new Map(published.result.slots.map((slot) => [slot.sourcePlayerId, slot.revision]));
-    const generatedAt = new Date().toISOString();
-    this.slots = published.slots.map((slot) => {
-      const prior = previous.get(slot.sourcePlayerId);
-      const revision = revisions.get(slot.sourcePlayerId) ?? slot.projection.revision;
-      return {
-        campaign_id: this.roomId as string,
-        source_player_id: slot.sourcePlayerId,
-        assigned_user_id: prior?.assigned_user_id ?? null,
-        assigned_character_id: slot.assignedCharacterId,
-        display_name: slot.displayName,
-        projection_version: slot.projectionVersion,
-        revision,
-        projection: parsePlayerProjection({ ...slot.projection, revision, generatedAt }),
-        generated_at: generatedAt,
-      };
-    });
-    this.renderRoster();
   }
 
   private async publishAll(manual: boolean): Promise<boolean> {
     if (this.gateway === null || this.roomId === null || this.userId === null) {
       this.fail(new Error('Create or link the room first.'));
       return false;
-    }
-    const snapshotFingerprint = this.currentSnapshotFingerprint();
-    if (!manual && snapshotFingerprint === this.lastPublishedFingerprint) {
-      this.publishPending = false;
-      this.setStatus('ROOM LIVE', `${this.roomSummary()} · no hosted changes`);
-      return true;
     }
     if (this.publishRunning) {
       this.publishPending = true;
@@ -495,14 +387,9 @@ export class GmNetcodePanel {
     this.publishAllButton.disabled = true;
     this.setStatus('SYNCING', 'Publishing one atomic campaign snapshot.');
     try {
-      const published = await this.publishSnapshotWithRetry();
-      this.applyPublishedSlots(published);
-      this.lastPublishedFingerprint = snapshotFingerprint;
-      this.lastPublishCompletedAt = Date.now();
-      this.setStatus(
-        'ROOM LIVE',
-        `${this.roomSummary()} · revision ${published.result.revision} · ${published.result.changedSlots} player view${published.result.changedSlots === 1 ? '' : 's'} changed`,
-      );
+      const revision = await this.publishSnapshotWithRetry();
+      await this.refreshRoom();
+      this.setStatus('ROOM LIVE', `${this.roomSummary()} · revision ${revision}`);
       if (manual) this.options.notify('Campaign and every player view are synchronized.', 'success');
       return true;
     } catch (error) {
@@ -589,11 +476,10 @@ export class GmNetcodePanel {
 
   private async refreshRoom(): Promise<void> {
     if (this.gateway === null || this.roomId === null) return;
-    [this.roster, this.slots, this.commands, this.diceEvents] = await Promise.all([
+    [this.roster, this.slots, this.commands] = await Promise.all([
       this.gateway.roster(this.roomId).then((items) => [...items]),
       this.gateway.slots(this.roomId).then((items) => [...items]),
       this.gateway.commands(this.roomId).then((items) => [...items]),
-      this.gateway.diceEvents(this.roomId).then((items) => [...items]),
     ]);
 
     try {
@@ -609,9 +495,6 @@ export class GmNetcodePanel {
 
     this.publishAllButton.disabled = false;
     this.createPlayerLoginButton.disabled = !this.portalApiReady;
-    this.openDiceTrayButton.disabled = false;
-    this.diceRollButton.disabled = false;
-    this.rebuildDiceRolls();
     this.populatePlayers();
     this.renderRoster();
     this.renderCommands();
@@ -643,7 +526,6 @@ export class GmNetcodePanel {
       },
       onSlot: (slot) => {
         this.slots = [slot, ...this.slots.filter((item) => item.source_player_id !== slot.source_player_id)];
-        this.ingestDiceRoll(slot.projection.diceRolls[0], true);
         this.renderRoster();
       },
       onPresence: (records) => {
@@ -654,8 +536,8 @@ export class GmNetcodePanel {
       onConnection: (state, detail) => this.setStatus(state === 'online' ? 'ROOM LIVE' : state.toLocaleUpperCase(), detail),
       onEvent: (event) => {
         if (event.event_type !== 'command.dice.roll') return;
-        this.diceEvents = [event, ...this.diceEvents.filter((item) => item.id !== event.id)].slice(0, 100);
-        this.ingestDiceRoll(event.safe_payload.diceRoll, true);
+        const roll = parseSharedDiceRoll(event.safe_payload.diceRoll);
+        if (roll !== null) showDiceRollBanner(roll);
       },
     });
   }
@@ -723,122 +605,10 @@ export class GmNetcodePanel {
   }
 
 
-  private rebuildDiceRolls(): void {
-    const candidates: unknown[] = [];
-    for (const event of this.diceEvents) candidates.push(event.safe_payload.diceRoll);
-    for (const command of this.commands) {
-      if (command.kind === 'dice.roll' && command.status === 'applied' && command.result !== null) {
-        candidates.push(command.result.diceRoll);
-      }
-    }
-    for (const slot of this.slots) candidates.push(...slot.projection.diceRolls);
-
-    const unique = new Map<string, SharedDiceRoll>();
-    for (const candidate of candidates) {
-      const roll = parseSharedDiceRoll(candidate);
-      if (roll !== null && !unique.has(roll.id)) unique.set(roll.id, roll);
-    }
-    this.diceRolls = [...unique.values()]
-      .sort((a, b) => Date.parse(b.rolledAt) - Date.parse(a.rolledAt))
-      .slice(0, 100);
-    this.renderDiceTray();
-  }
-
-  private ingestDiceRoll(value: unknown, announce: boolean): void {
-    const roll = parseSharedDiceRoll(value);
-    if (roll === null) return;
-    const isNew = !this.diceRolls.some((item) => item.id === roll.id);
-    this.diceRolls = [roll, ...this.diceRolls.filter((item) => item.id !== roll.id)]
-      .sort((a, b) => Date.parse(b.rolledAt) - Date.parse(a.rolledAt))
-      .slice(0, 100);
-    this.renderDiceTray();
-    if (announce && isNew) showDiceRollBanner(roll);
-  }
-
-  private renderDiceTray(): void {
-    this.diceHistory.replaceChildren();
-    const latest = this.diceRolls[0];
-    if (latest === undefined) {
-      const empty = document.createElement('span');
-      empty.textContent = 'No party rolls yet.';
-      this.diceHistory.append(empty);
-      const total = document.createElement('strong');
-      total.textContent = '—';
-      const detail = document.createElement('small');
-      detail.textContent = 'GM and player rolls will appear here.';
-      this.diceResult.replaceChildren(total, detail);
-      return;
-    }
-
-    const latestTitle = document.createElement('strong');
-    latestTitle.textContent = `${latest.rollerUsername} rolled ${latest.total}`;
-    const latestDetail = document.createElement('small');
-    latestDetail.textContent = `${latest.notation} · ${latest.values.join(' + ')}${latest.modifier === 0 ? '' : ` ${latest.modifier > 0 ? '+' : '-'} ${Math.abs(latest.modifier)}`}`;
-    this.diceResult.replaceChildren(latestTitle, latestDetail);
-
-    for (const roll of this.diceRolls.slice(0, 30)) {
-      const row = document.createElement('article');
-      const copy = document.createElement('span');
-      const title = document.createElement('strong');
-      title.textContent = `${roll.rollerUsername} rolled ${roll.total}`;
-      const detail = document.createElement('small');
-      detail.textContent = `${roll.notation} · [${roll.values.join(', ')}]${roll.modifier === 0 ? '' : ` ${roll.modifier > 0 ? '+' : ''}${roll.modifier}`} · ${new Date(roll.rolledAt).toLocaleTimeString()}`;
-      copy.append(title, detail);
-      const badge = document.createElement('small');
-      badge.className = 'player-card-badge';
-      badge.textContent = 'PARTY';
-      row.append(copy, badge);
-      this.diceHistory.append(row);
-    }
-  }
-
-  private openDiceTray(): void {
-    if (this.roomId === null) {
-      this.fail(new Error('Create or load the campaign room first.'));
-      return;
-    }
-    this.renderDiceTray();
-    this.diceDialog.dataset.open = 'true';
-    this.diceNotation.focus();
-    this.diceNotation.select();
-  }
-
-  private closeDiceTray(): void {
-    this.diceDialog.dataset.open = 'false';
-  }
-
-  private gmRollerUsername(): string {
-    const displayName = this.roster.find((member) => member.user_id === this.userId)?.display_name.trim() ?? '';
-    const readable = displayName.includes('@') ? displayName.slice(0, displayName.indexOf('@')) : displayName;
-    return readable.slice(0, 24) || 'GM';
-  }
-
-  private async rollGmDice(): Promise<void> {
-    if (this.gateway === null || this.roomId === null) {
-      this.fail(new Error('Create or load the campaign room first.'));
-      return;
-    }
-    const notation = this.diceNotation.value.trim();
-    if (notation.length === 0) {
-      this.fail(new Error('Enter dice notation such as 1d20 or 2d6+1.'));
-      return;
-    }
-    this.diceRollButton.disabled = true;
-    try {
-      const value = await this.gateway.rollGmDice(this.roomId, notation, this.gmRollerUsername());
-      const roll = parseSharedDiceRoll(value);
-      if (roll === null) throw new Error('The GM dice response was incomplete.');
-      this.ingestDiceRoll(roll, true);
-    } catch (error) {
-      this.fail(error);
-    } finally {
-      this.diceRollButton.disabled = this.roomId === null;
-    }
-  }
-
   private announceDiceRoll(command: CampaignCommandRecord): void {
     if (command.kind !== 'dice.roll' || command.status !== 'applied' || command.result === null) return;
-    this.ingestDiceRoll(command.result.diceRoll, true);
+    const roll = parseSharedDiceRoll(command.result.diceRoll);
+    if (roll !== null) showDiceRollBanner(roll);
   }
 
   private renderCommands(): void {

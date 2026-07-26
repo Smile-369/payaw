@@ -31,7 +31,7 @@ function main(): void {
     map: { ...baseProjection(15).map, features: [{ id: 'ping:one', kind: 'ping' as const, label: 'Look here', knowledge: 'visited' as const, position: { x: 20, y: 20 }, approximateRadius: null, detail: 'Temporary player ping', linkedEntityId: null, color: '#73b7a4', expiresAt: '2099-01-01T00:00:00.000Z' }] },
     messages: [{ ...baseProjection(15).messages[0]!, messages: [{ id: 'message:player', senderLabel: 'Ana', body: 'Are you there?', sentAt: '2026-07-23T00:00:00.000Z', status: 'sent' as const, presentation: { glitch: false, corruption: 0 } }] }],
     objectives: [{ id: 'objective:player', wording: 'Check the bell tower', status: 'proposed' as const, completionNote: '', playerCreated: true }],
-    diceRolls: [{ id: 'roll:one', notation: '1d20', values: [12], modifier: 0, total: 12, visibility: 'private' as const, rolledAt: '2026-07-23T00:00:00.000Z' }],
+    diceRolls: [{ id: 'roll:one', rollerUsername: 'PLAYER_ONE', notation: '1d20', values: [12], modifier: 0, total: 12, visibility: 'party' as const, rolledAt: '2026-07-23T00:00:00.000Z' }],
   };
   const merged = mergePlayerOwnedProjection(parsePlayerProjection(generated), parsePlayerProjection(hosted));
   const json = JSON.stringify(merged);
@@ -42,7 +42,7 @@ function main(): void {
   assert(merged.map.features.some((feature) => feature.id === 'ping:one'), 'Unexpired player ping was overwritten.');
   assert(merged.messages[0]?.messages.some((message) => message.id === 'message:player'), 'Player message was overwritten.');
   assert(merged.objectives.some((objective) => objective.playerCreated), 'Player objective proposal was overwritten.');
-  assert(merged.diceRolls.length === 1, 'Player dice history was overwritten.');
+  assert(merged.diceRolls.length === 0, 'Legacy dice history was copied back into the durable player slot.');
   assert(merged.revision === 15, 'Projection merge moved the revision backwards.');
   assert(isOfflineSafeCommand({ kind: 'journal.create', title: 'x', body: '', sharedWithParty: false }), 'Private journal write should be offline-safe.');
   assert(!isOfflineSafeCommand({ kind: 'dice.roll', notation: '1d20', visibility: 'party' }), 'Dice must not be queued offline.');
@@ -74,7 +74,7 @@ function main(): void {
   assert(reducedTable.players.length === 3 && reducedTable.characters.length === 3, 'The player table did not shrink to the GM-configured size.');
   assert(Object.keys(reducedTable.capabilitiesByPlayer).length === 3, 'Removed player capabilities survived a table resize.');
   console.log(JSON.stringify({
-    projectionMerge: true, staleKnowledgeRemoved: true, playerOwnedDataPreserved: true,
+    projectionMerge: true, staleKnowledgeRemoved: true, playerOwnedDataPreserved: true, eventBackedDice: true,
     monotonicRevision: true, offlineQueueAllowlist: true, configurablePlayerCount: true,
     denyByDefault: true, publicTownMapBaseline: true,
   }, null, 2));

@@ -83,6 +83,7 @@ The migration creates:
 - Protected `payaw-player-assets` and `payaw-gm-assets` Storage buckets.
 - Realtime publication for safe projections, commands, and safe events.
 - Atomic authority/player snapshot publishing with revision-conflict detection.
+- Event-only dice recording, atomic multi-recipient command finalization, changed-slot-only snapshot writes, hot-path indexes, and bounded command/event retention from `202607260010_netcode_write_reduction.sql`.
 
 Supabase Postgres Changes honors table RLS and requires publication enrollment; see [Postgres Changes](https://supabase.com/docs/guides/realtime/postgres-changes). PAYAW also uses private Presence following the [Realtime authorization](https://supabase.com/docs/guides/realtime/authorization) pattern.
 
@@ -243,3 +244,5 @@ git push
 ```
 
 Cloudflare rebuilds from Git. Supabase applies only migrations not already recorded. Keep schema changes in migration files; do not make untracked production-only table edits.
+
+For the PAYAW 0.24 netcode optimization, deploy in this order: database migrations, `campaign-command`, then the frontend. The new function and frontend call RPCs introduced by `202607260010_netcode_write_reduction.sql`.

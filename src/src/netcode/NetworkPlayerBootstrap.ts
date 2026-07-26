@@ -212,7 +212,7 @@ async function openRoom(
   }
   const presence: PresenceRecord = {
     userId,
-    displayName: projection.viewer.displayName,
+    displayName: username,
     role: 'player',
     sourcePlayerId,
     view: 'player',

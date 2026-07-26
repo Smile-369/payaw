@@ -900,10 +900,10 @@ function createTravelDialog(getProjection: () => PlayerProjection): HTMLElement 
 }
 
 function createDiceDialog(getProjection: () => PlayerProjection, onCommand: (command: PlayerCommand) => void): HTMLElement {
-  const backdrop = create('div', 'player-utility-dialog player-dice-dialog');
+  const backdrop = create('div', 'player-utility-dialog');
   backdrop.id = 'player-dice-dialog';
   backdrop.setAttribute('role', 'dialog'); backdrop.setAttribute('aria-modal', 'true'); backdrop.setAttribute('aria-label', 'Dice tray');
-  const panel = create('section', 'player-utility-panel player-dice-panel');
+  const panel = create('section', 'player-utility-panel');
   const header = create('div', 'player-utility-panel-head'); appendText(header, 'h2', 'Dice tray');
   const close = create('button', '', '×'); close.type = 'button'; close.setAttribute('aria-label', 'Close dice tray'); header.append(close);
   const form = create('form', 'player-form-grid');
@@ -918,16 +918,11 @@ function createDiceDialog(getProjection: () => PlayerProjection, onCommand: (com
     history.replaceChildren();
     for (const item of projection.diceRolls.slice(0, 12)) {
       const row = create('div', 'player-list-item');
-      const copy = create('div');
-      appendText(copy, 'strong', `${item.rollerUsername} rolled ${item.total}`);
-      appendText(copy, 'p', `${item.notation} · [${item.values.join(', ')}]${item.modifier === 0 ? '' : ` ${item.modifier > 0 ? '+' : ''}${item.modifier}`} · ${new Date(item.rolledAt).toLocaleTimeString()}`);
+      const copy = create('div'); appendText(copy, 'strong', `${item.rollerUsername} rolled ${item.total}`); appendText(copy, 'p', `${item.notation} · [${item.values.join(', ')}]${item.modifier === 0 ? '' : ` ${item.modifier > 0 ? '+' : ''}${item.modifier}`}`);
       row.append(copy, create('span', 'player-card-badge', 'PARTY')); history.append(row);
     }
     const latest = projection.diceRolls[0];
-    if (latest !== undefined) result.replaceChildren(
-      create('strong', '', `${latest.rollerUsername} rolled ${latest.total}`),
-      create('small', '', `${latest.notation} · ${latest.values.join(' + ')}${latest.modifier === 0 ? '' : ` ${latest.modifier > 0 ? '+' : ''} ${latest.modifier}`}`),
-    );
+    if (latest !== undefined) result.replaceChildren(create('strong', '', String(latest.total)), create('small', '', `${latest.rollerUsername} · ${latest.notation} · ${latest.values.join(' + ')}${latest.modifier === 0 ? '' : ` ${latest.modifier > 0 ? '+' : ''} ${latest.modifier}`}`));
   };
   form.addEventListener('submit', (event) => { event.preventDefault(); onCommand({ kind: 'dice.roll', notation: notation.value, visibility: 'party' }); });
   close.addEventListener('click', () => { backdrop.dataset.open = 'false'; });

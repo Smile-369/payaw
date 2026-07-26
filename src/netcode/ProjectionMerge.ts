@@ -51,7 +51,9 @@ export function mergePlayerOwnedProjection(generatedValue: PlayerProjection, hos
       shared: mergeById(generated.journal.shared, hosted.journal.shared.filter((entry) => entry.sharedWithParty)),
     },
     messages,
-    diceRolls: mergeById(generated.diceRolls, hosted.diceRolls).slice(0, 100),
+    // Shared dice is event-backed. Do not copy legacy roll history into every
+    // recipient slot; PlayerNetworkSession hydrates and preserves it locally.
+    diceRolls: generated.diceRolls,
     objectives: mergeById(generated.objectives, hosted.objectives.filter((objective) => objective.playerCreated)),
     map: { ...generated.map, features: mergeById(generated.map.features, retainedPings) },
     generatedAt: new Date().toISOString(),

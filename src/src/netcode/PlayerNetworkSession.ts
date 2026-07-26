@@ -23,7 +23,6 @@ export class PlayerNetworkSession {
   private readonly diceRollListeners = new Set<(roll: SharedDiceRoll) => void>();
   private unsubscribeRealtime: (() => void) | null = null;
   private retryTimer: number | null = null;
-  private diceHistoryPromise: Promise<void> | null = null;
   private queue: QueuedPlayerCommand[];
   private readonly queueKey: string;
   private readonly cacheKey: string;
@@ -77,7 +76,6 @@ export class PlayerNetworkSession {
     window.addEventListener('offline', this.handleOffline);
     try {
       await this.connectRealtime();
-      await this.hydrateDiceHistory();
     } catch {
       this.setConnection('offline', 'Offline cache opened. Live updates will resume when the connection returns.');
     }
@@ -109,9 +107,7 @@ export class PlayerNetworkSession {
     }
     try {
       const result = await this.gateway.submitCommand(this.campaignId, submittedCommand, this.projectionValue.revision, offlineSafe, queued.idempotencyKey);
-      if (result.projection !== null) this.acceptSnapshot(result.projection);
-      const roll = parseSharedDiceRoll(result.diceRoll);
-      if (roll !== null) this.acceptDiceRoll(roll, true);
+      this.acceptSnapshot(result.projection);
       return this.projectionValue;
     } catch (error) {
       if (!offlineSafe) throw error;
@@ -125,10 +121,7 @@ export class PlayerNetworkSession {
 
   private readonly handleOnline = (): void => {
     this.setConnection('reconnecting', 'Network returned; reconnecting safely…');
-    void this.connectRealtime().then(async () => {
-      await this.hydrateDiceHistory();
-      await this.flushQueue();
-    }).catch(() => {
+    void this.connectRealtime().then(() => this.flushQueue()).catch(() => {
       this.setConnection('offline', 'Could not reconnect yet. Your cached view remains available.');
     });
   };
@@ -140,83 +133,25 @@ export class PlayerNetworkSession {
       onProjection: (projection) => this.acceptSnapshot(projection),
       onConnection: (state, detail) => {
         this.setConnection(state, detail);
-        if (state === 'online') {
-          void this.hydrateDiceHistory();
-          void this.flushQueue();
-        }
+        if (state === 'online') void this.flushQueue();
       },
       onEvent: (event) => {
         if (event.event_type !== 'command.dice.roll') return;
         const roll = parseSharedDiceRoll(event.safe_payload.diceRoll);
-        if (roll !== null) this.acceptDiceRoll(roll, true);
+        if (roll !== null) for (const listener of this.diceRollListeners) listener(roll);
+        void this.gateway.acknowledge(this.campaignId, this.projectionValue.revision, event.sequence).catch(() => undefined);
       },
     });
   }
 
   private acceptSnapshot(value: PlayerProjection): void {
-    const incoming = parsePlayerProjection(value);
-    const diceById = new Map<string, SharedDiceRoll>();
-    for (const candidate of [...this.projectionValue.diceRolls, ...incoming.diceRolls]) {
-      const roll = parseSharedDiceRoll(candidate);
-      if (roll !== null && !diceById.has(roll.id)) diceById.set(roll.id, roll);
-    }
-    const projection = parsePlayerProjection({
-      ...incoming,
-      diceRolls: [...diceById.values()]
-        .sort((a, b) => Date.parse(b.rolledAt) - Date.parse(a.rolledAt))
-        .slice(0, 100),
-    });
+    const projection = parsePlayerProjection(value);
     if (projection.revision < this.projectionValue.revision && this.queue.length === 0) return;
     const gap = projection.revision > this.projectionValue.revision + 1;
     this.projectionValue = projection;
     this.writeCache(projection); this.emitProjection();
+    void this.gateway.acknowledge(this.campaignId, projection.revision).catch(() => undefined);
     if (gap) this.setConnection('online', 'A revision gap was replaced with a complete safe snapshot.');
-  }
-
-  private async hydrateDiceHistory(): Promise<void> {
-    if (this.diceHistoryPromise !== null) return this.diceHistoryPromise;
-    const operation = this.loadDiceHistory();
-    this.diceHistoryPromise = operation;
-    try {
-      await operation;
-    } finally {
-      if (this.diceHistoryPromise === operation) this.diceHistoryPromise = null;
-    }
-  }
-
-  private async loadDiceHistory(): Promise<void> {
-    try {
-      const events = await this.gateway.diceEvents(this.campaignId, 30);
-      const rolls = events.flatMap((event) => {
-        const roll = parseSharedDiceRoll(event.safe_payload.diceRoll);
-        return roll === null ? [] : [roll];
-      });
-      if (rolls.length === 0) return;
-      const unique = new Map<string, SharedDiceRoll>();
-      for (const roll of [...rolls, ...this.projectionValue.diceRolls]) {
-        const parsed = parseSharedDiceRoll(roll);
-        if (parsed !== null && !unique.has(parsed.id)) unique.set(parsed.id, parsed);
-      }
-      const diceRolls = [...unique.values()]
-        .sort((a, b) => Date.parse(b.rolledAt) - Date.parse(a.rolledAt))
-        .slice(0, 100);
-      this.projectionValue = parsePlayerProjection({ ...this.projectionValue, diceRolls });
-      this.writeCache(this.projectionValue);
-      this.emitProjection();
-    } catch {
-      // Dice history is a reconnect convenience. The assigned safe projection still opens without it.
-    }
-  }
-
-  private acceptDiceRoll(roll: SharedDiceRoll, announce: boolean): void {
-    if (this.projectionValue.diceRolls.some((item) => item.id === roll.id)) return;
-    this.projectionValue = parsePlayerProjection({
-      ...this.projectionValue,
-      diceRolls: [roll, ...this.projectionValue.diceRolls].slice(0, 100),
-    });
-    this.writeCache(this.projectionValue);
-    this.emitProjection();
-    if (announce) for (const listener of this.diceRollListeners) listener(roll);
   }
 
   private enqueue(command: QueuedPlayerCommand): void {
@@ -232,7 +167,6 @@ export class PlayerNetworkSession {
       if (next === undefined) break;
       try {
         const result = await this.gateway.submitCommand(this.campaignId, next.command, next.expectedRevision, true, next.idempotencyKey);
-        if (result.projection === null) throw new Error('Queued state command returned no projection.');
         this.queue = this.queue.slice(1); this.writeQueue(); this.acceptSnapshot(result.projection);
       } catch {
         const attempts = next.attempts + 1;
