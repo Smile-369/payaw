@@ -112,6 +112,11 @@ export class GmNetcodePanel {
   private portalApiError: unknown = null;
 
   public constructor(private readonly options: GmNetcodePanelOptions) {
+    // The tray is authored inside the Players workspace for maintainability, but it
+    // must live directly under <body> at runtime. Leaving it inside the drawer traps
+    // it in that drawer's stacking context, allowing the map and dock to paint above it.
+    if (this.diceDialog.parentElement !== document.body) document.body.append(this.diceDialog);
+
     this.signIn.addEventListener('click', () => void this.signInWithPassword());
     this.createAccount.addEventListener('click', () => void this.createPasswordAccount());
     this.password.addEventListener('keydown', (event) => {
@@ -793,6 +798,8 @@ export class GmNetcodePanel {
   }
 
   private openDiceTray(): void {
+    // Re-assert the body portal in case another UI rebuild moved the dialog.
+    if (this.diceDialog.parentElement !== document.body) document.body.append(this.diceDialog);
     if (this.roomId === null) {
       this.fail(new Error('Create or load the campaign room first.'));
       return;

@@ -894,15 +894,16 @@ body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-templa
 
 /* Shared GM dice tray. Player tray uses its own player-view stylesheet. */
 .netcode-dice-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483000;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
   display: none;
   place-items: center;
   padding: 20px;
-  background-color: rgba(0, 0, 0, 0.34);
+  isolation: isolate;
+  background: rgba(0, 0, 0, 0.34) !important;
 }
-.netcode-dice-dialog[data-open="true"] { display: grid; }
+.netcode-dice-dialog[data-open="true"] { display: grid !important; }
 
 /* Keep the GM tray fully opaque even when theme surface variables are transparent. */
 .netcode-dice-panel {
@@ -912,6 +913,7 @@ body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-templa
   grid-template-rows: auto auto auto minmax(120px, 1fr);
   overflow: hidden;
   position: relative;
+  z-index: 1;
   isolation: isolate;
   opacity: 1 !important;
   color: #111;
