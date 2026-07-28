@@ -3046,8 +3046,8 @@ function recordRecentProject(): void {
 
 function commandDefinitions(): CommandDefinition[] {
   return [
-    { id: 'generate', label: 'Generate world', description: 'Regenerate using the current profile', shortcut: 'G', run: () => { void generateResponsive(customAnchors, builtInOverrides, true, true); } },
-    { id: 'random-seed', label: 'Generate random world', description: 'Create a new random seed and generate', run: () => { seedInput.value = createCryptoSeed(); void generateResponsive(customAnchors, builtInOverrides, true, true); } },
+    { id: 'generate', label: 'Generate world', description: 'Regenerate using the current profile', shortcut: 'G', run: () => { void generateResponsive(customAnchors, builtInOverrides, true, true, true); } },
+    { id: 'random-seed', label: 'Generate random world', description: 'Create a new random seed and keep active authoring', run: () => { seedInput.value = createCryptoSeed(); void generateResponsive(customAnchors, builtInOverrides, true, true, true); } },
     { id: 'save-json', label: 'Save compact World JSON', description: 'Export the reproducible world recipe without generated caches or NPC records', shortcut: 'Ctrl+S', run: () => downloadWorld(world, currentMapCustomization(), importedAssets, labelSettings, customStoryDefinitions) },
     { id: 'open-json', label: 'Open project JSON', description: 'Import a PAYAW project or override file', shortcut: 'Ctrl+O', run: () => projectImportFile.click() },
     { id: 'export-png', label: 'Export map PNG', description: 'Render the visible layer configuration', run: () => { void exportVisibleMapImage(); } },
@@ -3769,7 +3769,7 @@ function travelSegmentIcon(mode: TravelPlan['segments'][number]['mode']): string
   if (mode === 'walk') return 'W';
   if (mode === 'drive') return 'C';
   if (mode === 'public-transport') return 'J';
-  return 'F';
+  return 'B';
 }
 
 function renderTravelPlanResult(plan: TravelPlan | null): void {
@@ -6209,6 +6209,7 @@ async function generateResponsive(
   candidateBuiltIns: readonly BuiltInAnchorOverride[] = builtInOverrides,
   fitAfter = true,
   clearEditorHistory = false,
+  preserveActiveAuthoring = false,
 ): Promise<boolean> {
   activeGenerationController?.abort();
   const controller = new AbortController();
@@ -6220,7 +6221,9 @@ async function generateResponsive(
 
   const signature = worldSignature();
   const names = loadNameState(signature);
-  let mapCustomization = loadMapCustomization(signature);
+  let mapCustomization = preserveActiveAuthoring && activeWorldSignature.length > 0
+    ? currentMapCustomization()
+    : loadMapCustomization(signature);
   const recoveredOverrides: string[] = [];
 
   try {
@@ -6302,7 +6305,7 @@ async function generateResponsive(
     npcLocationAuthoring = structuredClone(mapCustomization.npcLocationAuthoring);
     world.npcs = applyNpcLocationAuthoring(world, npcLocationAuthoring);
 
-    if (recoveredOverrides.length > 0) saveMapCustomization(signature, mapCustomization);
+    if (recoveredOverrides.length > 0 || preserveActiveAuthoring) saveMapCustomization(signature, mapCustomization);
     refreshWorldUi(fitAfter);
     saveProfile({
       terrainSize: selectedTerrainSize(),
@@ -7236,7 +7239,7 @@ window.addEventListener('keydown', (event) => {
   if (modifier && !event.altKey && key === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
   else if (modifier && !event.altKey && key === 'y') { event.preventDefault(); redo(); }
   else if (!modifier && key === 'f') { event.preventDefault(); if (selectedInspectorItem === null) fitCamera(); else focusSelection(); }
-  else if (!modifier && key === 'g') { event.preventDefault(); void generateResponsive(customAnchors, builtInOverrides, true, true); }
+  else if (!modifier && key === 'g') { event.preventDefault(); void generateResponsive(customAnchors, builtInOverrides, true, true, true); }
   else if (!modifier && key === 'n') { event.preventDefault(); toggleNpcView(); }
   else if (event.key === 'Escape') { selectedInspectorItem = null; renderInspector(); }
 });
@@ -7311,14 +7314,14 @@ dmClearLog.addEventListener('click', () => {
   dmSessionEntries = [];
   renderDmSessionLog();
 });
-generateButton.addEventListener('click', () => { void generateResponsive(customAnchors, builtInOverrides, true, true); });
+generateButton.addEventListener('click', () => { void generateResponsive(customAnchors, builtInOverrides, true, true, true); });
 cancelGenerationButton.addEventListener('click', () => activeGenerationController?.abort());
 seedInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') void generateResponsive(customAnchors, builtInOverrides, true, true);
+  if (event.key === 'Enter') void generateResponsive(customAnchors, builtInOverrides, true, true, true);
 });
 randomSeedButton.addEventListener('click', () => {
   seedInput.value = createCryptoSeed();
-  void generateResponsive(customAnchors, builtInOverrides, true, true);
+  void generateResponsive(customAnchors, builtInOverrides, true, true, true);
 });
 terrainSizeSelect.addEventListener('change', updateProfileHint);
 townScaleSelect.addEventListener('change', updateProfileHint);

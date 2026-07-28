@@ -79,7 +79,7 @@ function retireLegacyAuthoringUi(): void {
   const sections = Array.from(card.querySelectorAll<HTMLElement>(':scope .authoring-section'));
   for (const section of sections.slice(1)) retired.append(section);
   const globalActions = card.querySelector<HTMLElement>('.authoring-global-actions');
-  if (globalActions !== null) retired.append(globalActions);
+  if (globalActions !== null) globalActions.classList.add('ms21-anchor-actions');
   const trailingHelp = Array.from(card.querySelectorAll<HTMLElement>(':scope > .disclosure-body > .helper-text')).at(-1);
   if (trailingHelp !== undefined) retired.append(trailingHelp);
 

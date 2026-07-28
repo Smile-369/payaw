@@ -17,7 +17,7 @@ export enum TrafficProfile {
 }
 
 export type TravelLocationKind = 'story' | 'anchor' | 'settlement' | 'port' | 'npc' | 'point';
-export type TravelSegmentMode = 'walk' | 'drive' | 'public-transport';
+export type TravelSegmentMode = 'walk' | 'drive' | 'public-transport' | 'boat';
 
 export interface TravelLocation {
   readonly id: string;
@@ -355,6 +355,99 @@ function roadJourney(
   return { segments, durationMinutes: duration, distanceKilometers: distance };
 }
 
+function nearestPortOnIsland(world: World, location: TravelLocation, islandId: number) {
+  const origin = world.tiles[location.tileIndex];
+  if (origin === undefined) return undefined;
+  return world.ports
+    .filter((port) => port.islandId === islandId)
+    .sort((left, right) => (
+      Math.hypot(left.position.x - origin.x, left.position.y - origin.y)
+      - Math.hypot(right.position.x - origin.x, right.position.y - origin.y)
+      || left.id - right.id
+    ))[0];
+}
+
+function portLocation(port: World['ports'][number]): TravelLocation {
+  return {
+    id: `port:${port.key}`,
+    label: port.name,
+    kind: 'port',
+    tileIndex: port.tileIndex,
+    x: port.position.x,
+    y: port.position.y,
+  };
+}
+
+function waterPath(world: World, startIndex: number, goalIndex: number): readonly number[] {
+  return findGridPath(world, {
+    startIndex,
+    goalIndex,
+    heuristicScale: 0.8,
+    maximumVisited: Math.min(world.tiles.length, 180_000),
+    traversalCost: (_fromIndex, toIndex) => (
+      world.tiles[toIndex]?.water === WaterType.Ocean ? 1 : Number.POSITIVE_INFINITY
+    ),
+  });
+}
+
+function accessJourney(
+  world: World,
+  from: TravelLocation,
+  to: TravelLocation,
+  roads: RoadTileData,
+  traffic: TrafficProfile,
+  context?: TravelContext,
+): Journey | undefined {
+  if (from.tileIndex === to.tileIndex) return { segments: [], durationMinutes: 0, distanceKilometers: 0 };
+  return roadJourney(world, from, to, roads, 'public-transport', traffic, new Set<number>(), context)
+    ?? walkingJourney(world, from, to, context);
+}
+
+function maritimeJourney(
+  world: World,
+  from: TravelLocation,
+  to: TravelLocation,
+  roads: RoadTileData,
+  traffic: TrafficProfile,
+  context?: TravelContext,
+): Journey | undefined {
+  const fromIslandId = world.tiles[from.tileIndex]?.islandId;
+  const toIslandId = world.tiles[to.tileIndex]?.islandId;
+  if (fromIslandId === null || fromIslandId === undefined || toIslandId === null || toIslandId === undefined || fromIslandId === toIslandId) {
+    return undefined;
+  }
+  const fromPort = nearestPortOnIsland(world, from, fromIslandId);
+  const toPort = nearestPortOnIsland(world, to, toIslandId);
+  if (fromPort === undefined || toPort === undefined) return undefined;
+  const crossing = waterPath(world, fromPort.waterTileIndex, toPort.waterTileIndex);
+  if (crossing.length < 2) return undefined;
+
+  const fromPortLocation = portLocation(fromPort);
+  const toPortLocation = portLocation(toPort);
+  const departure = accessJourney(world, from, fromPortLocation, roads, traffic, context);
+  const arrival = accessJourney(world, toPortLocation, to, roads, traffic, context);
+  if (departure === undefined || arrival === undefined) return undefined;
+
+  const crossingDistance = pathDistance(world, crossing);
+  const boatSpeed = traffic === TrafficProfile.Storm ? 11 : 18;
+  const boardingMinutes = traffic === TrafficProfile.Storm ? 16 : traffic === TrafficProfile.RushHour ? 12 : 8;
+  const crossingDuration = boardingMinutes + crossingDistance / boatSpeed * 60;
+  const boat = segmentForPath(
+    world,
+    'boat',
+    fromPort.name,
+    toPort.name,
+    crossing,
+    crossingDuration,
+    `Take a passenger boat from ${fromPort.name} to ${toPort.name}.`,
+  );
+  return {
+    segments: [...departure.segments, boat, ...arrival.segments],
+    durationMinutes: departure.durationMinutes + crossingDuration + arrival.durationMinutes,
+    distanceKilometers: departure.distanceKilometers + crossingDistance + arrival.distanceKilometers,
+  };
+}
+
 export function collectTravelLocations(world: World): readonly TravelLocation[] {
   const locations: TravelLocation[] = [];
   for (const item of world.storyObjects) locations.push({ id: `story:${item.key}`, label: item.name, kind: 'story', tileIndex: item.tileIndex, x: item.x, y: item.y });
@@ -376,7 +469,8 @@ export function planTravel(world: World, from: TravelLocation, to: TravelLocatio
     ? walkingJourney(world, from, to, options.context)
     : options.mode === TravelMode.Drive
       ? roadJourney(world, from, to, roads, 'drive', trafficProfile, new Set<number>(), options.context)
-      : roadJourney(world, from, to, roads, 'public-transport', trafficProfile, new Set<number>(), options.context);
+      : roadJourney(world, from, to, roads, 'public-transport', trafficProfile, new Set<number>(), options.context)
+        ?? maritimeJourney(world, from, to, roads, trafficProfile, options.context);
   if (journey === undefined) {
     return {
       from,
@@ -387,10 +481,11 @@ export function planTravel(world: World, from: TravelLocation, to: TravelLocatio
       distanceKilometers: 0,
       durationMinutes: 0,
       segments: [],
-      warnings: ['No connected route was found for the selected travel mode. Choose locations connected by land or a bridge.'],
+      warnings: ['No connected route was found for the selected travel mode. Remote islands require passenger-boat access and the Public transport mode.'],
       contextRevision: options.context?.revision,
     };
   }
+  const usesBoat = journey.segments.some((segment) => segment.mode === 'boat');
   return {
     from,
     to,
@@ -401,7 +496,9 @@ export function planTravel(world: World, from: TravelLocation, to: TravelLocatio
     durationMinutes: journey.durationMinutes,
     segments: journey.segments,
     warnings: options.context === undefined
-      ? ['Travel time is a campaign estimate based on 125 m tiles, generated road classes, terrain, and the selected traffic profile.']
+      ? [usesBoat
+        ? 'Passenger-boat time includes jetty access, boarding, and the generated open-water crossing.'
+        : 'Travel time is a campaign estimate based on 125 m tiles, generated road classes, terrain, and the selected traffic profile.']
       : ['Live world conditions applied.', ...options.context.reasons],
     contextRevision: options.context?.revision,
   };

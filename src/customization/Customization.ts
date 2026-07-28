@@ -68,7 +68,7 @@ export interface RuntimeImageAsset {
 }
 
 export interface TravelPathOverlaySegment {
-  readonly mode: 'walk' | 'drive' | 'public-transport';
+  readonly mode: 'walk' | 'drive' | 'public-transport' | 'boat';
   readonly tileIndices: readonly number[];
 }
 

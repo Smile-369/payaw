@@ -492,7 +492,9 @@ export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
   },
   bridges: {
     minimumSpan: 3,
-    maximumSpan: 62,
+    // Automatic bridges are for nearby shores. Longer crossings use the
+    // maritime network unless a GM explicitly authors a long bridge.
+    maximumSpan: 18,
     maximumManualSpan: 92,
     maximumBridges: 4,
     extraBridgeConnections: 1,

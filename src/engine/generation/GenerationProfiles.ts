@@ -135,7 +135,9 @@ export function resolveGenerationConfig(
     },
     bridges: {
       ...base.bridges,
-      maximumSpan: Math.round(base.bridges.maximumSpan * Math.min(1.35, linearRatio)),
+      // A larger canvas must not make physically longer automatic bridges
+      // acceptable; tile size remains 125 m across terrain profiles.
+      maximumSpan: base.bridges.maximumSpan,
       maximumManualSpan: Math.round(base.bridges.maximumManualSpan * Math.min(1.35, linearRatio)),
       maximumBridges: options.terrainShape === TerrainShape.Archipelago ? 5 : options.terrainShape === TerrainShape.TwinIslands ? 2 : base.bridges.maximumBridges,
       extraBridgeConnections: options.townScale === TownScale.Urban ? 2 : options.townScale === TownScale.Rural ? 0 : base.bridges.extraBridgeConnections,

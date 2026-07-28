@@ -1592,6 +1592,9 @@ export class CanvasRenderer {
       } else if (segment.mode === 'public-transport') {
         this.context.strokeStyle = 'rgba(191, 255, 173, 0.98)';
         this.context.setLineDash([3.4, 1.1]);
+      } else if (segment.mode === 'boat') {
+        this.context.strokeStyle = 'rgba(122, 218, 255, 0.98)';
+        this.context.setLineDash([2.2, 1.35]);
       } else {
         this.context.strokeStyle = 'rgba(255, 173, 104, 0.98)';
         this.context.setLineDash([]);

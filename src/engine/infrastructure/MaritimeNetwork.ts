@@ -184,9 +184,32 @@ function nearestCoastCandidate(
   return best;
 }
 
-function defaultPortType(island: Island): PortType {
+function needsPassengerBoatAccess(world: World, island: Island): boolean {
+  const reachable = new Set<number>([island.id]);
+  const pending = [island.id];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) continue;
+    for (const bridge of world.bridges) {
+      const neighbor = bridge.fromIslandId === current
+        ? bridge.toIslandId
+        : bridge.toIslandId === current ? bridge.fromIslandId : undefined;
+      if (neighbor === undefined || reachable.has(neighbor)) continue;
+      reachable.add(neighbor);
+      pending.push(neighbor);
+    }
+  }
+  return world.islands.some((other) => (
+    !reachable.has(other.id)
+    && other.settlementIds.length > 0
+    && other.allocatedPopulation > 0
+  ));
+}
+
+function defaultPortType(world: World, island: Island): PortType {
   if (island.role === IslandRole.Industrial) return PortType.IndustrialPort;
   if (island.role === IslandRole.PortHub) return PortType.CommercialPort;
+  if (needsPassengerBoatAccess(world, island)) return PortType.BarangayJetty;
   if (island.role === IslandRole.PrimarySettlement && island.allocatedPopulation >= 6000) return PortType.BarangayJetty;
   if (island.allocatedPopulation >= 1800) return PortType.BarangayJetty;
   return PortType.FishingDock;
@@ -204,9 +227,10 @@ function shortIslandName(name: string): string {
   return name.replace(/\b(Island|Isla)\b/gi, '').replace(/\s+/g, ' ').trim() || name;
 }
 
-function generatedPortName(island: Island, type: PortType): string {
+function generatedPortName(world: World, island: Island, type: PortType): string {
   const suffix = type === PortType.FishingDock ? 'Fishing Dock'
-    : type === PortType.BarangayJetty ? 'Jetty'
+    : type === PortType.BarangayJetty && needsPassengerBoatAccess(world, island) ? 'Ferry Jetty'
+      : type === PortType.BarangayJetty ? 'Jetty'
       : type === PortType.IndustrialPort ? 'Industrial Port'
         : type === PortType.Marina ? 'Marina' : 'Port';
   return `${shortIslandName(island.name)} ${suffix}`;
@@ -280,14 +304,14 @@ function buildPort(
   override: PortOverride | undefined,
 ): Port | undefined {
   if (override?.suppressed === true) return undefined;
-  const type = override?.type ?? definition?.type ?? defaultPortType(island);
+  const type = override?.type ?? definition?.type ?? defaultPortType(world, island);
   const tile = world.tiles[candidate.tileIndex];
   const water = world.tiles[candidate.waterTileIndex];
   if (tile === undefined || water === undefined) return undefined;
   return {
     id: world.ports.length,
     key,
-    name: override?.name?.trim() || definition?.name.trim() || generatedPortName(island, type),
+    name: override?.name?.trim() || definition?.name.trim() || generatedPortName(world, island, type),
     islandId: island.id,
     settlementId: candidate.settlementId,
     position: { x: tile.x + 0.5, y: tile.y + 0.5 },
