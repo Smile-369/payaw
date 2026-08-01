@@ -7,12 +7,17 @@ import type {
 import { EMPTY_AUTHORING_LAYER } from '../authoring/AuthoringLayer';
 import type { CampaignState } from '../campaign/CampaignSystem';
 import type { NPCLocationAuthoringState } from '../campaign/NPCLocationAuthoring';
-import { EMPTY_NPC_LOCATION_AUTHORING } from '../campaign/NPCLocationAuthoring';
+import {
+  EMPTY_NPC_LOCATION_AUTHORING,
+  applyNpcLocationAuthoring,
+  normalizeNpcLocationAuthoring,
+} from '../campaign/NPCLocationAuthoring';
 import type {
   ImportedImageAsset,
   LabelDisplaySettings,
   PlacedImage,
   RuntimeImageAsset,
+  StoredMapCustomization,
 } from '../customization/Customization';
 import type {
   AnchorPositionOverride,
@@ -50,6 +55,16 @@ export interface InspectorSelection {
   readonly y: number;
   readonly title: string;
   readonly subtitle: string;
+}
+
+export interface EditorSnapshot {
+  readonly customAnchors: readonly CustomAnchorDefinition[];
+  readonly builtInOverrides: readonly BuiltInAnchorOverride[];
+  readonly customStoryPoints: readonly CustomStoryPointDefinition[];
+  readonly roadNames: readonly EntityNameOverride[];
+  readonly blockNames: readonly EntityNameOverride[];
+  readonly labels: LabelDisplaySettings;
+  readonly mapCustomization: StoredMapCustomization;
 }
 
 /**
@@ -131,6 +146,99 @@ export class EditorSession {
       ...this.settlementPositionOverrides.filter((item) => item.key !== key),
       { key, x, y, islandKey },
     ].sort((left, right) => left.key.localeCompare(right.key));
+  }
+
+  public currentMapCustomization(): StoredMapCustomization {
+    return {
+      anchorPositions: this.anchorPositionOverrides,
+      settlementPositions: this.settlementPositionOverrides,
+      storyPositions: this.storyPositionOverrides,
+      storyRules: this.storyRuleOverrides,
+      zoneOverrides: this.zoneOverrides,
+      placedImages: this.placedImages,
+      islandOverrides: this.islandOverrides,
+      bridgeOverrides: this.bridgeOverrides,
+      customBridges: this.customBridges,
+      portOverrides: this.portOverrides,
+      customPorts: this.customPorts,
+      authoringLayer: this.authoringLayer,
+      npcLocationAuthoring: this.npcLocationAuthoring,
+    };
+  }
+
+  public captureSnapshot(): EditorSnapshot {
+    return structuredClone({
+      customAnchors: this.customAnchors,
+      builtInOverrides: this.builtInOverrides,
+      customStoryPoints: this.customStoryDefinitions,
+      roadNames: this.roadNameOverrides,
+      blockNames: this.blockNameOverrides,
+      labels: this.labelSettings,
+      mapCustomization: this.currentMapCustomization(),
+    });
+  }
+
+  public restoreSnapshot(snapshot: EditorSnapshot): void {
+    this.customAnchors = [...snapshot.customAnchors];
+    this.builtInOverrides = [...snapshot.builtInOverrides];
+    this.customStoryDefinitions = [...snapshot.customStoryPoints];
+    this.roadNameOverrides = [...snapshot.roadNames];
+    this.blockNameOverrides = [...snapshot.blockNames];
+    this.labelSettings = structuredClone(snapshot.labels);
+    this.anchorPositionOverrides = [...snapshot.mapCustomization.anchorPositions];
+    this.settlementPositionOverrides = [...snapshot.mapCustomization.settlementPositions];
+    this.storyPositionOverrides = [...snapshot.mapCustomization.storyPositions];
+    this.storyRuleOverrides = [...snapshot.mapCustomization.storyRules];
+    this.zoneOverrides = [...snapshot.mapCustomization.zoneOverrides];
+    this.placedImages = [...snapshot.mapCustomization.placedImages];
+    this.islandOverrides = [...snapshot.mapCustomization.islandOverrides];
+    this.bridgeOverrides = [...snapshot.mapCustomization.bridgeOverrides];
+    this.customBridges = [...snapshot.mapCustomization.customBridges];
+    this.portOverrides = [...snapshot.mapCustomization.portOverrides];
+    this.customPorts = [...snapshot.mapCustomization.customPorts];
+    this.authoringLayer = structuredClone(snapshot.mapCustomization.authoringLayer);
+    this.npcLocationAuthoring = structuredClone(snapshot.mapCustomization.npcLocationAuthoring);
+  }
+
+  public setStudioTab(tab: StudioTab): void {
+    this.activeStudioTab = tab;
+  }
+
+  public setInspectorSelection(selection: InspectorSelection | null): void {
+    this.selectedInspectorItem = selection;
+  }
+
+  public setLabelSettings(settings: LabelDisplaySettings): void {
+    this.labelSettings = structuredClone(settings);
+  }
+
+  public selectNpc(key: string | null): void {
+    this.selectedNpcKey = key;
+    this.pendingNpcPortraitDataUrl = null;
+  }
+
+  public selectNpcScheduleDay(day: CampaignDay): void {
+    this.selectedNpcScheduleDay = day;
+  }
+
+  public selectLocation(sourceRef: string | null): void {
+    this.selectedLocationRef = sourceRef;
+  }
+
+  public setPendingNpcPortrait(dataUrl: string | null): void {
+    this.pendingNpcPortraitDataUrl = dataUrl;
+  }
+
+  public applyNpcAuthoringState(next: NPCLocationAuthoringState): void {
+    const selectedKey = this.selectedNpcKey;
+    this.npcLocationAuthoring = normalizeNpcLocationAuthoring(next);
+    this.world.npcs = applyNpcLocationAuthoring(this.world, this.npcLocationAuthoring);
+    this.simulation?.replaceWorld(this.world);
+    this.simulation?.setNpcLocationAuthoring(this.npcLocationAuthoring);
+    this.simulation?.tick(Date.now(), true);
+    this.selectedNpcKey = selectedKey !== null && this.world.npcs.some((npc) => npc.key === selectedKey)
+      ? selectedKey
+      : null;
   }
 
   public updateNpc(key: string, update: (npc: NPC) => NPC): boolean {

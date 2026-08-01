@@ -16,37 +16,20 @@ import {
 import { authoringFeatureCenter, transformAuthoringGeometry, translateAuthoringGeometry } from './authoring/AuthoringGeometry';
 import { createGeneratedReplacementFeature, generatedSourceForFeature } from './authoring/GeneratedFeatureAuthoring';
 import {
-  CAMPAIGN_DAYS,
   EMPTY_NPC_LOCATION_AUTHORING,
   applyNpcLocationAuthoring,
   collectCampaignLocations,
-  isResidentialBuilding,
   normalizeNpcLocationAuthoring,
   scheduleLocationFromRef,
-  resolveNpcPlacement,
-  validateNpcHome,
-  validateSchedule,
-  venueStatusAt,
-  type AuthoredLocationRecord,
-  type AuthoredNPCDefinition,
   type NPCLocationAuthoringState,
-  type NPCProfileOverride,
   type NPCScenePlacement,
-  type VenueHoursEntry,
 } from './campaign/NPCLocationAuthoring';
 import {
   createCampaign,
   normalizeCampaignState,
 } from './campaign/CampaignSystem';
-import {
-  createNpcJsonBundle,
-  parseNpcJsonBundle,
-  withSettlementNames,
-  type NpcJsonBundle,
-  type PortableNpcRecord,
-} from './campaign/NpcJson';
 import { CampaignStudio, type CampaignStudioOption } from './campaign/CampaignStudio';
-import { datetimeLocalValue, minuteAsTime, timestampFromZonedLocal } from './campaign/CampaignTime';
+import { datetimeLocalValue, timestampFromZonedLocal } from './campaign/CampaignTime';
 import { GmPlayerPreview } from './player/GmPlayerPreview';
 import { readNetcodeConfig } from './netcode/NetcodeConfig';
 import {
@@ -55,7 +38,6 @@ import {
 } from './player/PlayerViewState';
 import {
   AssetTargetCategory,
-  DEFAULT_LABEL_DISPLAY_SETTINGS,
   EMPTY_RENDER_CUSTOMIZATION,
   type ImportedImageAsset,
   type LabelDisplaySettings,
@@ -125,7 +107,7 @@ import { RoadType, type Road } from './engine/infrastructure/Road';
 import type { Building } from './engine/buildings/Building';
 import { PortType, type CustomPortDefinition } from './engine/infrastructure/Port';
 import { brushIndices, floodFillIndices, rectangleIndices, setZoneOverrides, smoothZoneOverrides, type ZoneTool } from './editor/ZoneEditor';
-import { HistoryManager } from './editor/HistoryManager';
+import { EditorHistoryController } from './editor/EditorHistoryController';
 import {
   MAX_CUSTOM_ANCHORS,
   MAX_CUSTOM_STORY_POINTS,
@@ -184,7 +166,7 @@ import {
   serializeWorldCustomization,
   type ProjectSerializationState,
 } from './project/ProjectSerialization';
-import { EditorSession } from './models/EditorSession';
+import { EditorSession, type EditorSnapshot } from './models/EditorSession';
 import { AuthoringController } from './authoring/AuthoringController';
 import { NpcController } from './npc/NpcController';
 import { renderNpcRosterView } from './npc/NpcRosterView';
@@ -192,28 +174,17 @@ import { ProjectController } from './project/ProjectController';
 import { renderRecentProjectsView } from './project/RecentProjectsView';
 import { GenerationController } from './generation/GenerationController';
 import { MapInteractionController } from './map/MapInteractionController';
+import { MapInspectorController } from './map/MapInspectorController';
+import { StudioShellController } from './ui/StudioShellController';
+import { LabelDisplayController } from './ui/LabelDisplayController';
+import { NpcEditorView } from './npc/NpcEditorView';
+import { NpcJsonController } from './npc/NpcJsonController';
 
 export function startEditorApplication(): void {
 
 const SATELLITE_SETTLEMENT_COUNT = 0;
 const WORKSPACE_STORAGE_KEY = 'payaw.workspace.v1';
-const UI_THEME_STORAGE_KEY = 'payaw.ui-theme.v1';
-const UI_LEFT_PANEL_STORAGE_KEY = 'payaw.ui-left-panel.v1';
-const UI_STUDIO_DOCK_STORAGE_KEY = 'payaw.ui-studio-dock.v1';
-const UI_STUDIO_TAB_STORAGE_KEY = 'payaw.ui-studio-tab.v1';
-const UI_MINIMAP_STORAGE_KEY = 'payaw.ui-minimap.v1';
 const CLOCK_FORMAT_STORAGE_KEY = 'payaw.clock-format.v1';
-
-interface EditorSnapshot {
-  readonly customAnchors: readonly CustomAnchorDefinition[];
-  readonly builtInOverrides: readonly BuiltInAnchorOverride[];
-  readonly customStoryPoints: readonly CustomStoryPointDefinition[];
-  readonly roadNames: readonly EntityNameOverride[];
-  readonly blockNames: readonly EntityNameOverride[];
-  readonly labels: LabelDisplaySettings;
-  readonly mapCustomization: StoredMapCustomization;
-}
-
 
 function updateStats(container: HTMLElement, world: World): void {
   renderWorldStatistics(container, world, {
@@ -246,16 +217,7 @@ const {
   storyRuleWish, storyRuleManifestation, storyRuleEncounters, customStoryForm, customStoryFormTitle, customStoryCancel, customStoryEditId, customStoryName,
   customStoryType, customStoryRegion, customStoryTerrain, customStoryZone, customStoryAllowedZones, customStoryDisallowedZones, customStoryRadius, customStorySpacing,
   customStoryWish, customStoryManifestation, customStoryEncounters, customStoryList, customStoryCount, npcCount, npcRosterSize, npcSearch,
-  npcList, npcExportSelected, npcExportGroup, npcEditorHeading, npcEditName,
-  npcEditAge, npcEditStatus, npcEditOccupation, npcEditSettlement, npcEditHome, npcEditUnusualHome, npcEditWorkplace, npcEditPublicDescription,
-  npcEditPersonality, npcEditWish, npcEditFear, npcEditSecret, npcEditRumor, npcEditTags, npcEditNotes, npcEditPortrait,
-  npcPortraitPreview, npcSaveButton, npcResetButton, npcDeleteButton, npcScheduleDayTabs, npcScheduleStart, npcScheduleEnd, npcScheduleActivity,
-  npcScheduleLocation, npcScheduleTravel, npcScheduleVisibility, npcScheduleAdd, npcScheduleCopyWeekdays, npcScheduleClearDay, npcScheduleList, npcScheduleValidation,
-  npcRelationshipTarget, npcRelationshipKind, npcRelationshipHidden, npcRelationshipLabel, npcRelationshipAdd, npcRelationshipList, npcOverrideLocation, npcOverrideActivity,
-  npcOverrideDuration, npcSceneId, npcOverrideReason, npcSceneVisible, npcOverrideAdd, npcScenePlace, npcPlacementClear, npcPlacementList,
-  locationSource, locationName, locationType, locationOwner, locationVisibility, locationStatus, locationTags, locationDescription,
-  locationPlayerDescription, locationNotes, locationSave, locationDelete, locationHoursDay, locationHoursOpen, locationHoursClose, locationHoursClosed,
-  locationHoursSave, locationHoursList, locationList, npcViewToggleButton, realtimeClock, simulationClockMode, simulationSpeed, simulationDatetime,
+  npcList, npcExportSelected, npcExportGroup, npcViewToggleButton, realtimeClock, simulationClockMode, simulationSpeed, simulationDatetime,
   simulationApplyTime, simulationAdvance15, simulationAdvanceHour, simulationAdvanceDay, simulationWeather, simulationEventFilter, simulationEventClear,
   simulationInfrastructureKind, simulationInfrastructureTarget,
   simulationInfrastructureStatus, simulationInfrastructureApply, simulationInfrastructureClear, viewportShell, toolbarEditButton, undoButton, redoButton, editModeButton,
@@ -314,7 +276,7 @@ session.builtInOverrides = [...storedAnchors.builtInOverrides];
 session.customStoryDefinitions = loadCustomStoryDefinitions();
 session.roadNameOverrides = [];
 session.blockNameOverrides = [];
-session.labelSettings = loadLabelSettings();
+session.setLabelSettings(loadLabelSettings());
 session.anchorPositionOverrides = [];
 session.settlementPositionOverrides = [];
 session.storyPositionOverrides = [];
@@ -334,10 +296,9 @@ session.pendingImportedCampaign = null;
 session.playerViewState = createDefaultPlayerViewState(6);
 session.pendingImportedPlayerView = null;
 let playerPreview: GmPlayerPreview | null = null;
-session.selectedNpcKey = null;
-session.selectedNpcScheduleDay = 'monday';
-session.selectedLocationRef = null;
-session.pendingNpcPortraitDataUrl = null;
+session.selectNpc(null);
+session.selectNpcScheduleDay('monday');
+session.selectLocation(null);
 session.importedAssets = [];
 session.runtimeImageAssets = [];
 
@@ -374,18 +335,13 @@ let draggedImageOffsetX = 0;
 let draggedImageOffsetY = 0;
 let draggedImageOriginal: PlacedImage | null = null;
 let draggedImageHistorySnapshot: EditorSnapshot | null = null;
-const history = new HistoryManager<EditorSnapshot>(64);
-let restoringHistory = false;
 type WorkspaceMode = 'editor' | 'dm';
 session.activeWorkspace = localStorage.getItem(WORKSPACE_STORAGE_KEY) === 'editor' ? 'editor' : 'dm';
 session.dmSessionEntries = [];
-type StudioTab = 'inspector' | 'layers' | 'project';
-type UiTheme = 'dark' | 'light' | 'contrast';
-session.activeStudioTab = (localStorage.getItem(UI_STUDIO_TAB_STORAGE_KEY) as StudioTab | null) ?? 'inspector';
+session.activeStudioTab = 'inspector';
 session.selectedInspectorItem = null;
 let pointerTravel = 0;
 let autosaveTimer: number | null = null;
-let minimapBase: HTMLCanvasElement | null = null;
 const travelPlanner = new TravelPlannerController({
   elements: {
     canvas,
@@ -405,6 +361,125 @@ const travelPlanner = new TravelPlannerController({
   camera,
   syncMap: () => syncRendererCustomization(),
   requestRender: () => requestRender(),
+  setStatus: (message, tone) => setStatus(message, tone),
+});
+
+const studioShell = new StudioShellController({
+  session,
+  elements: {
+    toggleLeftPanelButton,
+    toggleStudioDockButton,
+    closeStudioDockButton,
+    tabButtons: {
+      inspector: studioTabInspector,
+      layers: studioTabLayers,
+      project: studioTabProject,
+    },
+    tabPanels: {
+      inspector: studioInspectorPanel,
+      layers: studioLayersPanel,
+      project: studioProjectPanel,
+    },
+    layerList: studioLayerList,
+    layerSearchInput,
+    layersAllButton,
+    layersNoneButton,
+    themeSelect: studioThemeSelect,
+    viewPreset,
+    layerElements,
+  },
+  fitCamera: () => fitCamera(),
+  requestRender: () => requestRender(),
+  setLayer: (layer, visible) => setLayer(layer, visible),
+});
+
+const mapInspector = new MapInspectorController({
+  session,
+  camera,
+  elements: {
+    canvas,
+    inspectorContent,
+    focusSelectionButton,
+    minimapPanel,
+    minimapCanvas,
+    minimapCollapseButton,
+    statusSeed,
+    statusLayout,
+    statusZoom,
+    statusSelection,
+    statusGeneration,
+  },
+  fitCamera: () => fitCamera(),
+  requestRender: () => requestRender(),
+  openInspector: () => studioShell.setTab('inspector'),
+  adoptRoad: (road) => adoptGeneratedRoad(road),
+  adoptBuilding: (building) => adoptGeneratedBuilding(building),
+  isGenerationRunning: () => activeGenerationController !== null,
+});
+
+const historyController = new EditorHistoryController({
+  session,
+  undoButton,
+  redoButton,
+  persist: () => persistAllEditorState(),
+  applyLabels: () => labelDisplay.apply(session.labelSettings),
+  regenerate: () => { generate(session.customAnchors, session.builtInOverrides, false, false); },
+  scheduleAutosave: () => scheduleAutosave(),
+  setStatus: (message, state) => setStatus(message, state),
+});
+
+const labelDisplay = new LabelDisplayController({
+  session,
+  elements: {
+    roadFontSize: roadLabelFontSize,
+    roadFontOutput: roadLabelFontOutput,
+    roadOpacity: roadLabelOpacity,
+    roadOpacityOutput: roadLabelOpacityOutput,
+    roadDensity: roadLabelDensity,
+    roadDensityOutput: roadLabelDensityOutput,
+    roadMainZoom: roadLabelMainZoom,
+    roadSecondaryZoom: roadLabelSecondaryZoom,
+    roadLocalZoom: roadLabelLocalZoom,
+    roadMain: roadLabelMain,
+    roadSecondary: roadLabelSecondary,
+    roadLocal: roadLabelLocal,
+    roadRotate: roadLabelRotate,
+    roadOutline: roadLabelOutline,
+    roadSummary: roadLabelSummary,
+    blockFontSize: blockLabelFontSize,
+    blockFontOutput: blockLabelFontOutput,
+    blockOpacity: blockLabelOpacity,
+    blockOpacityOutput: blockLabelOpacityOutput,
+    blockDensity: blockLabelDensity,
+    blockDensityOutput: blockLabelDensityOutput,
+    blockMinZoom: blockLabelMinZoom,
+    blockOutline: blockLabelOutline,
+    blockSummary: blockLabelSummary,
+    avoidCollisions: labelAvoidCollisions,
+    resetButton: labelControlsReset,
+    viewPreset,
+    layerElements,
+  },
+  captureSnapshot: () => captureEditorSnapshot(),
+  recordHistory: (snapshot, label) => recordHistory(snapshot, label),
+  setRenderedLayer: (layer, visible) => renderer.layers.setVisible(layer, visible),
+  syncMap: () => syncRendererCustomization(),
+  setStatus: (message, state) => setStatus(message, state),
+});
+
+const npcEditorView = new NpcEditorView({
+  session,
+  updateAuthoring: (next, message) => updateNpcAuthoringState(next, message),
+  updateSchedule: (entries, message) => updateSelectedNpcSchedule(entries, message),
+  updateRelationships: (relationships, message) => updateSelectedNpcRelationships(relationships, message),
+  focusMapPoint: (x, y) => focusMapPoint(x, y),
+  selectScheduleDay: (day) => session.selectNpcScheduleDay(day),
+  selectLocation: (sourceRef) => session.selectLocation(sourceRef || null),
+});
+
+const npcJsonController = new NpcJsonController({
+  session,
+  updateAuthoring: (next, message) => updateNpcAuthoringState(next, message),
   setStatus: (message, tone) => setStatus(message, tone),
 });
 
@@ -432,7 +507,7 @@ const simulationPanel = new SimulationPanelController({
     session.activeNpcSchedulePeriod = period;
     renderNPCList();
     travelPlanner.refreshLocations();
-    renderInspector();
+    mapInspector.renderInspector();
     travelPlanner.recalculateIfContextual();
   },
 });
@@ -447,27 +522,30 @@ const nameEditor = new NameEditorController<EditorSnapshot>({
   setStatus: (message, tone) => setStatus(message, tone),
 });
 
-new NpcController({
+const npcController = new NpcController({
   session,
   regenerateRoster: () => regenerateNpcRoster(),
   renderList: () => renderNPCList(),
   toggleView: () => toggleNpcView(),
-  createNpc: () => createAuthoredNpc(),
-  selectedNpc: () => selectedNpc(),
   filteredNpcs: () => filteredNpcs(),
-  downloadJson: (npcs, name) => downloadNpcJson(npcs, name),
-  importJson: (file) => importNpcJsonFile(file),
-  saveNpc: () => saveSelectedNpc(),
-  renderSelectors: (npc) => renderNpcSelectors(npc),
-  campaignLocations: () => campaignLocationOptions(),
-  nearestSettlementForTile: (tileIndex) => nearestSettlementForTile(tileIndex),
-  renderPortrait: (npc) => renderNpcPortrait(npc),
-  updateAuthoring: (next, message) => updateNpcAuthoringState(next, message),
-  updateSchedule: (entries, message) => updateSelectedNpcSchedule(entries, message),
-  updateRelationships: (relationships, message) => updateSelectedNpcRelationships(relationships, message),
-  selectedLocation: () => selectedAuthoredLocation(),
-  renderLocation: () => renderLocationEditor(),
-  saveLocation: (hours) => saveLocationRecord(hours),
+  downloadJson: (npcs, name) => npcJsonController.download(npcs, name),
+  importJson: (file) => npcJsonController.importFile(file),
+  renderSelectors: (npc) => npcEditorView.renderSelectors(npc),
+  campaignLocations: () => npcEditorView.campaignLocations(),
+  nearestSettlementForTile: (tileIndex) => npcEditorView.nearestSettlementForTile(tileIndex),
+  renderPortrait: (npc) => npcEditorView.renderPortrait(npc),
+  renderLocation: () => npcEditorView.renderLocationEditor(),
+  onAuthoringChanged: (message) => {
+    persistMapCustomization();
+    renderNPCList();
+    npcEditorView.renderAll();
+    travelPlanner.refreshLocations();
+    campaignStudio?.refreshExternalReferences();
+    updateStats(stats, session.world);
+    requestRender();
+    scheduleAutosave();
+    if (message !== undefined) setStatus(message, 'success');
+  },
   setStatus: (message, tone) => setStatus(message, tone),
 });
 
@@ -521,7 +599,7 @@ new MapInteractionController({
     || session.authoredFeatureOriginal !== null || dragPreview !== null || draggedImageId !== null,
   handleAuthoringClick: (x, y) => handleAuthoringMapClick(x, y),
   handleTravelClick: (x, y) => travelPlanner.handleMapPoint(x, y),
-  inspectPosition: (x, y) => inspectMapPosition(x, y),
+  inspectPosition: (x, y) => mapInspector.inspectMapPosition(x, y),
   fitCamera: () => fitCamera(),
   requestRender: () => requestRender(),
 });
@@ -1445,21 +1523,7 @@ function generationOptions(
 }
 
 function currentMapCustomization(): StoredMapCustomization {
-  return {
-    anchorPositions: session.anchorPositionOverrides,
-    settlementPositions: session.settlementPositionOverrides,
-    storyPositions: session.storyPositionOverrides,
-    storyRules: session.storyRuleOverrides,
-    zoneOverrides: session.zoneOverrides,
-    placedImages: session.placedImages,
-    islandOverrides: session.islandOverrides,
-    bridgeOverrides: session.bridgeOverrides,
-    customBridges: session.customBridges,
-    portOverrides: session.portOverrides,
-    customPorts: session.customPorts,
-    authoringLayer: session.authoringLayer,
-    npcLocationAuthoring: session.npcLocationAuthoring,
-  };
+  return session.currentMapCustomization();
 }
 
 function persistMapCustomization(): void {
@@ -1469,29 +1533,11 @@ function persistMapCustomization(): void {
 
 
 function captureEditorSnapshot(): EditorSnapshot {
-  return structuredClone({
-    customAnchors: session.customAnchors,
-    builtInOverrides: session.builtInOverrides,
-    customStoryPoints: session.customStoryDefinitions,
-    roadNames: session.roadNameOverrides,
-    blockNames: session.blockNameOverrides,
-    labels: session.labelSettings,
-    mapCustomization: currentMapCustomization(),
-  });
-}
-
-function updateHistoryButtons(): void {
-  undoButton.disabled = !history.canUndo;
-  redoButton.disabled = !history.canRedo;
-  undoButton.title = history.undoLabel === undefined ? 'Undo (Ctrl/Cmd+Z)' : `Undo ${history.undoLabel} (Ctrl/Cmd+Z)`;
-  redoButton.title = history.redoLabel === undefined ? 'Redo (Ctrl/Cmd+Shift+Z)' : `Redo ${history.redoLabel} (Ctrl/Cmd+Shift+Z)`;
+  return historyController.capture();
 }
 
 function recordHistory(previous: EditorSnapshot, label: string): void {
-  if (restoringHistory) return;
-  history.record(previous, label);
-  updateHistoryButtons();
-  scheduleAutosave();
+  historyController.record(previous, label);
 }
 
 function persistAllEditorState(): void {
@@ -1502,45 +1548,12 @@ function persistAllEditorState(): void {
   persistNames();
 }
 
-function restoreEditorSnapshot(snapshot: EditorSnapshot, label: string): void {
-  restoringHistory = true;
-  session.customAnchors = [...snapshot.customAnchors];
-  session.builtInOverrides = [...snapshot.builtInOverrides];
-  session.customStoryDefinitions = [...snapshot.customStoryPoints];
-  session.roadNameOverrides = [...snapshot.roadNames];
-  session.blockNameOverrides = [...snapshot.blockNames];
-  session.labelSettings = structuredClone(snapshot.labels);
-  session.anchorPositionOverrides = [...snapshot.mapCustomization.anchorPositions];
-  session.settlementPositionOverrides = [...snapshot.mapCustomization.settlementPositions];
-  session.storyPositionOverrides = [...snapshot.mapCustomization.storyPositions];
-  session.storyRuleOverrides = [...snapshot.mapCustomization.storyRules];
-  session.zoneOverrides = [...snapshot.mapCustomization.zoneOverrides];
-  session.placedImages = [...snapshot.mapCustomization.placedImages];
-  session.islandOverrides = [...snapshot.mapCustomization.islandOverrides];
-  session.bridgeOverrides = [...snapshot.mapCustomization.bridgeOverrides];
-  session.customBridges = [...snapshot.mapCustomization.customBridges];
-  session.portOverrides = [...snapshot.mapCustomization.portOverrides];
-  session.customPorts = [...snapshot.mapCustomization.customPorts];
-  session.authoringLayer = structuredClone(snapshot.mapCustomization.authoringLayer);
-  session.npcLocationAuthoring = structuredClone(snapshot.mapCustomization.npcLocationAuthoring);
-  persistAllEditorState();
-  applyLabelSettingsToControls(session.labelSettings);
-  generate(session.customAnchors, session.builtInOverrides, false, false);
-  restoringHistory = false;
-  updateHistoryButtons();
-  setStatus(label, 'success');
-}
-
 function undo(): void {
-  const entry = history.undo(captureEditorSnapshot());
-  if (entry === undefined) return;
-  restoreEditorSnapshot(entry.state, `Undid ${entry.label}.`);
+  historyController.undo();
 }
 
 function redo(): void {
-  const entry = history.redo(captureEditorSnapshot());
-  if (entry === undefined) return;
-  restoreEditorSnapshot(entry.state, `Redid ${entry.label}.`);
+  historyController.redo();
 }
 
 function syncRendererCustomization(): void {
@@ -1590,82 +1603,6 @@ async function exportVisibleMapImage(): Promise<void> {
   }
 }
 
-function percentage(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
-function readLabelSettingsFromControls(): LabelDisplaySettings {
-  return normalizeLabelSettings({
-    road: {
-      visible: layerElements[RenderLayer.RoadLabels].checked,
-      fontSizePx: Number(roadLabelFontSize.value),
-      opacity: Number(roadLabelOpacity.value) / 100,
-      density: Number(roadLabelDensity.value) / 100,
-      showMain: roadLabelMain.checked,
-      showSecondary: roadLabelSecondary.checked,
-      showLocal: roadLabelLocal.checked,
-      mainMinZoom: Number(roadLabelMainZoom.value),
-      secondaryMinZoom: Number(roadLabelSecondaryZoom.value),
-      localMinZoom: Number(roadLabelLocalZoom.value),
-      rotateAlongRoad: roadLabelRotate.checked,
-      outline: roadLabelOutline.checked,
-    },
-    block: {
-      visible: layerElements[RenderLayer.BlockLabels].checked,
-      fontSizePx: Number(blockLabelFontSize.value),
-      opacity: Number(blockLabelOpacity.value) / 100,
-      density: Number(blockLabelDensity.value) / 100,
-      minZoom: Number(blockLabelMinZoom.value),
-      outline: blockLabelOutline.checked,
-    },
-    avoidCollisions: labelAvoidCollisions.checked,
-  });
-}
-
-function updateLabelControlOutputs(): void {
-  roadLabelFontOutput.value = `${session.labelSettings.road.fontSizePx.toFixed(0)} px`;
-  roadLabelOpacityOutput.value = percentage(session.labelSettings.road.opacity);
-  roadLabelDensityOutput.value = percentage(session.labelSettings.road.density);
-  roadLabelSummary.textContent = `${session.labelSettings.road.fontSizePx.toFixed(0)} px · ${percentage(session.labelSettings.road.density)}`;
-  blockLabelFontOutput.value = `${session.labelSettings.block.fontSizePx.toFixed(0)} px`;
-  blockLabelOpacityOutput.value = percentage(session.labelSettings.block.opacity);
-  blockLabelDensityOutput.value = percentage(session.labelSettings.block.density);
-  blockLabelSummary.textContent = `${session.labelSettings.block.fontSizePx.toFixed(0)} px · ${percentage(session.labelSettings.block.density)}`;
-}
-
-function applyLabelSettingsToControls(settings: LabelDisplaySettings): void {
-  layerElements[RenderLayer.RoadLabels].checked = settings.road.visible;
-  layerElements[RenderLayer.BlockLabels].checked = settings.block.visible;
-  renderer.layers.setVisible(RenderLayer.RoadLabels, settings.road.visible);
-  renderer.layers.setVisible(RenderLayer.BlockLabels, settings.block.visible);
-  roadLabelFontSize.value = String(settings.road.fontSizePx);
-  roadLabelOpacity.value = String(Math.round(settings.road.opacity * 100));
-  roadLabelDensity.value = String(Math.round(settings.road.density * 100));
-  roadLabelMainZoom.value = String(settings.road.mainMinZoom);
-  roadLabelSecondaryZoom.value = String(settings.road.secondaryMinZoom);
-  roadLabelLocalZoom.value = String(settings.road.localMinZoom);
-  roadLabelMain.checked = settings.road.showMain;
-  roadLabelSecondary.checked = settings.road.showSecondary;
-  roadLabelLocal.checked = settings.road.showLocal;
-  roadLabelRotate.checked = settings.road.rotateAlongRoad;
-  roadLabelOutline.checked = settings.road.outline;
-  blockLabelFontSize.value = String(settings.block.fontSizePx);
-  blockLabelOpacity.value = String(Math.round(settings.block.opacity * 100));
-  blockLabelDensity.value = String(Math.round(settings.block.density * 100));
-  blockLabelMinZoom.value = String(settings.block.minZoom);
-  blockLabelOutline.checked = settings.block.outline;
-  labelAvoidCollisions.checked = settings.avoidCollisions;
-  updateLabelControlOutputs();
-}
-
-function commitLabelControls(): void {
-  session.labelSettings = readLabelSettingsFromControls();
-  saveLabelSettings(session.labelSettings);
-  updateLabelControlOutputs();
-  viewPreset.value = 'custom';
-  syncRendererCustomization();
-}
-
 function showToast(message: string, state: 'success' | 'warning' | 'error'): void {
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -1680,327 +1617,6 @@ function setStatus(message: string, state: 'success' | 'warning' | 'error' | 'wo
   statusMessage.textContent = message;
   statusMessage.dataset.state = state;
   if (state === 'success' || state === 'warning' || state === 'error') showToast(message, state);
-}
-
-function setTheme(theme: UiTheme): void {
-  document.documentElement.dataset.theme = theme;
-  studioThemeSelect.value = theme;
-  localStorage.setItem(UI_THEME_STORAGE_KEY, theme);
-  requestRender();
-}
-
-function setLeftPanel(open: boolean): void {
-  document.body.dataset.leftPanel = open ? 'open' : 'closed';
-  toggleLeftPanelButton.setAttribute('aria-pressed', String(open));
-  localStorage.setItem(UI_LEFT_PANEL_STORAGE_KEY, open ? 'open' : 'closed');
-  window.setTimeout(fitCamera, 190);
-}
-
-function setStudioDock(open: boolean): void {
-  document.body.dataset.studioDock = open ? 'open' : 'closed';
-  toggleStudioDockButton.setAttribute('aria-pressed', String(open));
-  localStorage.setItem(UI_STUDIO_DOCK_STORAGE_KEY, open ? 'open' : 'closed');
-  window.setTimeout(fitCamera, 190);
-}
-
-function setStudioTab(tab: StudioTab, openDock = true): void {
-  session.activeStudioTab = tab;
-  localStorage.setItem(UI_STUDIO_TAB_STORAGE_KEY, tab);
-  const buttons: Readonly<Record<StudioTab, HTMLButtonElement>> = {
-    inspector: studioTabInspector,
-    layers: studioTabLayers,
-    project: studioTabProject,
-  };
-  const panels: Readonly<Record<StudioTab, HTMLElement>> = {
-    inspector: studioInspectorPanel,
-    layers: studioLayersPanel,
-    project: studioProjectPanel,
-  };
-  for (const key of Object.keys(buttons) as StudioTab[]) {
-    buttons[key].setAttribute('aria-selected', String(key === tab));
-    panels[key].hidden = key !== tab;
-  }
-  if (openDock) setStudioDock(true);
-}
-
-const STUDIO_LAYER_GROUPS: readonly {
-  readonly title: string;
-  readonly layers: readonly { readonly layer: RenderLayer; readonly label: string }[];
-}[] = [
-  { title: 'Base', layers: [
-    { layer: RenderLayer.Terrain, label: 'Terrain' },
-    { layer: RenderLayer.Elevation, label: 'Elevation' },
-    { layer: RenderLayer.Moisture, label: 'Moisture' },
-    { layer: RenderLayer.Temperature, label: 'Temperature' },
-  ] },
-  { title: 'Planning', layers: [
-    { layer: RenderLayer.Accessibility, label: 'Accessibility' },
-    { layer: RenderLayer.LandValue, label: 'Land value' },
-    { layer: RenderLayer.Zones, label: 'Zones' },
-    { layer: RenderLayer.Blocks, label: 'Blocks' },
-    { layer: RenderLayer.BlockLabels, label: 'Block labels' },
-  ] },
-  { title: 'Region', layers: [
-    { layer: RenderLayer.Floodplains, label: 'Flood risk' },
-    { layer: RenderLayer.Rivers, label: 'Rivers' },
-    { layer: RenderLayer.Islands, label: 'Island boundaries' },
-    { layer: RenderLayer.IslandLabels, label: 'Island labels' },
-    { layer: RenderLayer.Settlements, label: 'Settlements' },
-  ] },
-  { title: 'Infrastructure', layers: [
-    { layer: RenderLayer.Roads, label: 'Roads' },
-    { layer: RenderLayer.RoadLabels, label: 'Road labels' },
-    { layer: RenderLayer.Bridges, label: 'Bridges' },
-    { layer: RenderLayer.BridgeLabels, label: 'Bridge labels' },
-    { layer: RenderLayer.Ports, label: 'Ports' },
-    { layer: RenderLayer.PortLabels, label: 'Port labels' },
-  ] },
-  { title: 'Live world', layers: [
-    { layer: RenderLayer.LiveInfrastructure, label: 'Infrastructure status' },
-    { layer: RenderLayer.VenueStatus, label: 'Venue status' },
-    { layer: RenderLayer.SettlementActivity, label: 'Settlement activity' },
-    { layer: RenderLayer.SupernaturalActivity, label: 'Supernatural activity' },
-    { layer: RenderLayer.NPCs, label: 'NPCs' },
-    { layer: RenderLayer.Travel, label: 'Travel route' },
-  ] },
-  { title: 'World objects', layers: [
-    { layer: RenderLayer.Buildings, label: 'Buildings' },
-    { layer: RenderLayer.Vegetation, label: 'Vegetation' },
-    { layer: RenderLayer.CustomImages, label: 'Custom images' },
-    { layer: RenderLayer.Anchors, label: 'Anchors' },
-    { layer: RenderLayer.Story, label: 'Story sites' },
-    { layer: RenderLayer.Grid, label: 'Grid' },
-  ] },
-];
-
-function renderStudioLayerManager(): void {
-  studioLayerList.replaceChildren();
-  for (const groupDefinition of STUDIO_LAYER_GROUPS) {
-    const group = document.createElement('section');
-    group.className = 'studio-layer-group';
-    const title = document.createElement('strong');
-    title.textContent = groupDefinition.title;
-    group.append(title);
-    for (const item of groupDefinition.layers) {
-      const row = document.createElement('label');
-      row.className = 'studio-layer-row';
-      row.dataset.search = `${groupDefinition.title} ${item.label}`.toLocaleLowerCase();
-      const label = document.createElement('span');
-      label.textContent = item.label;
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.checked = layerElements[item.layer].checked;
-      input.dataset.layer = item.layer;
-      input.addEventListener('change', () => {
-        layerElements[item.layer].checked = input.checked;
-        layerElements[item.layer].dispatchEvent(new Event('change'));
-      });
-      layerElements[item.layer].addEventListener('change', () => { input.checked = layerElements[item.layer].checked; });
-      row.append(label, input);
-      group.append(row);
-    }
-    studioLayerList.append(group);
-  }
-}
-
-function filterStudioLayers(): void {
-  const query = layerSearchInput.value.trim().toLocaleLowerCase();
-  for (const row of studioLayerList.querySelectorAll<HTMLElement>('.studio-layer-row')) {
-    row.dataset.filtered = String(query.length > 0 && !(row.dataset.search ?? '').includes(query));
-  }
-}
-
-function syncStudioLayerManager(): void {
-  for (const input of studioLayerList.querySelectorAll<HTMLInputElement>('input[data-layer]')) {
-    const layer = input.dataset.layer as RenderLayer;
-    input.checked = layerElements[layer].checked;
-  }
-}
-
-function setAllStudioLayers(visible: boolean): void {
-  for (const layer of Object.values(RenderLayer)) setLayer(layer, visible || layer === RenderLayer.Terrain);
-  viewPreset.value = 'custom';
-  syncStudioLayerManager();
-  requestRender();
-}
-
-function terrainMinimapColor(terrain: string, water: WaterType): string {
-  if (water === WaterType.Ocean) return terrain === 'shallow-water' ? '#406b74' : '#254650';
-  if (water === WaterType.Lake) return '#3e7180';
-  switch (terrain) {
-    case 'beach': return '#b7a777';
-    case 'river-channel': return '#4a7881';
-    case 'delta': return '#67816a';
-    case 'floodplain': return '#758d6a';
-    case 'forest': return '#355c3d';
-    case 'hill': return '#776f55';
-    case 'mountain': return '#716b62';
-    default: return '#66805d';
-  }
-}
-
-function rebuildMinimapBase(): void {
-  if (session.world === undefined) return;
-  const base = document.createElement('canvas');
-  base.width = minimapCanvas.width;
-  base.height = minimapCanvas.height;
-  const context = base.getContext('2d');
-  if (context === null) return;
-  const cellWidth = base.width / session.world.width;
-  const cellHeight = base.height / session.world.height;
-  for (let y = 0; y < session.world.height; y += 1) {
-    for (let x = 0; x < session.world.width; x += 1) {
-      const tile = session.world.getTile(x, y);
-      if (tile === undefined) continue;
-      context.fillStyle = terrainMinimapColor(tile.terrain, tile.water);
-      context.fillRect(Math.floor(x * cellWidth), Math.floor(y * cellHeight), Math.ceil(cellWidth + .2), Math.ceil(cellHeight + .2));
-    }
-  }
-  minimapBase = base;
-  renderMinimap();
-}
-
-function renderMinimap(): void {
-  if (session.world === undefined || minimapBase === null || minimapPanel.dataset.collapsed === 'true') return;
-  const context = minimapCanvas.getContext('2d');
-  if (context === null) return;
-  context.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
-  context.drawImage(minimapBase, 0, 0);
-  const left = Math.max(0, -camera.x / camera.zoom);
-  const top = Math.max(0, -camera.y / camera.zoom);
-  const right = Math.min(session.world.width, (canvas.clientWidth - camera.x) / camera.zoom);
-  const bottom = Math.min(session.world.height, (canvas.clientHeight - camera.y) / camera.zoom);
-  context.strokeStyle = '#ffffff';
-  context.lineWidth = 1.5;
-  context.strokeRect(
-    left / session.world.width * minimapCanvas.width,
-    top / session.world.height * minimapCanvas.height,
-    Math.max(3, (right - left) / session.world.width * minimapCanvas.width),
-    Math.max(3, (bottom - top) / session.world.height * minimapCanvas.height),
-  );
-  if (session.selectedInspectorItem !== null) {
-    context.fillStyle = '#f0d68a';
-    context.beginPath();
-    context.arc(
-      (session.selectedInspectorItem.x + .5) / session.world.width * minimapCanvas.width,
-      (session.selectedInspectorItem.y + .5) / session.world.height * minimapCanvas.height,
-      3,
-      0,
-      Math.PI * 2,
-    );
-    context.fill();
-  }
-}
-
-function updateStatusBar(): void {
-  if (session.world === undefined) return;
-  statusSeed.textContent = `Seed: ${session.world.seed}`;
-  statusLayout.textContent = `Layout: ${session.world.metadata.terrainShape}`;
-  statusZoom.textContent = `Zoom: ${Math.round(camera.zoom * 100)}%`;
-  statusSelection.textContent = `Selected: ${session.selectedInspectorItem?.title ?? 'none'}`;
-  const total = Object.values(session.world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
-  statusGeneration.textContent = activeGenerationController === null ? `Generation: ${total.toFixed(0)} ms` : 'Generation: running';
-}
-
-function renderInspector(): void {
-  focusSelectionButton.disabled = session.selectedInspectorItem === null;
-  if (session.selectedInspectorItem === null || session.world === undefined) {
-    inspectorContent.className = 'inspector-empty';
-    inspectorContent.innerHTML = '<strong>Nothing selected</strong><p>Click the map to inspect terrain, roads, districts, settlements, anchors, story sites, and NPCs.</p>';
-    updateStatusBar();
-    return;
-  }
-  const tile = session.world.getTile(session.selectedInspectorItem.x, session.selectedInspectorItem.y);
-  if (tile === undefined) return;
-  const island = tile.islandId === null ? undefined : session.world.islands[tile.islandId];
-  const settlement = tile.settlementId === null ? undefined : session.world.settlements[tile.settlementId];
-  const road = tile.roadId === null ? undefined : session.world.roads[tile.roadId];
-  const block = tile.blockId === null ? undefined : session.world.blocks[tile.blockId];
-  const building = tile.buildingId === null ? undefined : session.world.buildings[tile.buildingId];
-  const anchor = session.world.anchors.find((item) => item.tileIndex === session.selectedInspectorItem?.tileIndex);
-  const story = session.world.storyObjects.find((item) => item.tileIndex === session.selectedInspectorItem?.tileIndex);
-  const npc = session.world.npcs.find((item) => item.tileIndex === session.selectedInspectorItem?.tileIndex);
-  const tags = [tile.river ? 'River' : '', tile.coast ? 'Coast' : '', tile.bridge ? 'Bridge' : '', tile.hasZoneOverride ? 'Zone override' : ''].filter(Boolean);
-  inspectorContent.className = 'inspector-card';
-  inspectorContent.replaceChildren();
-  const header = document.createElement('header');
-  const title = document.createElement('strong');
-  title.textContent = session.selectedInspectorItem.title;
-  const subtitle = document.createElement('span');
-  subtitle.textContent = session.selectedInspectorItem.subtitle;
-  header.append(title, subtitle);
-  const list = document.createElement('dl');
-  list.className = 'inspector-grid';
-  const rows: readonly [string, string][] = [
-    ['Coordinates', `${tile.x}, ${tile.y}`],
-    ['Terrain', tile.terrain],
-    ['Elevation', tile.elevation.toFixed(3)],
-    ['Slope', tile.slope.toFixed(3)],
-    ['Moisture', tile.moisture.toFixed(2)],
-    ['Flood risk', `${Math.round(tile.floodRisk * 100)}%`],
-    ['Zone', tile.zoneType ?? 'none'],
-    ['Island', island?.name ?? 'none'],
-    ['Settlement', settlement?.name ?? 'none'],
-    ['Road', road?.name ?? 'none'],
-    ['Block', block?.name ?? 'none'],
-    ['Building', building === undefined ? 'none' : `#${building.id}`],
-    ['Anchor', anchor?.name ?? 'none'],
-    ['Story site', story?.name ?? 'none'],
-    ['NPC', npc === undefined ? 'none' : `${npc.name} · ${npc.occupation} · ${npc.status}`],
-  ];
-  for (const [name, value] of rows) {
-    const term = document.createElement('dt'); term.textContent = name;
-    const description = document.createElement('dd'); description.textContent = value;
-    list.append(term, description);
-  }
-  const tagContainer = document.createElement('div');
-  tagContainer.className = 'inspector-tags';
-  for (const tag of tags) { const span = document.createElement('span'); span.textContent = tag; tagContainer.append(span); }
-  const actions = document.createElement('div');
-  actions.className = 'button-row inspector-actions';
-  if (road !== undefined && road.source !== 'authored' && road.bridgeId === null && road.portId === null) {
-    const adopt = document.createElement('button');
-    adopt.type = 'button';
-    adopt.textContent = 'Adopt road into authoring';
-    adopt.addEventListener('click', () => adoptGeneratedRoad(road));
-    actions.append(adopt);
-  }
-  if (building !== undefined && building.source !== 'authored') {
-    const adopt = document.createElement('button');
-    adopt.type = 'button';
-    adopt.textContent = 'Adopt building into authoring';
-    adopt.addEventListener('click', () => adoptGeneratedBuilding(building));
-    actions.append(adopt);
-  }
-  inspectorContent.append(header, list, tagContainer);
-  if (actions.childElementCount > 0) inspectorContent.append(actions);
-  updateStatusBar();
-  renderMinimap();
-}
-
-function inspectMapPosition(worldX: number, worldY: number): void {
-  const x = Math.floor(worldX);
-  const y = Math.floor(worldY);
-  const tile = session.world.getTile(x, y);
-  if (tile === undefined) return;
-  const index = y * session.world.width + x;
-  const story = session.world.storyObjects.find((item) => item.tileIndex === index);
-  const npc = session.world.npcs.find((item) => item.tileIndex === index);
-  const anchor = session.world.anchors.find((item) => item.tileIndex === index);
-  const settlement = tile.settlementId === null ? undefined : session.world.settlements[tile.settlementId];
-  const road = tile.roadId === null ? undefined : session.world.roads[tile.roadId];
-  const block = tile.blockId === null ? undefined : session.world.blocks[tile.blockId];
-  const title = npc?.name ?? story?.name ?? anchor?.name ?? settlement?.name ?? road?.name ?? block?.name ?? `${tile.terrain} tile`;
-  const subtitle = npc !== undefined ? 'NPC' : story !== undefined ? 'Story site' : anchor !== undefined ? 'Anchor' : settlement !== undefined ? 'Settlement' : road !== undefined ? 'Road' : block !== undefined ? 'Block' : 'Terrain';
-  session.selectedInspectorItem = { tileIndex: index, x, y, title, subtitle };
-  renderInspector();
-  setStudioTab('inspector');
-}
-
-function focusSelection(): void {
-  if (session.selectedInspectorItem === null) { fitCamera(); return; }
-  camera.focus(session.selectedInspectorItem.x, session.selectedInspectorItem.y, canvas.clientWidth, canvas.clientHeight, Math.max(7, camera.zoom));
-  requestRender();
 }
 
 function currentProjectSerializationState(): ProjectSerializationState {
@@ -2061,7 +1677,7 @@ function restoreBrowserMapView(view: PersistedMapView | undefined): void {
   const visibleLayers = new Set(view.visibleLayers);
   for (const layer of Object.values(RenderLayer)) setLayer(layer, visibleLayers.has(layer));
   viewPreset.value = 'custom';
-  syncStudioLayerManager();
+  studioShell.syncLayerManager();
   requestRender();
 }
 
@@ -2153,17 +1769,17 @@ function commandDefinitions(): CommandDefinition[] {
     { id: 'open-json', label: 'Open project JSON', description: 'Import a PAYAW project or override file', shortcut: 'Ctrl+O', run: () => projectImportFile.click() },
     { id: 'export-png', label: 'Export map PNG', description: 'Render the visible layer configuration', run: () => { void exportVisibleMapImage(); } },
     { id: 'fit', label: 'Fit entire world', description: 'Fit the regional map into the viewport', shortcut: 'F', run: fitCamera },
-    { id: 'focus', label: 'Focus selection', description: 'Center the selected map object', run: focusSelection },
+    { id: 'focus', label: 'Focus selection', description: 'Center the selected map object', run: () => mapInspector.focusSelection() },
     { id: 'editor', label: 'Switch to World Editor', description: 'Open authoring controls', run: () => setWorkspace('editor') },
     { id: 'dm', label: 'Switch to DM Mode', description: 'Open the session workspace', run: () => setWorkspace('dm') },
-    { id: 'inspector', label: 'Open Inspector', description: 'Inspect the selected tile or object', run: () => setStudioTab('inspector') },
-    { id: 'layers', label: 'Open Layer Manager', description: 'Toggle map visibility layers', run: () => setStudioTab('layers') },
-    { id: 'project', label: 'Open Project panel', description: 'Autosave, recent worlds, and theme', run: () => setStudioTab('project') },
-    { id: 'toggle-left', label: 'Toggle authoring panel', description: 'Show or hide the left workspace', shortcut: 'Ctrl+[', run: () => setLeftPanel(document.body.dataset.leftPanel !== 'closed' ? false : true) },
-    { id: 'toggle-right', label: 'Toggle Studio Dock', description: 'Show or hide inspector, layers, and project', shortcut: 'Ctrl+]', run: () => setStudioDock(document.body.dataset.studioDock !== 'closed' ? false : true) },
-    { id: 'dark', label: 'Use dark appearance', description: 'Switch the interface theme', run: () => setTheme('dark') },
-    { id: 'light', label: 'Use light appearance', description: 'Switch the interface theme', run: () => setTheme('light') },
-    { id: 'contrast', label: 'Use high-contrast appearance', description: 'Switch the interface theme', run: () => setTheme('contrast') },
+    { id: 'inspector', label: 'Open Inspector', description: 'Inspect the selected tile or object', run: () => studioShell.setTab('inspector') },
+    { id: 'layers', label: 'Open Layer Manager', description: 'Toggle map visibility layers', run: () => studioShell.setTab('layers') },
+    { id: 'project', label: 'Open Project panel', description: 'Autosave, recent worlds, and theme', run: () => studioShell.setTab('project') },
+    { id: 'toggle-left', label: 'Toggle authoring panel', description: 'Show or hide the left workspace', shortcut: 'Ctrl+[', run: () => studioShell.toggleLeftPanel() },
+    { id: 'toggle-right', label: 'Toggle Studio Dock', description: 'Show or hide inspector, layers, and project', shortcut: 'Ctrl+]', run: () => studioShell.toggleStudioDock() },
+    { id: 'dark', label: 'Use dark appearance', description: 'Switch the interface theme', run: () => studioShell.setTheme('dark') },
+    { id: 'light', label: 'Use light appearance', description: 'Switch the interface theme', run: () => studioShell.setTheme('light') },
+    { id: 'contrast', label: 'Use high-contrast appearance', description: 'Switch the interface theme', run: () => studioShell.setTheme('contrast') },
   ];
 }
 
@@ -2906,9 +2522,9 @@ async function importCustomizationFile(file: File): Promise<void> {
     saveCustomStoryDefinitions(session.customStoryDefinitions);
   }
   if (parsed.labelDisplay !== undefined) {
-    session.labelSettings = normalizeLabelSettings(parsed.labelDisplay);
+    session.setLabelSettings(normalizeLabelSettings(parsed.labelDisplay));
     saveLabelSettings(session.labelSettings);
-    applyLabelSettingsToControls(session.labelSettings);
+    labelDisplay.apply(session.labelSettings);
   }
   persistMapCustomization();
   persistNames();
@@ -2950,7 +2566,7 @@ async function importPayawJsonFile(file: File): Promise<void> {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('The selected file is not a PAYAW JSON object.');
   const root = parsed as Record<string, unknown>;
   if (root.format === 'payaw-npcs') {
-    await importNpcJsonFile(file);
+    await npcJsonController.importFile(file);
     return;
   }
   if (root.format === 'payaw-world-overrides') {
@@ -3084,8 +2700,8 @@ async function importProjectPayload(parsed: unknown, sourceLabel: string): Promi
   session.customAnchors = [...anchorState.customAnchors];
   session.builtInOverrides = [...anchorState.builtInOverrides];
   session.customStoryDefinitions = importedStories;
-  session.labelSettings = normalizeLabelSettings(labelSource);
-  applyLabelSettingsToControls(session.labelSettings);
+  session.setLabelSettings(normalizeLabelSettings(labelSource));
+  labelDisplay.apply(session.labelSettings);
   session.roadNameOverrides = importedRoadNames;
   session.blockNameOverrides = importedBlockNames;
 
@@ -3180,559 +2796,22 @@ function toggleNpcView(): void {
   checkbox.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function parseTagList(value: string): string[] {
-  return [...new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean))].slice(0, 64);
-}
-
-function campaignLocationOptions() {
-  return collectCampaignLocations(session.world, session.authoringLayer);
-}
-
-function selectedNpc(): NPC | undefined {
-  return session.selectedNpcKey === null ? undefined : session.world.npcs.find((npc) => npc.key === session.selectedNpcKey);
-}
-
-function selectedAuthoredLocation(): AuthoredLocationRecord | undefined {
-  const sourceRef = session.selectedLocationRef ?? locationSource.value;
-  return session.npcLocationAuthoring.locations.find((record) => record.sourceRef === sourceRef);
-}
-
-function replaceSelectOptions(
-  select: HTMLSelectElement,
-  options: readonly { readonly value: string; readonly label: string }[],
-  preferredValue?: string,
-): void {
-  const previous = preferredValue ?? select.value;
-  select.replaceChildren(...options.map(({ value, label }) => {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    return option;
-  }));
-  if (options.some((option) => option.value === previous)) select.value = previous;
-}
-
 function updateNpcAuthoringState(next: NPCLocationAuthoringState, message?: string): void {
-  session.npcLocationAuthoring = normalizeNpcLocationAuthoring(next);
-  const selectedKey = session.selectedNpcKey;
-  session.world.npcs = applyNpcLocationAuthoring(session.world, session.npcLocationAuthoring);
-  session.simulation?.replaceWorld(session.world);
-  session.simulation?.setNpcLocationAuthoring(session.npcLocationAuthoring);
-  session.simulation?.tick(Date.now(), true);
-  session.selectedNpcKey = selectedKey !== null && session.world.npcs.some((npc) => npc.key === selectedKey) ? selectedKey : null;
-  persistMapCustomization();
-  renderNPCList();
-  renderNpcLocationAuthoringUi();
-  travelPlanner.refreshLocations();
-  campaignStudio?.refreshExternalReferences();
-  updateStats(stats, session.world);
-  requestRender();
-  scheduleAutosave();
-  if (message !== undefined) setStatus(message, 'success');
+  npcController.updateAuthoring(next, message);
 }
 
 function updateSelectedNpcSchedule(entries: readonly NPCScheduleEntry[], message?: string): void {
-  const npc = selectedNpc();
-  if (npc === undefined) return;
-  if (npc.source === 'authored') {
-    updateNpcAuthoringState({
-      ...session.npcLocationAuthoring,
-      authoredNpcs: session.npcLocationAuthoring.authoredNpcs.map((definition) => definition.key === npc.key ? { ...definition, weeklySchedule: entries } : definition),
-    }, message);
-    return;
-  }
-  const existing = session.npcLocationAuthoring.npcOverrides.find((override) => override.npcKey === npc.key);
-  updateNpcAuthoringState({
-    ...session.npcLocationAuthoring,
-    npcOverrides: [
-      ...session.npcLocationAuthoring.npcOverrides.filter((override) => override.npcKey !== npc.key),
-      { ...(existing ?? { npcKey: npc.key }), weeklySchedule: entries },
-    ],
-  }, message);
+  npcController.updateSchedule(entries, message);
 }
 
 function updateSelectedNpcRelationships(relationships: readonly NPCRelationship[], message?: string): void {
-  const npc = selectedNpc();
-  if (npc === undefined) return;
-  if (npc.source === 'authored') {
-    updateNpcAuthoringState({
-      ...session.npcLocationAuthoring,
-      authoredNpcs: session.npcLocationAuthoring.authoredNpcs.map((definition) => definition.key === npc.key ? { ...definition, relationships } : definition),
-    }, message);
-    return;
-  }
-  const existing = session.npcLocationAuthoring.npcOverrides.find((override) => override.npcKey === npc.key);
-  updateNpcAuthoringState({
-    ...session.npcLocationAuthoring,
-    npcOverrides: [
-      ...session.npcLocationAuthoring.npcOverrides.filter((override) => override.npcKey !== npc.key),
-      { ...(existing ?? { npcKey: npc.key }), relationships },
-    ],
-  }, message);
-}
-
-function nearestSettlementForTile(tileIndex: number) {
-  const tile = session.world.tiles[tileIndex];
-  if (tile === undefined) return session.world.settlements[0];
-  return [...session.world.settlements].sort((left, right) => Math.hypot(left.x - tile.x, left.y - tile.y) - Math.hypot(right.x - tile.x, right.y - tile.y))[0];
-}
-
-function buildingCampaignLabel(buildingId: number): string {
-  const location = campaignLocationOptions().find((candidate) => candidate.ref === `building:${buildingId}`);
-  const community = location === undefined ? undefined : nearestSettlementForTile(location.tileIndex);
-  const buildingLabel = location?.label ?? `Building #${buildingId + 1}`;
-  return community === undefined ? buildingLabel : `${community.name} · ${buildingLabel}`;
-}
-
-function renderNpcSelectors(npc: NPC | undefined): void {
-  const preferredSettlement = npcEditSettlement.value || String(npc?.settlementId ?? 0);
-  replaceSelectOptions(npcEditSettlement, session.world.settlements.map((settlement) => ({ value: String(settlement.id), label: settlement.name })), preferredSettlement);
-  const selectedSettlement = session.world.settlements.find((settlement) => String(settlement.id) === npcEditSettlement.value);
-  const distanceToSelected = (buildingId: number): number => {
-    const option = campaignLocationOptions().find((candidate) => candidate.ref === `building:${buildingId}`);
-    const tile = option === undefined ? undefined : session.world.tiles[option.tileIndex];
-    return selectedSettlement === undefined || tile === undefined ? Number.POSITIVE_INFINITY : Math.hypot(tile.x - selectedSettlement.x, tile.y - selectedSettlement.y);
-  };
-
-  const homeOptions = session.world.buildings
-    .filter((building) => npcEditUnusualHome.checked || isResidentialBuilding(building))
-    .sort((left, right) => distanceToSelected(left.id) - distanceToSelected(right.id) || buildingCampaignLabel(left.id).localeCompare(buildingCampaignLabel(right.id)))
-    .map((building) => ({ value: String(building.id), label: buildingCampaignLabel(building.id) }));
-  replaceSelectOptions(npcEditHome, [{ value: '', label: 'Home unassigned — choose a residential building' }, ...homeOptions], npc?.homeBuildingId === null || npc === undefined ? '' : String(npc.homeBuildingId));
-
-  const workplaceOptions = session.world.buildings
-    .sort((left, right) => distanceToSelected(left.id) - distanceToSelected(right.id) || buildingCampaignLabel(left.id).localeCompare(buildingCampaignLabel(right.id)))
-    .map((building) => ({ value: String(building.id), label: buildingCampaignLabel(building.id) }));
-  replaceSelectOptions(npcEditWorkplace, [{ value: '', label: 'No workplace assigned' }, ...workplaceOptions], npc?.workplaceBuildingId === null || npc === undefined ? '' : String(npc.workplaceBuildingId));
-
-  const locations = campaignLocationOptions().map((location) => ({ value: location.ref, label: location.label }));
-  replaceSelectOptions(npcScheduleLocation, locations);
-  replaceSelectOptions(npcOverrideLocation, locations);
-
-  replaceSelectOptions(npcRelationshipTarget, session.world.npcs
-    .filter((candidate) => candidate.key !== npc?.key)
-    .map((candidate) => ({ value: String(candidate.id), label: candidate.name })));
-}
-
-function renderNpcPortrait(npc: NPC | undefined): void {
-  npcPortraitPreview.replaceChildren();
-  const source = session.pendingNpcPortraitDataUrl ?? npc?.portraitDataUrl ?? null;
-  if (source === null) {
-    const placeholder = document.createElement('span');
-    placeholder.textContent = npc === undefined ? 'No NPC selected' : npc.name.slice(0, 1).toLocaleUpperCase();
-    npcPortraitPreview.append(placeholder);
-    return;
-  }
-  const image = document.createElement('img');
-  image.src = source;
-  image.alt = npc === undefined ? 'NPC portrait preview' : `${npc.name} portrait`;
-  npcPortraitPreview.append(image);
-}
-
-function renderNpcScheduleEditor(npc: NPC | undefined): void {
-  npcScheduleDayTabs.replaceChildren();
-  for (const day of CAMPAIGN_DAYS) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = day.slice(0, 3).toLocaleUpperCase();
-    button.dataset.active = String(day === session.selectedNpcScheduleDay);
-    button.addEventListener('click', () => {
-      session.selectedNpcScheduleDay = day;
-      renderNpcScheduleEditor(selectedNpc());
-    });
-    npcScheduleDayTabs.append(button);
-  }
-
-  npcScheduleList.replaceChildren();
-  const entries = (npc?.weeklySchedule ?? [])
-    .filter((entry) => entry.day === session.selectedNpcScheduleDay)
-    .sort((left, right) => left.startMinute - right.startMinute);
-  if (entries.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'helper-text empty-authoring-state';
-    empty.textContent = npc === undefined ? 'Select an NPC to edit a schedule.' : 'No blocks on this day. Schedule gaps resolve to the residential home.';
-    npcScheduleList.append(empty);
-  }
-  for (const entry of entries) {
-    const row = document.createElement('article');
-    row.className = 'schedule-entry';
-    const copy = document.createElement('div');
-    const title = document.createElement('strong');
-    title.textContent = `${minuteAsTime(entry.startMinute)}–${minuteAsTime(entry.endMinute)} · ${entry.activity}`;
-    const meta = document.createElement('small');
-    meta.textContent = `${entry.location.label} · ${entry.travelMode.replace('-', ' ')} · ${entry.visibility.replace('-', ' ')}`;
-    copy.append(title, meta);
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => updateSelectedNpcSchedule((npc?.weeklySchedule ?? []).filter((candidate) => candidate.id !== entry.id), 'Removed schedule block.'));
-    row.append(copy, remove);
-    npcScheduleList.append(row);
-  }
-
-  const errors = validateSchedule(npc?.weeklySchedule ?? []);
-  npcScheduleValidation.dataset.valid = String(errors.length === 0);
-  npcScheduleValidation.textContent = errors.length === 0
-    ? npc === undefined ? '' : 'Schedule valid. Unscheduled time resolves to home.'
-    : errors.join(' ');
-}
-
-function renderNpcRelationships(npc: NPC | undefined): void {
-  npcRelationshipList.replaceChildren();
-  if (npc === undefined || npc.relationships.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'helper-text empty-authoring-state';
-    empty.textContent = npc === undefined ? 'Select an NPC to edit relationships.' : 'No authored relationships.';
-    npcRelationshipList.append(empty);
-    return;
-  }
-  for (let index = 0; index < npc.relationships.length; index += 1) {
-    const relationship = npc.relationships[index];
-    if (relationship === undefined) continue;
-    const target = session.world.npcs.find((candidate) => candidate.id === relationship.npcId);
-    const row = document.createElement('article');
-    row.className = 'relationship-entry';
-    const copy = document.createElement('div');
-    const title = document.createElement('strong');
-    title.textContent = `${target?.name ?? 'Missing NPC'} · ${relationship.kind}`;
-    const meta = document.createElement('small');
-    meta.textContent = [relationship.label, relationship.hidden ? 'GM only' : 'visible'].filter(Boolean).join(' · ');
-    copy.append(title, meta);
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => updateSelectedNpcRelationships(npc.relationships.filter((_, candidateIndex) => candidateIndex !== index), 'Removed relationship.'));
-    row.append(copy, remove);
-    npcRelationshipList.append(row);
-  }
-}
-
-function renderNpcPlacements(npc: NPC | undefined): void {
-  npcPlacementList.replaceChildren();
-  if (npc === undefined) {
-    const empty = document.createElement('p');
-    empty.className = 'helper-text empty-authoring-state';
-    empty.textContent = 'Select an NPC to place them in a scene or temporarily override their routine.';
-    npcPlacementList.append(empty);
-    return;
-  }
-  const timestamp = session.simulation?.state().time.campaignTimestampMs ?? Date.now();
-  const timezone = session.simulation?.state().time.timezone ?? 'Asia/Manila';
-  const resolved = resolveNpcPlacement(session.world, npc, session.npcLocationAuthoring, timestamp, timezone);
-  const now = document.createElement('article');
-  now.className = 'placement-entry placement-current';
-  const nowCopy = document.createElement('div');
-  const nowTitle = document.createElement('strong');
-  nowTitle.textContent = `Now: ${resolved.location.label}`;
-  const nowMeta = document.createElement('small');
-  nowMeta.textContent = `${resolved.activity} · source: ${resolved.source}`;
-  nowCopy.append(nowTitle, nowMeta);
-  const focus = document.createElement('button');
-  focus.type = 'button';
-  focus.textContent = 'Focus';
-  focus.addEventListener('click', () => {
-    const tile = session.world.tiles[resolved.location.tileIndex];
-    if (tile !== undefined) focusMapPoint(tile.x, tile.y);
-  });
-  now.append(nowCopy, focus);
-  npcPlacementList.append(now);
-
-  const temporary = session.npcLocationAuthoring.temporaryOverrides.filter((override) => override.npcKey === npc.key);
-  const scenes = session.npcLocationAuthoring.scenePlacements.filter((placement) => placement.npcKey === npc.key);
-  for (const placement of [...temporary, ...scenes]) {
-    const isTemporary = 'startsAtMs' in placement;
-    const row = document.createElement('article');
-    row.className = 'placement-entry';
-    const copy = document.createElement('div');
-    const title = document.createElement('strong');
-    title.textContent = `${isTemporary ? 'Temporary' : `Scene ${placement.sceneId}`} · ${placement.location.label}`;
-    const meta = document.createElement('small');
-    meta.textContent = isTemporary
-      ? `${placement.activity} · until ${new Date(placement.endsAtMs).toLocaleString()}`
-      : `${placement.activity}${placement.sceneId === session.npcLocationAuthoring.activeSceneId ? ' · active' : ''}`;
-    copy.append(title, meta);
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => updateNpcAuthoringState({
-      ...session.npcLocationAuthoring,
-      temporaryOverrides: isTemporary ? session.npcLocationAuthoring.temporaryOverrides.filter((candidate) => candidate.id !== placement.id) : session.npcLocationAuthoring.temporaryOverrides,
-      scenePlacements: isTemporary ? session.npcLocationAuthoring.scenePlacements : session.npcLocationAuthoring.scenePlacements.filter((candidate) => candidate.id !== placement.id),
-    }, 'Removed NPC placement.'));
-    row.append(copy, remove);
-    npcPlacementList.append(row);
-  }
-}
-
-function renderNpcEditor(): void {
-  const npc = selectedNpc();
-  const controls: Array<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement> = [
-    npcEditName, npcEditAge, npcEditStatus, npcEditOccupation, npcEditSettlement, npcEditHome, npcEditUnusualHome,
-    npcEditWorkplace, npcEditPublicDescription, npcEditPersonality, npcEditWish, npcEditFear, npcEditSecret, npcEditRumor,
-    npcEditTags, npcEditNotes, npcEditPortrait, npcSaveButton, npcScheduleStart, npcScheduleEnd, npcScheduleActivity,
-    npcScheduleLocation, npcScheduleTravel, npcScheduleVisibility, npcScheduleAdd, npcScheduleCopyWeekdays,
-    npcScheduleClearDay, npcRelationshipTarget, npcRelationshipKind, npcRelationshipHidden, npcRelationshipLabel,
-    npcRelationshipAdd, npcOverrideLocation, npcOverrideActivity, npcOverrideDuration, npcSceneId, npcOverrideReason,
-    npcSceneVisible, npcOverrideAdd, npcScenePlace, npcPlacementClear,
-  ];
-  controls.forEach((control) => { control.disabled = npc === undefined; });
-  npcResetButton.disabled = npc === undefined || npc.source === 'authored';
-  npcDeleteButton.disabled = npc === undefined || npc.source !== 'authored';
-
-  if (npc === undefined) {
-    npcEditorHeading.textContent = 'Select an NPC or create one.';
-    npcEditName.value = '';
-    npcEditAge.value = '30';
-    npcEditStatus.value = NPCStatus.Alive;
-    npcEditOccupation.value = '';
-    npcEditPublicDescription.value = '';
-    npcEditPersonality.value = '';
-    npcEditWish.value = '';
-    npcEditFear.value = '';
-    npcEditSecret.value = '';
-    npcEditRumor.value = '';
-    npcEditTags.value = '';
-    npcEditNotes.value = '';
-    renderNpcSelectors(undefined);
-    renderNpcPortrait(undefined);
-    renderNpcScheduleEditor(undefined);
-    renderNpcRelationships(undefined);
-    renderNpcPlacements(undefined);
-    return;
-  }
-
-  npcEditorHeading.textContent = `${npc.source === 'authored' ? 'Authored NPC' : 'Generated suggestion'} · ${npc.name}`;
-  npcEditName.value = npc.name;
-  npcEditAge.value = String(npc.age);
-  npcEditStatus.value = npc.status;
-  npcEditOccupation.value = npc.occupation;
-  npcEditUnusualHome.checked = session.npcLocationAuthoring.authoredNpcs.find((definition) => definition.key === npc.key)?.allowNonResidentialHome
-    ?? session.npcLocationAuthoring.npcOverrides.find((override) => override.npcKey === npc.key)?.allowNonResidentialHome
-    ?? false;
-  renderNpcSelectors(npc);
-  npcEditSettlement.value = String(npc.settlementId);
-  npcEditHome.value = npc.homeBuildingId === null ? '' : String(npc.homeBuildingId);
-  npcEditWorkplace.value = npc.workplaceBuildingId === null ? '' : String(npc.workplaceBuildingId);
-  npcEditPublicDescription.value = npc.publicDescription ?? '';
-  npcEditPersonality.value = npc.personality;
-  npcEditWish.value = npc.wish;
-  npcEditFear.value = npc.fear;
-  npcEditSecret.value = npc.secret;
-  npcEditRumor.value = npc.rumor;
-  npcEditTags.value = (npc.tags ?? []).join(', ');
-  npcEditNotes.value = npc.gmNotes ?? '';
-  renderNpcPortrait(npc);
-  renderNpcScheduleEditor(npc);
-  renderNpcRelationships(npc);
-  renderNpcPlacements(npc);
-}
-
-function renderLocationEditor(): void {
-  const options = campaignLocationOptions();
-  if (session.selectedLocationRef === null || !options.some((option) => option.ref === session.selectedLocationRef)) session.selectedLocationRef = options[0]?.ref ?? null;
-  replaceSelectOptions(locationSource, options.map((option) => ({ value: option.ref, label: option.label })), session.selectedLocationRef ?? '');
-  locationSource.disabled = options.length === 0;
-  const record = selectedAuthoredLocation();
-  const source = options.find((option) => option.ref === session.selectedLocationRef);
-
-  locationName.value = record?.name ?? source?.label ?? '';
-  locationType.value = record?.locationType ?? (source?.kind ?? 'location');
-  locationVisibility.value = record?.visibility ?? 'gm-only';
-  locationStatus.value = record?.manualStatus ?? '';
-  locationTags.value = record?.tags.join(', ') ?? '';
-  locationDescription.value = record?.description ?? '';
-  locationPlayerDescription.value = record?.playerDescription ?? '';
-  locationNotes.value = record?.gmNotes ?? '';
-  replaceSelectOptions(locationOwner, [{ value: '', label: 'No owner assigned' }, ...session.world.npcs.map((npc) => ({ value: npc.key, label: npc.name }))], record?.ownerNpcKey ?? '');
-  locationDelete.disabled = record === undefined;
-  locationSave.disabled = source === undefined;
-  locationHoursSave.disabled = source === undefined;
-
-  locationHoursList.replaceChildren();
-  for (const day of CAMPAIGN_DAYS) {
-    const hours = record?.venueHours.find((entry) => entry.day === day);
-    const row = document.createElement('article');
-    row.className = 'venue-hours-entry';
-    const copy = document.createElement('div');
-    const title = document.createElement('strong');
-    title.textContent = day.charAt(0).toLocaleUpperCase() + day.slice(1);
-    const meta = document.createElement('small');
-    meta.textContent = hours === undefined ? 'No hours authored' : hours.closed ? 'Closed all day' : `${minuteAsTime(hours.openMinute)}–${minuteAsTime(hours.closeMinute)}`;
-    copy.append(title, meta);
-    const edit = document.createElement('button');
-    edit.type = 'button';
-    edit.textContent = 'Edit';
-    edit.addEventListener('click', () => {
-      locationHoursDay.value = day;
-      locationHoursOpen.value = minuteAsTime(hours?.openMinute ?? 8 * 60);
-      locationHoursClose.value = minuteAsTime(hours?.closeMinute ?? 17 * 60);
-      locationHoursClosed.checked = hours?.closed ?? false;
-    });
-    row.append(copy, edit);
-    locationHoursList.append(row);
-  }
-
-  locationList.replaceChildren();
-  if (session.npcLocationAuthoring.locations.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'helper-text empty-authoring-state';
-    empty.textContent = 'No authored locations yet. Select a map source and save it as a campaign location.';
-    locationList.append(empty);
-  }
-  const timestamp = session.simulation?.state().time.campaignTimestampMs ?? Date.now();
-  const timezone = session.simulation?.state().time.timezone ?? 'Asia/Manila';
-  for (const location of session.npcLocationAuthoring.locations) {
-    const row = document.createElement('article');
-    row.className = 'location-entry';
-    row.dataset.selected = String(location.sourceRef === session.selectedLocationRef);
-    const copy = document.createElement('div');
-    const title = document.createElement('strong');
-    title.textContent = location.name;
-    const meta = document.createElement('small');
-    meta.textContent = `${location.locationType} · ${location.visibility.replace('-', ' ')} · ${venueStatusAt(location, timestamp, timezone).replace('-', ' ')}`;
-    copy.append(title, meta);
-    const actions = document.createElement('div');
-    actions.className = 'compact-buttons';
-    const edit = document.createElement('button');
-    edit.type = 'button';
-    edit.textContent = 'Edit';
-    edit.addEventListener('click', () => { session.selectedLocationRef = location.sourceRef; renderLocationEditor(); });
-    const focus = document.createElement('button');
-    focus.type = 'button';
-    focus.textContent = 'Focus';
-    focus.addEventListener('click', () => {
-      const option = options.find((candidate) => candidate.ref === location.sourceRef);
-      const tile = option === undefined ? undefined : session.world.tiles[option.tileIndex];
-      if (tile !== undefined) focusMapPoint(tile.x, tile.y);
-    });
-    actions.append(edit, focus);
-    row.append(copy, actions);
-    locationList.append(row);
-  }
-}
-
-function renderNpcLocationAuthoringUi(): void {
-  renderNpcEditor();
-  renderLocationEditor();
+  npcController.updateRelationships(relationships, message);
 }
 
 function selectNpcForEditing(key: string): void {
-  session.selectedNpcKey = key;
-  session.pendingNpcPortraitDataUrl = null;
+  session.selectNpc(key);
   renderNPCList();
-  renderNpcLocationAuthoringUi();
-}
-
-function saveSelectedNpc(): void {
-  const npc = selectedNpc();
-  if (npc === undefined) return;
-  const homeBuildingId = npcEditHome.value === '' ? null : Number(npcEditHome.value);
-  const allowNonResidentialHome = npcEditUnusualHome.checked;
-  const homeError = validateNpcHome(session.world, homeBuildingId, allowNonResidentialHome);
-  if (homeError !== null) {
-    setStatus(homeError, 'error');
-    return;
-  }
-  const age = Math.max(0, Math.min(130, Math.round(Number(npcEditAge.value) || 0)));
-  const settlementId = Math.max(0, Math.round(Number(npcEditSettlement.value) || 0));
-  const workplaceBuildingId = npcEditWorkplace.value === '' ? null : Number(npcEditWorkplace.value);
-  const portraitDataUrl = session.pendingNpcPortraitDataUrl ?? npc.portraitDataUrl ?? null;
-  const shared = {
-    name: npcEditName.value.trim() || 'Unnamed NPC',
-    age,
-    occupation: npcEditOccupation.value.trim(),
-    status: npcEditStatus.value as NPCStatus,
-    settlementId,
-    homeBuildingId,
-    allowNonResidentialHome,
-    workplaceBuildingId,
-    personality: npcEditPersonality.value.trim(),
-    wish: npcEditWish.value.trim(),
-    fear: npcEditFear.value.trim(),
-    secret: npcEditSecret.value.trim(),
-    rumor: npcEditRumor.value.trim(),
-    weeklySchedule: npc.weeklySchedule,
-    relationships: npc.relationships,
-    portraitAssetId: npc.portraitAssetId ?? null,
-    portraitDataUrl,
-    publicDescription: npcEditPublicDescription.value.trim(),
-    gmNotes: npcEditNotes.value.trim(),
-    tags: parseTagList(npcEditTags.value),
-  };
-  session.pendingNpcPortraitDataUrl = null;
-  if (npc.source === 'authored') {
-    const definition: AuthoredNPCDefinition = { key: npc.key, ...shared };
-    updateNpcAuthoringState({
-      ...session.npcLocationAuthoring,
-      authoredNpcs: [...session.npcLocationAuthoring.authoredNpcs.filter((candidate) => candidate.key !== npc.key), definition],
-    }, `Saved ${shared.name}.`);
-    return;
-  }
-  const override: NPCProfileOverride = { npcKey: npc.key, ...shared };
-  updateNpcAuthoringState({
-    ...session.npcLocationAuthoring,
-    npcOverrides: [...session.npcLocationAuthoring.npcOverrides.filter((candidate) => candidate.npcKey !== npc.key), override],
-  }, `Saved ${shared.name}.`);
-}
-
-function createAuthoredNpc(): void {
-  const firstHome = session.world.buildings.find(isResidentialBuilding);
-  const key = `npc:authored:${createRuleId()}`;
-  const definition: AuthoredNPCDefinition = {
-    key,
-    name: 'New NPC',
-    age: 30,
-    occupation: '',
-    status: NPCStatus.Alive,
-    settlementId: session.world.settlements[0]?.id ?? 0,
-    homeBuildingId: firstHome?.id ?? null,
-    allowNonResidentialHome: false,
-    workplaceBuildingId: null,
-    personality: '',
-    wish: '',
-    fear: '',
-    secret: '',
-    rumor: '',
-    weeklySchedule: [],
-    relationships: [],
-    portraitAssetId: null,
-    portraitDataUrl: null,
-    publicDescription: '',
-    gmNotes: '',
-    tags: [],
-  };
-  session.selectedNpcKey = key;
-  updateNpcAuthoringState({ ...session.npcLocationAuthoring, authoredNpcs: [...session.npcLocationAuthoring.authoredNpcs, definition] }, 'Created a new authored NPC.');
-}
-
-function saveLocationRecord(hoursOverride?: readonly VenueHoursEntry[]): void {
-  const sourceRef = session.selectedLocationRef ?? locationSource.value;
-  const source = campaignLocationOptions().find((option) => option.ref === sourceRef);
-  if (source === undefined) {
-    setStatus('Choose a map source for the location.', 'error');
-    return;
-  }
-  const existing = session.npcLocationAuthoring.locations.find((record) => record.sourceRef === sourceRef);
-  const record: AuthoredLocationRecord = {
-    key: existing?.key ?? `location:${createRuleId()}`,
-    name: locationName.value.trim() || source.label,
-    sourceRef,
-    locationType: locationType.value.trim() || 'location',
-    description: locationDescription.value.trim(),
-    playerDescription: locationPlayerDescription.value.trim(),
-    gmNotes: locationNotes.value.trim(),
-    ownerNpcKey: locationOwner.value || null,
-    tags: parseTagList(locationTags.value),
-    visibility: locationVisibility.value as AuthoredLocationRecord['visibility'],
-    venueHours: hoursOverride ?? existing?.venueHours ?? [],
-    manualStatus: locationStatus.value === '' ? null : locationStatus.value as AuthoredLocationRecord['manualStatus'],
-    portraitAssetId: existing?.portraitAssetId ?? null,
-  };
-  session.selectedLocationRef = sourceRef;
-  updateNpcAuthoringState({
-    ...session.npcLocationAuthoring,
-    locations: [...session.npcLocationAuthoring.locations.filter((candidate) => candidate.sourceRef !== sourceRef), record],
-  }, `Saved ${record.name}.`);
+  npcEditorView.renderAll();
 }
 
 function npcStatusLabel(status: NPCStatus): string {
@@ -3749,165 +2828,6 @@ function filteredNpcs(): readonly NPC[] {
     .join(' ').toLocaleLowerCase().includes(query));
 }
 
-function allowNonResidentialHomeForNpc(key: string): boolean {
-  const authored = session.npcLocationAuthoring.authoredNpcs.find((npc) => npc.key === key);
-  if (authored !== undefined) return authored.allowNonResidentialHome;
-  return session.npcLocationAuthoring.npcOverrides.find((npc) => npc.npcKey === key)?.allowNonResidentialHome === true;
-}
-
-function downloadNpcJson(npcs: readonly NPC[], name: string): void {
-  if (npcs.length === 0) {
-    setStatus('No NPCs are available for export.', 'warning');
-    return;
-  }
-  const bundle = withSettlementNames(
-    createNpcJsonBundle(
-      npcs,
-      session.world.npcs,
-      { seed: session.world.seed, generationVersion: session.world.metadata.generationVersion },
-      name,
-      allowNonResidentialHomeForNpc,
-    ),
-    (settlementId) => session.world.settlements.find((settlement) => settlement.id === settlementId)?.name ?? '',
-  );
-  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  const safeName = bundle.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_') || (bundle.kind === 'npc' ? 'npc' : 'npc-group');
-  link.download = `${safeName}.${bundle.kind === 'npc' ? 'npc' : 'npc-group'}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-  const omittedCount = Math.max(0, npcs.length - bundle.npcs.length);
-  setStatus(
-    `Exported ${bundle.npcs.length} NPC${bundle.npcs.length === 1 ? '' : 's'} separately from the world.${omittedCount === 0 ? '' : ` The ${omittedCount} records above the 500-NPC portability limit were omitted.`}`,
-    omittedCount === 0 ? 'success' : 'warning',
-  );
-}
-
-function importedNpcSettlementId(record: PortableNpcRecord, sameWorld: boolean): number {
-  const byName = record.settlementName.length === 0
-    ? undefined
-    : session.world.settlements.find((settlement) => settlement.name.toLocaleLowerCase() === record.settlementName.toLocaleLowerCase());
-  if (byName !== undefined) return byName.id;
-  if (sameWorld && session.world.settlements.some((settlement) => settlement.id === record.settlementId)) return record.settlementId;
-  return session.world.settlements[0]?.id ?? 0;
-}
-
-function importedNpcHomeId(record: PortableNpcRecord, sameWorld: boolean): number | null {
-  if (!sameWorld || record.homeBuildingId === null) return null;
-  return validateNpcHome(session.world, record.homeBuildingId, record.allowNonResidentialHome) === null ? record.homeBuildingId : null;
-}
-
-function importedNpcWorkplaceId(record: PortableNpcRecord, sameWorld: boolean): number | null {
-  if (!sameWorld || record.workplaceBuildingId === null) return null;
-  return session.world.buildings.some((building) => building.id === record.workplaceBuildingId) ? record.workplaceBuildingId : null;
-}
-
-function importedNpcSchedule(
-  record: PortableNpcRecord,
-  settlementId: number,
-  homeBuildingId: number | null,
-  sameWorld: boolean,
-): readonly NPCScheduleEntry[] {
-  const settlement = session.world.settlements.find((candidate) => candidate.id === settlementId) ?? session.world.settlements[0];
-  const home = homeBuildingId === null
-    ? undefined
-    : scheduleLocationFromRef(session.world, session.authoringLayer, `building:${homeBuildingId}`, 'Imported NPC home');
-  const fallbackTileIndex = home?.tileIndex ?? settlement?.tileIndex ?? 0;
-  return record.weeklySchedule.map((entry) => {
-    const resolved = sameWorld
-      ? scheduleLocationFromRef(session.world, session.authoringLayer, entry.location.ref, entry.location.label)
-      : undefined;
-    return {
-      ...entry,
-      id: `schedule:${createRuleId()}`,
-      location: resolved ?? {
-        kind: 'custom',
-        ref: `custom:imported:${createRuleId()}`,
-        label: entry.location.label || 'Imported location',
-        tileIndex: fallbackTileIndex,
-      },
-    };
-  });
-}
-
-function authoredDefinitionsFromNpcBundle(bundle: NpcJsonBundle): readonly AuthoredNPCDefinition[] {
-  const availableSlots = Math.max(0, 500 - session.npcLocationAuthoring.authoredNpcs.length);
-  if (availableSlots === 0) throw new Error('This world already has the maximum of 500 authored NPCs.');
-  const records = bundle.npcs.slice(0, availableSlots);
-  const sameWorld = bundle.sourceWorld.seed === session.world.seed
-    && bundle.sourceWorld.generationVersion === session.world.metadata.generationVersion;
-  const baseNpcId = session.world.npcs.length;
-  const prepared = records.map((record, index) => {
-    const settlementId = importedNpcSettlementId(record, sameWorld);
-    const homeBuildingId = importedNpcHomeId(record, sameWorld);
-    return {
-      record,
-      key: `npc:imported:${createRuleId()}`,
-      npcId: baseNpcId + index,
-      settlementId,
-      homeBuildingId,
-      workplaceBuildingId: importedNpcWorkplaceId(record, sameWorld),
-      weeklySchedule: importedNpcSchedule(record, settlementId, homeBuildingId, sameWorld),
-    };
-  });
-  const importedIdBySourceKey = new Map<string, number>();
-  for (const item of prepared) {
-    if (item.record.sourceKey.length > 0 && !importedIdBySourceKey.has(item.record.sourceKey)) {
-      importedIdBySourceKey.set(item.record.sourceKey, item.npcId);
-    }
-  }
-  const existingIdByKey = new Map(session.world.npcs.map((npc) => [npc.key, npc.id]));
-  return prepared.map((item): AuthoredNPCDefinition => ({
-    key: item.key,
-    name: item.record.name,
-    age: item.record.age,
-    occupation: item.record.occupation,
-    status: item.record.status,
-    settlementId: item.settlementId,
-    homeBuildingId: item.homeBuildingId,
-    allowNonResidentialHome: item.record.allowNonResidentialHome && item.homeBuildingId !== null,
-    workplaceBuildingId: item.workplaceBuildingId,
-    personality: item.record.personality,
-    wish: item.record.wish,
-    fear: item.record.fear,
-    secret: item.record.secret,
-    rumor: item.record.rumor,
-    weeklySchedule: item.weeklySchedule,
-    relationships: item.record.relationships.flatMap((relationship) => {
-      const targetId = importedIdBySourceKey.get(relationship.npcKey) ?? existingIdByKey.get(relationship.npcKey);
-      if (targetId === undefined || targetId === item.npcId) return [];
-      return [{
-        npcId: targetId,
-        kind: relationship.kind,
-        ...(relationship.label === null ? {} : { label: relationship.label }),
-        ...(relationship.notes === null ? {} : { notes: relationship.notes }),
-        hidden: relationship.hidden,
-      }];
-    }),
-    portraitAssetId: null,
-    portraitDataUrl: item.record.portraitDataUrl,
-    publicDescription: item.record.publicDescription,
-    gmNotes: item.record.gmNotes,
-    tags: item.record.tags,
-  }));
-}
-
-async function importNpcJsonFile(file: File): Promise<void> {
-  if (!file.name.toLocaleLowerCase().endsWith('.json') && file.type !== 'application/json' && file.type !== '') {
-    throw new Error('Select a PAYAW NPC JSON file.');
-  }
-  if (file.size > 64 * 1024 * 1024) throw new Error('NPC JSON is larger than the 64 MB import limit.');
-  const bundle = parseNpcJsonBundle(JSON.parse(await file.text()) as unknown);
-  const definitions = authoredDefinitionsFromNpcBundle(bundle);
-  session.selectedNpcKey = definitions[0]?.key ?? null;
-  updateNpcAuthoringState({
-    ...session.npcLocationAuthoring,
-    authoredNpcs: [...session.npcLocationAuthoring.authoredNpcs, ...definitions],
-  }, `Imported ${definitions.length} NPC${definitions.length === 1 ? '' : 's'} from ${bundle.kind === 'npc' ? 'an NPC file' : 'an NPC group'}.`);
-}
-
 function renderNPCList(): void {
   const filtered = filteredNpcs();
   renderNpcRosterView({
@@ -3920,7 +2840,7 @@ function renderNPCList(): void {
     totalCount: session.world.npcs.length,
     filteredNpcs: filtered,
     selectedKey: session.selectedNpcKey,
-    hasSelectedNpc: selectedNpc() !== undefined,
+    hasSelectedNpc: npcController.selectedNpc() !== undefined,
   }, {
     describeNpc: (npc) => {
       const currentEntry = currentNpcScheduleEntry(npc);
@@ -3986,10 +2906,10 @@ function refreshWorldUi(fitAfter = false, regeneratedFromStage?: string): void {
   campaignStudio?.refreshExternalReferences();
   playerPreview?.refresh();
   if (regeneratedFromStage === undefined) {
-    rebuildMinimapBase();
+    mapInspector.rebuildMinimapBase();
     recordRecentProject();
   }
-  renderInspector();
+  mapInspector.renderInspector();
   scheduleAutosave();
   if (fitAfter) fitCamera();
 }
@@ -4085,7 +3005,7 @@ function generate(
 
     refreshWorldUi(fitAfter);
     saveProfile({ terrainSize: selectedTerrainSize(), townScale: selectedTownScale(), terrainShape: selectedTerrainShape(), climatePreset: selectedClimatePreset(), islandCount: selectedIslandCount(), islandSpacingKilometers: selectedIslandSpacing(), satelliteSettlementCount: SATELLITE_SETTLEMENT_COUNT });
-    if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
+    if (clearEditorHistory) historyController.clear();
     const duration = Object.values(session.world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
     const recoveryMessage = recoveredOverrides.length === 0
       ? ''
@@ -4210,7 +3130,7 @@ async function generateResponsive(
       islandSpacingKilometers: selectedIslandSpacing(),
       satelliteSettlementCount: SATELLITE_SETTLEMENT_COUNT,
     });
-    if (clearEditorHistory) { history.clear(); updateHistoryButtons(); }
+    if (clearEditorHistory) historyController.clear();
     const duration = Object.values(session.world.diagnostics.stageTimingsMs).reduce((sum, value) => sum + value, 0);
     const recoveryMessage = recoveredOverrides.length === 0
       ? ''
@@ -4340,10 +3260,10 @@ function setLayer(layer: RenderLayer, visible: boolean): void {
   renderer.layers.setVisible(layer, visible);
   layerElements[layer].checked = visible;
   if (layer === RenderLayer.RoadLabels) {
-    session.labelSettings = { ...session.labelSettings, road: { ...session.labelSettings.road, visible } };
+    session.setLabelSettings({ ...session.labelSettings, road: { ...session.labelSettings.road, visible } });
     saveLabelSettings(session.labelSettings);
   } else if (layer === RenderLayer.BlockLabels) {
-    session.labelSettings = { ...session.labelSettings, block: { ...session.labelSettings.block, visible } };
+    session.setLabelSettings({ ...session.labelSettings, block: { ...session.labelSettings.block, visible } });
     saveLabelSettings(session.labelSettings);
   }
   if (layer === RenderLayer.NPCs) {
@@ -4357,7 +3277,7 @@ function applyViewPreset(name: string): void {
   if (visible === undefined) return;
   const selected = new Set(visible);
   for (const layer of Object.values(RenderLayer)) setLayer(layer, selected.has(layer));
-  syncStudioLayerManager();
+  studioShell.syncLayerManager();
   requestRender();
 }
 
@@ -4543,22 +3463,15 @@ function animationFrame(): void {
     renderRequested = false;
     updatePerformancePanel();
   }
-  renderMinimap();
-  updateStatusBar();
+  mapInspector.renderMinimap();
+  mapInspector.updateStatusBar();
   window.requestAnimationFrame(animationFrame);
 }
 
-const storedTheme = localStorage.getItem(UI_THEME_STORAGE_KEY);
-setTheme(storedTheme === 'dark' || storedTheme === 'contrast' ? storedTheme : 'light');
-setLeftPanel(localStorage.getItem(UI_LEFT_PANEL_STORAGE_KEY) !== 'closed');
-setStudioDock(localStorage.getItem(UI_STUDIO_DOCK_STORAGE_KEY) === 'open');
-setStudioTab(session.activeStudioTab === 'layers' || session.activeStudioTab === 'project' ? session.activeStudioTab : 'inspector', false);
-minimapPanel.dataset.collapsed = localStorage.getItem(UI_MINIMAP_STORAGE_KEY) === 'collapsed' ? 'true' : 'false';
-minimapCollapseButton.textContent = minimapPanel.dataset.collapsed === 'true' ? '+' : '−';
-renderStudioLayerManager();
+studioShell.restore();
 renderRecentProjects();
 updateRecoveryUi();
-applyLabelSettingsToControls(session.labelSettings);
+labelDisplay.apply(session.labelSettings);
 updateProfileHint();
 syncNpcViewToggle();
 simulationPanel.updateRealtimeClock();
@@ -4834,7 +3747,6 @@ if (readNetcodeConfig().enabled) loadNetcodePanel();
 syncSimulationToCampaignClock();
 authoringController.initialize();
 renderAuthoringLists();
-updateHistoryButtons();
 setEditMode(false);
 setZoneEditMode(false);
 setWorkspace(session.activeWorkspace, session.activeWorkspace === 'dm');
@@ -4856,27 +3768,17 @@ window.addEventListener('keydown', (event) => {
   if (modifier && !event.altKey && key === 'p') { event.preventDefault(); commandPalette.open(); return; }
   if (modifier && !event.altKey && key === 's') { event.preventDefault(); downloadWorld(); return; }
   if (modifier && !event.altKey && key === 'o') { event.preventDefault(); projectImportFile.click(); return; }
-  if (modifier && !event.altKey && event.key === '[') { event.preventDefault(); setLeftPanel(document.body.dataset.leftPanel === 'closed'); return; }
-  if (modifier && !event.altKey && event.key === ']') { event.preventDefault(); setStudioDock(document.body.dataset.studioDock === 'closed'); return; }
+  if (modifier && !event.altKey && event.key === '[') { event.preventDefault(); studioShell.toggleLeftPanel(); return; }
+  if (modifier && !event.altKey && event.key === ']') { event.preventDefault(); studioShell.toggleStudioDock(); return; }
   if (editingText) return;
   if (modifier && !event.altKey && key === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
   else if (modifier && !event.altKey && key === 'y') { event.preventDefault(); redo(); }
-  else if (!modifier && key === 'f') { event.preventDefault(); if (session.selectedInspectorItem === null) fitCamera(); else focusSelection(); }
+  else if (!modifier && key === 'f') { event.preventDefault(); mapInspector.focusSelection(); }
   else if (!modifier && key === 'g') { event.preventDefault(); void generateResponsive(session.customAnchors, session.builtInOverrides, true, true, true); }
   else if (!modifier && key === 'n') { event.preventDefault(); toggleNpcView(); }
-  else if (event.key === 'Escape') { session.selectedInspectorItem = null; renderInspector(); }
+  else if (event.key === 'Escape') { mapInspector.clearSelection(); }
 });
 window.addEventListener('resize', fitCamera);
-toggleLeftPanelButton.addEventListener('click', () => setLeftPanel(document.body.dataset.leftPanel === 'closed'));
-toggleStudioDockButton.addEventListener('click', () => setStudioDock(document.body.dataset.studioDock === 'closed'));
-closeStudioDockButton.addEventListener('click', () => setStudioDock(false));
-studioTabInspector.addEventListener('click', () => setStudioTab('inspector'));
-studioTabLayers.addEventListener('click', () => setStudioTab('layers'));
-studioTabProject.addEventListener('click', () => setStudioTab('project'));
-focusSelectionButton.addEventListener('click', focusSelection);
-layerSearchInput.addEventListener('input', filterStudioLayers);
-layersAllButton.addEventListener('click', () => setAllStudioLayers(true));
-layersNoneButton.addEventListener('click', () => setAllStudioLayers(false));
 for (const control of document.querySelectorAll<HTMLInputElement>('[data-layer-target]')) {
   const targetId = control.dataset.layerTarget;
   const target = targetId === undefined ? null : document.getElementById(targetId) as HTMLInputElement | null;
@@ -4895,21 +3797,6 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-open-wo
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-open-panel="npc"]')) button.addEventListener('click', () => {
   setWorkspace('editor');
   document.querySelector('.npc-studio-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
-studioThemeSelect.addEventListener('change', () => setTheme(studioThemeSelect.value as UiTheme));
-minimapCollapseButton.addEventListener('click', () => {
-  const collapsed = minimapPanel.dataset.collapsed !== 'true';
-  minimapPanel.dataset.collapsed = String(collapsed);
-  minimapCollapseButton.textContent = collapsed ? '+' : '−';
-  localStorage.setItem(UI_MINIMAP_STORAGE_KEY, collapsed ? 'collapsed' : 'open');
-  if (!collapsed) renderMinimap();
-});
-minimapCanvas.addEventListener('click', (event) => {
-  const rectangle = minimapCanvas.getBoundingClientRect();
-  const x = (event.clientX - rectangle.left) / rectangle.width * session.world.width;
-  const y = (event.clientY - rectangle.top) / rectangle.height * session.world.height;
-  camera.focus(x, y, canvas.clientWidth, canvas.clientHeight, camera.zoom);
-  requestRender();
 });
 window.setInterval(scheduleAutosave, 30_000);
 window.addEventListener('beforeunload', () => {
@@ -4933,58 +3820,10 @@ dmClearLog.addEventListener('click', () => {
   session.dmSessionEntries = [];
   renderDmSessionLog();
 });
-undoButton.addEventListener('click', undo);
-redoButton.addEventListener('click', redo);
 fitMapButton.addEventListener('click', fitCamera);
 viewPreset.addEventListener('change', () => {
   applyViewPreset(viewPreset.value);
   if (viewPreset.value !== 'custom') dmViewPreset.value = viewPreset.value;
-});
-const labelRangeControls = [
-  roadLabelFontSize,
-  roadLabelOpacity,
-  roadLabelDensity,
-  blockLabelFontSize,
-  blockLabelOpacity,
-  blockLabelDensity,
-];
-for (const control of labelRangeControls) {
-  let snapshot: EditorSnapshot | null = null;
-  control.addEventListener('focus', () => { snapshot = captureEditorSnapshot(); });
-  control.addEventListener('pointerdown', () => { snapshot = captureEditorSnapshot(); });
-  control.addEventListener('input', commitLabelControls);
-  control.addEventListener('change', () => {
-    commitLabelControls();
-    if (snapshot !== null) recordHistory(snapshot, 'change label display');
-    snapshot = null;
-  });
-}
-const labelChangeControls: readonly (HTMLInputElement | HTMLSelectElement)[] = [
-  roadLabelMainZoom,
-  roadLabelSecondaryZoom,
-  roadLabelLocalZoom,
-  roadLabelMain,
-  roadLabelSecondary,
-  roadLabelLocal,
-  roadLabelRotate,
-  roadLabelOutline,
-  blockLabelMinZoom,
-  blockLabelOutline,
-  labelAvoidCollisions,
-];
-for (const control of labelChangeControls) control.addEventListener('change', () => {
-  const snapshot = captureEditorSnapshot();
-  commitLabelControls();
-  recordHistory(snapshot, 'change label display');
-});
-labelControlsReset.addEventListener('click', () => {
-  const snapshot = captureEditorSnapshot();
-  session.labelSettings = DEFAULT_LABEL_DISPLAY_SETTINGS;
-  saveLabelSettings(session.labelSettings);
-  applyLabelSettingsToControls(session.labelSettings);
-  syncRendererCustomization();
-  recordHistory(snapshot, 'reset label controls');
-  setStatus('Label controls reset to defaults.', 'success');
 });
 editModeButton.addEventListener('click', () => { if (!editMode) setZoneEditMode(false); setEditMode(!editMode); });
 toolbarEditButton.addEventListener('click', () => { if (!editMode) setZoneEditMode(false); setEditMode(!editMode); });
@@ -5213,10 +4052,7 @@ for (const layer of Object.values(RenderLayer)) {
   checkbox.addEventListener('change', () => {
     renderer.layers.setVisible(layer, checkbox.checked);
     if (layer === RenderLayer.RoadLabels || layer === RenderLayer.BlockLabels) {
-      session.labelSettings = readLabelSettingsFromControls();
-      saveLabelSettings(session.labelSettings);
-      updateLabelControlOutputs();
-      syncRendererCustomization();
+      labelDisplay.commitFromControls();
     }
     if (layer === RenderLayer.NPCs) syncNpcViewToggle();
     viewPreset.value = 'custom';

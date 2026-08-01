@@ -2,46 +2,39 @@ import { readFileAsDataUrl } from '../customization/AssetRepository';
 import { minuteFromTimeInput } from '../campaign/CampaignTime';
 import {
   scheduleLocationFromRef,
+  isResidentialBuilding,
+  validateNpcHome,
   validateSchedule,
   type AuthoredLocationRecord,
+  type AuthoredNPCDefinition,
+  type CampaignLocationOption,
   type NPCLocationAuthoringState,
+  type NPCProfileOverride,
   type NPCScenePlacement,
   type NPCTemporaryOverride,
   type VenueHoursEntry,
 } from '../campaign/NPCLocationAuthoring';
-import type { CampaignDay, NPC, NPCRelationship, NPCScheduleEntry } from '../engine/npc/NPC';
+import { NPCStatus, type CampaignDay, type NPC, type NPCRelationship, type NPCScheduleEntry } from '../engine/npc/NPC';
 import type { EditorSession } from '../models/EditorSession';
 import { createRuleId } from '../utils/Identifiers';
 import * as elements from '../ui/AppElements';
 
 type StatusTone = 'success' | 'warning' | 'error' | 'working' | 'idle';
 
-interface CampaignLocationOption {
-  readonly ref: string;
-  readonly tileIndex: number;
-}
-
 export interface NpcControllerDependencies {
   readonly session: EditorSession;
   readonly regenerateRoster: () => void;
   readonly renderList: () => void;
   readonly toggleView: () => void;
-  readonly createNpc: () => void;
-  readonly selectedNpc: () => NPC | undefined;
   readonly filteredNpcs: () => readonly NPC[];
   readonly downloadJson: (npcs: readonly NPC[], name: string) => void;
   readonly importJson: (file: File) => Promise<void>;
-  readonly saveNpc: () => void;
   readonly renderSelectors: (npc: NPC | undefined) => void;
   readonly campaignLocations: () => readonly CampaignLocationOption[];
   readonly nearestSettlementForTile: (tileIndex: number) => { readonly id: number } | undefined;
   readonly renderPortrait: (npc: NPC | undefined) => void;
-  readonly updateAuthoring: (next: NPCLocationAuthoringState, message?: string) => void;
-  readonly updateSchedule: (entries: readonly NPCScheduleEntry[], message?: string) => void;
-  readonly updateRelationships: (relationships: readonly NPCRelationship[], message?: string) => void;
-  readonly selectedLocation: () => AuthoredLocationRecord | undefined;
   readonly renderLocation: () => void;
-  readonly saveLocation: (hoursOverride?: readonly VenueHoursEntry[]) => void;
+  readonly onAuthoringChanged: (message?: string) => void;
   readonly setStatus: (message: string, tone?: StatusTone) => void;
 }
 
@@ -50,14 +43,207 @@ export class NpcController {
     this.bindEvents();
   }
 
+  public selectedNpc(): NPC | undefined {
+    const { session } = this.dependencies;
+    return session.selectedNpcKey === null
+      ? undefined
+      : session.world.npcs.find((npc) => npc.key === session.selectedNpcKey);
+  }
+
+  public selectedLocation(): AuthoredLocationRecord | undefined {
+    const { session } = this.dependencies;
+    const sourceRef = session.selectedLocationRef ?? elements.locationSource.value;
+    return session.npcLocationAuthoring.locations.find((record) => record.sourceRef === sourceRef);
+  }
+
+  public updateAuthoring(next: NPCLocationAuthoringState, message?: string): void {
+    this.dependencies.session.applyNpcAuthoringState(next);
+    this.dependencies.onAuthoringChanged(message);
+  }
+
+  public updateSchedule(entries: readonly NPCScheduleEntry[], message?: string): void {
+    const npc = this.selectedNpc();
+    if (npc === undefined) return;
+    const { session } = this.dependencies;
+    if (npc.source === 'authored') {
+      this.updateAuthoring({
+        ...session.npcLocationAuthoring,
+        authoredNpcs: session.npcLocationAuthoring.authoredNpcs.map((definition) => (
+          definition.key === npc.key ? { ...definition, weeklySchedule: entries } : definition
+        )),
+      }, message);
+      return;
+    }
+    const existing = session.npcLocationAuthoring.npcOverrides.find((override) => override.npcKey === npc.key);
+    this.updateAuthoring({
+      ...session.npcLocationAuthoring,
+      npcOverrides: [
+        ...session.npcLocationAuthoring.npcOverrides.filter((override) => override.npcKey !== npc.key),
+        { ...(existing ?? { npcKey: npc.key }), weeklySchedule: entries },
+      ],
+    }, message);
+  }
+
+  public updateRelationships(relationships: readonly NPCRelationship[], message?: string): void {
+    const npc = this.selectedNpc();
+    if (npc === undefined) return;
+    const { session } = this.dependencies;
+    if (npc.source === 'authored') {
+      this.updateAuthoring({
+        ...session.npcLocationAuthoring,
+        authoredNpcs: session.npcLocationAuthoring.authoredNpcs.map((definition) => (
+          definition.key === npc.key ? { ...definition, relationships } : definition
+        )),
+      }, message);
+      return;
+    }
+    const existing = session.npcLocationAuthoring.npcOverrides.find((override) => override.npcKey === npc.key);
+    this.updateAuthoring({
+      ...session.npcLocationAuthoring,
+      npcOverrides: [
+        ...session.npcLocationAuthoring.npcOverrides.filter((override) => override.npcKey !== npc.key),
+        { ...(existing ?? { npcKey: npc.key }), relationships },
+      ],
+    }, message);
+  }
+
+  public saveNpc(): void {
+    const { session } = this.dependencies;
+    const npc = this.selectedNpc();
+    if (npc === undefined) return;
+    const homeBuildingId = elements.npcEditHome.value === '' ? null : Number(elements.npcEditHome.value);
+    const allowNonResidentialHome = elements.npcEditUnusualHome.checked;
+    const homeError = validateNpcHome(session.world, homeBuildingId, allowNonResidentialHome);
+    if (homeError !== null) {
+      this.dependencies.setStatus(homeError, 'error');
+      return;
+    }
+    const age = Math.max(0, Math.min(130, Math.round(Number(elements.npcEditAge.value) || 0)));
+    const settlementId = Math.max(0, Math.round(Number(elements.npcEditSettlement.value) || 0));
+    const workplaceBuildingId = elements.npcEditWorkplace.value === '' ? null : Number(elements.npcEditWorkplace.value);
+    const portraitDataUrl = session.pendingNpcPortraitDataUrl ?? npc.portraitDataUrl ?? null;
+    const shared = {
+      name: elements.npcEditName.value.trim() || 'Unnamed NPC',
+      age,
+      occupation: elements.npcEditOccupation.value.trim(),
+      status: elements.npcEditStatus.value as NPCStatus,
+      settlementId,
+      homeBuildingId,
+      allowNonResidentialHome,
+      workplaceBuildingId,
+      personality: elements.npcEditPersonality.value.trim(),
+      wish: elements.npcEditWish.value.trim(),
+      fear: elements.npcEditFear.value.trim(),
+      secret: elements.npcEditSecret.value.trim(),
+      rumor: elements.npcEditRumor.value.trim(),
+      weeklySchedule: npc.weeklySchedule,
+      relationships: npc.relationships,
+      portraitAssetId: npc.portraitAssetId ?? null,
+      portraitDataUrl,
+      publicDescription: elements.npcEditPublicDescription.value.trim(),
+      gmNotes: elements.npcEditNotes.value.trim(),
+      tags: this.parseTagList(elements.npcEditTags.value),
+    };
+    session.setPendingNpcPortrait(null);
+    if (npc.source === 'authored') {
+      const definition: AuthoredNPCDefinition = { key: npc.key, ...shared };
+      this.updateAuthoring({
+        ...session.npcLocationAuthoring,
+        authoredNpcs: [
+          ...session.npcLocationAuthoring.authoredNpcs.filter((candidate) => candidate.key !== npc.key),
+          definition,
+        ],
+      }, `Saved ${shared.name}.`);
+      return;
+    }
+    const override: NPCProfileOverride = { npcKey: npc.key, ...shared };
+    this.updateAuthoring({
+      ...session.npcLocationAuthoring,
+      npcOverrides: [
+        ...session.npcLocationAuthoring.npcOverrides.filter((candidate) => candidate.npcKey !== npc.key),
+        override,
+      ],
+    }, `Saved ${shared.name}.`);
+  }
+
+  public createNpc(): void {
+    const { session } = this.dependencies;
+    const firstHome = session.world.buildings.find(isResidentialBuilding);
+    const key = `npc:authored:${createRuleId()}`;
+    const definition: AuthoredNPCDefinition = {
+      key,
+      name: 'New NPC',
+      age: 30,
+      occupation: '',
+      status: NPCStatus.Alive,
+      settlementId: session.world.settlements[0]?.id ?? 0,
+      homeBuildingId: firstHome?.id ?? null,
+      allowNonResidentialHome: false,
+      workplaceBuildingId: null,
+      personality: '',
+      wish: '',
+      fear: '',
+      secret: '',
+      rumor: '',
+      weeklySchedule: [],
+      relationships: [],
+      portraitAssetId: null,
+      portraitDataUrl: null,
+      publicDescription: '',
+      gmNotes: '',
+      tags: [],
+    };
+    session.selectNpc(key);
+    this.updateAuthoring({
+      ...session.npcLocationAuthoring,
+      authoredNpcs: [...session.npcLocationAuthoring.authoredNpcs, definition],
+    }, 'Created a new authored NPC.');
+  }
+
+  public saveLocation(hoursOverride?: readonly VenueHoursEntry[]): void {
+    const { session } = this.dependencies;
+    const sourceRef = session.selectedLocationRef ?? elements.locationSource.value;
+    const source = this.dependencies.campaignLocations().find((option) => option.ref === sourceRef);
+    if (source === undefined) {
+      this.dependencies.setStatus('Choose a map source for the location.', 'error');
+      return;
+    }
+    const existing = session.npcLocationAuthoring.locations.find((record) => record.sourceRef === sourceRef);
+    const record: AuthoredLocationRecord = {
+      key: existing?.key ?? `location:${createRuleId()}`,
+      name: elements.locationName.value.trim() || source.label,
+      sourceRef,
+      locationType: elements.locationType.value.trim() || 'location',
+      description: elements.locationDescription.value.trim(),
+      playerDescription: elements.locationPlayerDescription.value.trim(),
+      gmNotes: elements.locationNotes.value.trim(),
+      ownerNpcKey: elements.locationOwner.value || null,
+      tags: this.parseTagList(elements.locationTags.value),
+      visibility: elements.locationVisibility.value as AuthoredLocationRecord['visibility'],
+      venueHours: hoursOverride ?? existing?.venueHours ?? [],
+      manualStatus: elements.locationStatus.value === ''
+        ? null
+        : elements.locationStatus.value as AuthoredLocationRecord['manualStatus'],
+      portraitAssetId: existing?.portraitAssetId ?? null,
+    };
+    session.selectLocation(sourceRef);
+    this.updateAuthoring({
+      ...session.npcLocationAuthoring,
+      locations: [
+        ...session.npcLocationAuthoring.locations.filter((candidate) => candidate.sourceRef !== sourceRef),
+        record,
+      ],
+    }, `Saved ${record.name}.`);
+  }
+
   private bindEvents(): void {
     const { session } = this.dependencies;
     elements.npcGenerateButton.addEventListener('click', this.dependencies.regenerateRoster);
     elements.npcSearch.addEventListener('input', this.dependencies.renderList);
     elements.npcViewToggleButton.addEventListener('click', this.dependencies.toggleView);
-    elements.npcCreateButton.addEventListener('click', this.dependencies.createNpc);
+    elements.npcCreateButton.addEventListener('click', () => this.createNpc());
     elements.npcExportSelected.addEventListener('click', () => {
-      const npc = this.dependencies.selectedNpc();
+      const npc = this.selectedNpc();
       if (npc === undefined) {
         this.dependencies.setStatus('Select an NPC before exporting it.', 'warning');
         return;
@@ -80,9 +266,9 @@ export class NpcController {
       });
       elements.npcImportFile.value = '';
     });
-    elements.npcSaveButton.addEventListener('click', this.dependencies.saveNpc);
-    elements.npcEditUnusualHome.addEventListener('change', () => this.dependencies.renderSelectors(this.dependencies.selectedNpc()));
-    elements.npcEditSettlement.addEventListener('change', () => this.dependencies.renderSelectors(this.dependencies.selectedNpc()));
+    elements.npcSaveButton.addEventListener('click', () => this.saveNpc());
+    elements.npcEditUnusualHome.addEventListener('change', () => this.dependencies.renderSelectors(this.selectedNpc()));
+    elements.npcEditSettlement.addEventListener('change', () => this.dependencies.renderSelectors(this.selectedNpc()));
     elements.npcEditHome.addEventListener('change', () => {
       if (elements.npcEditHome.value === '') return;
       const option = this.dependencies.campaignLocations().find((candidate) => candidate.ref === `building:${elements.npcEditHome.value}`);
@@ -98,8 +284,8 @@ export class NpcController {
         return;
       }
       try {
-        session.pendingNpcPortraitDataUrl = await readFileAsDataUrl(file);
-        this.dependencies.renderPortrait(this.dependencies.selectedNpc());
+        session.setPendingNpcPortrait(await readFileAsDataUrl(file));
+        this.dependencies.renderPortrait(this.selectedNpc());
         this.dependencies.setStatus('Portrait ready. Save the NPC to keep it.', 'success');
       } catch (error) {
         this.dependencies.setStatus(error instanceof Error ? error.message : String(error), 'error');
@@ -115,10 +301,10 @@ export class NpcController {
     elements.npcScenePlace.addEventListener('click', () => this.addScenePlacement());
     elements.npcPlacementClear.addEventListener('click', () => this.clearPlacements());
     elements.locationSource.addEventListener('change', () => {
-      session.selectedLocationRef = elements.locationSource.value || null;
+      session.selectLocation(elements.locationSource.value || null);
       this.dependencies.renderLocation();
     });
-    elements.locationSave.addEventListener('click', () => this.dependencies.saveLocation());
+    elements.locationSave.addEventListener('click', () => this.saveLocation());
     elements.locationDelete.addEventListener('click', () => this.deleteLocation());
     elements.locationHoursClosed.addEventListener('change', () => {
       elements.locationHoursOpen.disabled = elements.locationHoursClosed.checked;
@@ -128,27 +314,26 @@ export class NpcController {
   }
 
   private resetNpc(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     if (npc === undefined || npc.source === 'authored') return;
     const existing = this.dependencies.session.npcLocationAuthoring.npcOverrides.find((override) => override.npcKey === npc.key);
     if (existing === undefined) {
       this.dependencies.setStatus(`${npc.name} already uses generated defaults.`, 'warning');
       return;
     }
-    this.dependencies.session.pendingNpcPortraitDataUrl = null;
-    this.dependencies.updateAuthoring({
+    this.dependencies.session.setPendingNpcPortrait(null);
+    this.updateAuthoring({
       ...this.dependencies.session.npcLocationAuthoring,
       npcOverrides: this.dependencies.session.npcLocationAuthoring.npcOverrides.filter((override) => override.npcKey !== npc.key),
     }, `Restored generated fields for ${npc.name}.`);
   }
 
   private deleteNpc(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     if (npc === undefined || npc.source !== 'authored') return;
     const { session } = this.dependencies;
-    session.selectedNpcKey = null;
-    session.pendingNpcPortraitDataUrl = null;
-    this.dependencies.updateAuthoring({
+    session.selectNpc(null);
+    this.updateAuthoring({
       ...session.npcLocationAuthoring,
       authoredNpcs: session.npcLocationAuthoring.authoredNpcs.filter((definition) => definition.key !== npc.key),
       temporaryOverrides: session.npcLocationAuthoring.temporaryOverrides.filter((override) => override.npcKey !== npc.key),
@@ -158,7 +343,7 @@ export class NpcController {
   }
 
   private addSchedule(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     if (npc === undefined) return;
     const { session } = this.dependencies;
     const startMinute = minuteFromTimeInput(elements.npcScheduleStart.value);
@@ -188,11 +373,11 @@ export class NpcController {
       this.dependencies.setStatus(errors[0] ?? 'That schedule block conflicts with another block.', 'error');
       return;
     }
-    this.dependencies.updateSchedule(next, `Added ${entry.activity} to ${session.selectedNpcScheduleDay}.`);
+    this.updateSchedule(next, `Added ${entry.activity} to ${session.selectedNpcScheduleDay}.`);
   }
 
   private copyScheduleToWeekdays(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     if (npc === undefined) return;
     const selectedDay = this.dependencies.session.selectedNpcScheduleDay;
     const source = npc.weeklySchedule.filter((entry) => entry.day === selectedDay);
@@ -203,18 +388,18 @@ export class NpcController {
     const weekdays: readonly CampaignDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
     const retained = npc.weeklySchedule.filter((entry) => !weekdays.includes(entry.day));
     const copied = weekdays.flatMap((day) => source.map((entry) => ({ ...entry, id: `schedule:${createRuleId()}`, day })));
-    this.dependencies.updateSchedule([...retained, ...copied], `Copied ${selectedDay} to weekdays.`);
+    this.updateSchedule([...retained, ...copied], `Copied ${selectedDay} to weekdays.`);
   }
 
   private clearScheduleDay(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     if (npc === undefined) return;
     const day = this.dependencies.session.selectedNpcScheduleDay;
-    this.dependencies.updateSchedule(npc.weeklySchedule.filter((entry) => entry.day !== day), `Cleared ${day}.`);
+    this.updateSchedule(npc.weeklySchedule.filter((entry) => entry.day !== day), `Cleared ${day}.`);
   }
 
   private addRelationship(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     const targetId = Number(elements.npcRelationshipTarget.value);
     if (npc === undefined || !Number.isInteger(targetId) || targetId === npc.id) {
       this.dependencies.setStatus('Choose another NPC for the relationship.', 'error');
@@ -228,11 +413,11 @@ export class NpcController {
     };
     const next = [...npc.relationships.filter((item) => !(item.npcId === targetId && item.kind === relationship.kind)), relationship];
     elements.npcRelationshipLabel.value = '';
-    this.dependencies.updateRelationships(next, 'Saved NPC relationship.');
+    this.updateRelationships(next, 'Saved NPC relationship.');
   }
 
   private addTemporaryOverride(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     const { session } = this.dependencies;
     const location = scheduleLocationFromRef(session.world, session.authoringLayer, elements.npcOverrideLocation.value);
     if (npc === undefined || location === undefined) {
@@ -251,11 +436,11 @@ export class NpcController {
       reason: elements.npcOverrideReason.value.trim(),
       priority: 100,
     };
-    this.dependencies.updateAuthoring({ ...session.npcLocationAuthoring, temporaryOverrides: [...session.npcLocationAuthoring.temporaryOverrides, override] }, `Temporarily placed ${npc.name} at ${location.label}.`);
+    this.updateAuthoring({ ...session.npcLocationAuthoring, temporaryOverrides: [...session.npcLocationAuthoring.temporaryOverrides, override] }, `Temporarily placed ${npc.name} at ${location.label}.`);
   }
 
   private addScenePlacement(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     const { session } = this.dependencies;
     const location = scheduleLocationFromRef(session.world, session.authoringLayer, elements.npcOverrideLocation.value);
     if (npc === undefined || location === undefined) {
@@ -271,7 +456,7 @@ export class NpcController {
       activity: elements.npcOverrideActivity.value.trim() || 'Present in scene',
       visibleToPlayers: elements.npcSceneVisible.checked,
     };
-    this.dependencies.updateAuthoring({
+    this.updateAuthoring({
       ...session.npcLocationAuthoring,
       activeSceneId: sceneId,
       scenePlacements: [...session.npcLocationAuthoring.scenePlacements.filter((candidate) => !(candidate.sceneId === sceneId && candidate.npcKey === npc.key)), placement],
@@ -279,10 +464,10 @@ export class NpcController {
   }
 
   private clearPlacements(): void {
-    const npc = this.dependencies.selectedNpc();
+    const npc = this.selectedNpc();
     if (npc === undefined) return;
     const { session } = this.dependencies;
-    this.dependencies.updateAuthoring({
+    this.updateAuthoring({
       ...session.npcLocationAuthoring,
       temporaryOverrides: session.npcLocationAuthoring.temporaryOverrides.filter((override) => override.npcKey !== npc.key),
       scenePlacements: session.npcLocationAuthoring.scenePlacements.filter((placement) => placement.npcKey !== npc.key),
@@ -290,16 +475,16 @@ export class NpcController {
   }
 
   private deleteLocation(): void {
-    const record = this.dependencies.selectedLocation();
+    const record = this.selectedLocation();
     if (record === undefined) return;
-    this.dependencies.updateAuthoring({
+    this.updateAuthoring({
       ...this.dependencies.session.npcLocationAuthoring,
       locations: this.dependencies.session.npcLocationAuthoring.locations.filter((candidate) => candidate.sourceRef !== record.sourceRef),
     }, `Removed the authored record for ${record.name}.`);
   }
 
   private saveLocationHours(): void {
-    const record = this.dependencies.selectedLocation();
+    const record = this.selectedLocation();
     const day = elements.locationHoursDay.value as CampaignDay;
     const openMinute = minuteFromTimeInput(elements.locationHoursOpen.value);
     const closeMinute = minuteFromTimeInput(elements.locationHoursClose.value);
@@ -314,6 +499,10 @@ export class NpcController {
       closed: elements.locationHoursClosed.checked,
     };
     const hours = [...(record?.venueHours ?? []).filter((candidate) => candidate.day !== day), entry];
-    this.dependencies.saveLocation(hours);
+    this.saveLocation(hours);
+  }
+
+  private parseTagList(value: string): string[] {
+    return [...new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean))].slice(0, 64);
   }
 }

@@ -64,7 +64,7 @@ pnpm test
 
 - [User guide](docs/USER_GUIDE.md)
 - [Deployment guide](docs/DEPLOYMENT.md)
-- [Architecture and security boundaries](docs/ARCHITECTURE.md)
+- [High-level design and architecture](docs/ARCHITECTURE.md)
 - [Release QA](docs/QA.md)
 - [Changelog](CHANGELOG.md)
 
