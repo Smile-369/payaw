@@ -1,4 +1,4 @@
-import type { AuthoringGeometry, AuthoringPoint } from './AuthoringLayer';
+import type { AuthoredMapFeature, AuthoringGeometry, AuthoringPoint } from './AuthoringLayer';
 
 function bresenham(start: AuthoringPoint, end: AuthoringPoint): AuthoringPoint[] {
   let x0 = Math.round(start.x);
@@ -93,4 +93,26 @@ export function transformAuthoringGeometry(
     };
   });
   return { kind: geometry.kind, points };
+}
+
+export function authoringFeatureCenter(feature: AuthoredMapFeature): AuthoringPoint {
+  const geometry = transformAuthoringGeometry(feature.geometry, feature.rotation, feature.scale);
+  if (geometry.kind === 'point') return geometry.point;
+  if (geometry.kind === 'circle') return geometry.center;
+  if (geometry.points.length === 0) return { x: 0, y: 0 };
+  return {
+    x: geometry.points.reduce((sum, point) => sum + point.x, 0) / geometry.points.length,
+    y: geometry.points.reduce((sum, point) => sum + point.y, 0) / geometry.points.length,
+  };
+}
+
+export function translateAuthoringGeometry(
+  geometry: AuthoringGeometry,
+  deltaX: number,
+  deltaY: number,
+): AuthoringGeometry {
+  const move = (point: AuthoringPoint): AuthoringPoint => ({ x: point.x + deltaX, y: point.y + deltaY });
+  if (geometry.kind === 'point') return { kind: 'point', point: move(geometry.point) };
+  if (geometry.kind === 'circle') return { kind: 'circle', center: move(geometry.center), radius: geometry.radius };
+  return { kind: geometry.kind, points: geometry.points.map(move) };
 }

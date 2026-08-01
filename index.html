@@ -309,7 +309,7 @@
 <p class="helper-text">Edit procedural point-of-interest templates such as the plaza, church, school, market, and port. Towns, barangays, subdivisions, and neighborhoods are created and moved as community anchors in the Anchor points panel.</p>
 <form class="anchor-form" id="anchor-form">
 <div class="form-mode full-width">
-<strong id="anchor-form-title">Add custom anchor</strong>
+<strong id="anchor-form-title">Add procedural point rule</strong>
 <button class="text-button" hidden="" id="anchor-cancel-button" type="button">Cancel edit</button>
 </div>
 <input id="anchor-edit-key" type="hidden"/>
@@ -399,7 +399,7 @@
 <option value="28">Isolated · 28 tiles</option>
 </select>
 </label>
-<button class="secondary full-width" id="anchor-submit-button" type="submit">Add anchor and regenerate</button>
+<button class="secondary full-width" id="anchor-submit-button" type="submit">Add rule and regenerate</button>
 </form>
 <div aria-live="polite" class="anchor-list" id="anchor-list"></div>
 </div>
@@ -1202,7 +1202,7 @@
 <div class="studio-panel-heading"><div><p class="section-kicker">Workspace</p><h3>Project & recovery</h3></div><span class="autosave-indicator" id="autosave-indicator">Autosave ready</span></div>
 <label class="form-field"><span>Appearance</span><select id="studio-theme-select"><option value="dark">Dark</option><option value="light">Light</option><option value="contrast">High contrast</option></select></label>
 <div class="project-action-grid"><button id="studio-save-button" type="button">Save World JSON</button><button id="studio-open-button" type="button">Open JSON</button><button id="studio-export-image-button" type="button">Export PNG</button><button id="restore-session-button" type="button">Restore autosave</button></div>
-<div class="project-recovery-copy" id="session-recovery-copy">No recoverable session yet.</div>
+<div class="project-recovery-copy" id="session-recovery-copy">No recoverable session yet. Once autosaved, this browser will reopen it automatically.</div>
 <div class="studio-subsection"><div class="studio-panel-heading compact"><h3>Recent worlds</h3><button id="clear-recent-projects-button" type="button">Clear</button></div><div class="recent-project-list" id="recent-project-list"></div></div>
 <div class="shortcut-reference"><strong>Shortcuts</strong><span><kbd>Ctrl</kbd>+<kbd>P</kbd> Commands</span><span><kbd>Ctrl</kbd>+<kbd>S</kbd> Save JSON</span><span><kbd>Ctrl</kbd>+<kbd>O</kbd> Open JSON</span><span><kbd>F</kbd> Fit or focus</span><span><kbd>[</kbd>/<kbd>]</kbd> Panels</span></div>
 </section>

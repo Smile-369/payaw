@@ -50,11 +50,11 @@ html = html.replace('</head>', '<script src="./route-styles.js"></script></head>
 html = html.replace('/src/bootstrap.ts', './src/bootstrap.js');
 writeFileSync(join(distPath, 'index.html'), html);
 cpSync(join(projectPath, 'src', 'styles.css'), join(distPath, 'styles.css'));
-cpSync(join(projectPath, 'src', 'ui', 'ms21.css'), join(distPath, 'ms21.css'));
+cpSync(join(projectPath, 'src', 'ui', 'campaign-studio-shell.css'), join(distPath, 'campaign-studio-shell.css'));
 cpSync(join(projectPath, 'src', 'player', 'player.css'), join(distPath, 'player.css'));
 writeFileSync(join(distPath, 'route-styles.js'), `(() => {
   const isPlayer = new URLSearchParams(location.search).get('view') === 'player';
-  const sheets = isPlayer ? ['./player.css?v=20260726-opaque-dice'] : ['./styles.css?v=20260726-opaque-dice', './ms21.css?v=20260726-opaque-dice'];
+  const sheets = isPlayer ? ['./player.css?v=20260726-opaque-dice'] : ['./styles.css?v=20260726-opaque-dice', './campaign-studio-shell.css?v=20260726-opaque-dice'];
   for (const href of sheets) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';

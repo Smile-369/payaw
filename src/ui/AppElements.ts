@@ -1,0 +1,430 @@
+import { RenderLayer } from '../engine/renderer/Layers';
+
+function requireElement<T extends HTMLElement>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (element === null) throw new Error(`Required UI element not found: ${selector}`);
+  return element;
+}
+
+export const canvas = requireElement<HTMLCanvasElement>('#world-canvas');
+export const seedInput = requireElement<HTMLInputElement>('#seed-input');
+export const terrainSizeSelect = requireElement<HTMLSelectElement>('#terrain-size');
+export const townScaleSelect = requireElement<HTMLSelectElement>('#town-scale');
+export const terrainShapeSelect = requireElement<HTMLSelectElement>('#terrain-shape');
+export const climatePresetSelect = requireElement<HTMLSelectElement>('#climate-preset');
+export const islandCountInput = requireElement<HTMLInputElement>('#island-count-input');
+export const islandSpacingInput = requireElement<HTMLInputElement>('#island-spacing-input');
+export const regionalScaleReadout = requireElement<HTMLElement>('#regional-scale-readout');
+export const profileHint = requireElement<HTMLElement>('#profile-hint');
+export const generateButton = requireElement<HTMLButtonElement>('#generate-button');
+export const cancelGenerationButton = requireElement<HTMLButtonElement>('#cancel-generation-button');
+export const generationProgress = requireElement<HTMLElement>('#generation-progress');
+export const generationProgressFill = requireElement<HTMLElement>('#generation-progress-fill');
+export const generationProgressStage = requireElement<HTMLElement>('#generation-progress-stage');
+export const generationProgressPercent = requireElement<HTMLElement>('#generation-progress-percent');
+export const perfGenerationTotal = requireElement<HTMLElement>('#perf-generation-total');
+export const perfSlowestStage = requireElement<HTMLElement>('#perf-slowest-stage');
+export const perfCacheTime = requireElement<HTMLElement>('#perf-cache-time');
+export const perfRenderTime = requireElement<HTMLElement>('#perf-render-time');
+export const perfVisibleBuildings = requireElement<HTMLElement>('#perf-visible-buildings');
+export const perfVisibleVegetation = requireElement<HTMLElement>('#perf-visible-vegetation');
+export const randomSeedButton = requireElement<HTMLButtonElement>('#random-seed-button');
+export const exportButton = requireElement<HTMLButtonElement>('#export-button');
+export const exportImageButton = requireElement<HTMLButtonElement>('#export-image-button');
+export const imageExportScale = requireElement<HTMLSelectElement>('#image-export-scale');
+export const imageExportPadding = requireElement<HTMLSelectElement>('#image-export-padding');
+export const exportCustomizationButton = requireElement<HTMLButtonElement>('#export-customization-button');
+export const customizationImportFile = requireElement<HTMLInputElement>('#customization-import-file');
+export const projectImportFile = requireElement<HTMLInputElement>('#project-import-file');
+export const projectJsonDropzone = requireElement<HTMLElement>('#project-json-dropzone');
+export const fitMapButton = requireElement<HTMLButtonElement>('#fit-map-button');
+export const viewPreset = requireElement<HTMLSelectElement>('#view-preset');
+export const statusMessage = requireElement<HTMLElement>('#generation-status');
+export const authoringCard = requireElement<HTMLElement>('#authoring-card');
+export const authoringModeBadge = requireElement<HTMLElement>('#authoring-mode-badge');
+export const authoringStatus = requireElement<HTMLElement>('#authoring-status');
+export const authoringSettlementName = requireElement<HTMLInputElement>('#authoring-settlement-name');
+export const authoringSettlementKind = requireElement<HTMLSelectElement>('#authoring-settlement-kind');
+export const authoringSettlementParent = requireElement<HTMLSelectElement>('#authoring-settlement-parent');
+export const authoringSettlementRadius = requireElement<HTMLInputElement>('#authoring-settlement-radius');
+export const authoringSettlementRotation = requireElement<HTMLInputElement>('#authoring-settlement-rotation');
+export const authoringSettlementPopulation = requireElement<HTMLInputElement>('#authoring-settlement-population');
+export const authoringSettlementDensity = requireElement<HTMLInputElement>('#authoring-settlement-density');
+export const authoringSettlementVisibility = requireElement<HTMLSelectElement>('#authoring-settlement-visibility');
+export const authoringSettlementNotes = requireElement<HTMLInputElement>('#authoring-settlement-notes');
+export const authoringSettlementRoads = requireElement<HTMLInputElement>('#authoring-settlement-roads');
+export const authoringSettlementBuildings = requireElement<HTMLInputElement>('#authoring-settlement-buildings');
+export const authoringPlaceSettlement = requireElement<HTMLButtonElement>('#authoring-place-settlement');
+export const authoringApplySettlement = requireElement<HTMLButtonElement>('#authoring-apply-settlement');
+export const authoringDuplicateSettlement = requireElement<HTMLButtonElement>('#authoring-duplicate-settlement');
+export const authoringSettlementList = requireElement<HTMLElement>('#authoring-settlement-list');
+export const settlementAnchorOnlyFields = [...document.querySelectorAll<HTMLElement>('[data-settlement-anchor-only]')];
+export const authoringFeatureName = requireElement<HTMLInputElement>('#authoring-feature-name');
+export const authoringFeatureCategory = requireElement<HTMLSelectElement>('#authoring-feature-category');
+export const authoringFeatureSubtype = requireElement<HTMLInputElement>('#authoring-feature-subtype');
+export const authoringFeatureReality = requireElement<HTMLSelectElement>('#authoring-feature-reality');
+export const authoringFeatureVisibility = requireElement<HTMLSelectElement>('#authoring-feature-visibility');
+export const authoringFeatureColor = requireElement<HTMLInputElement>('#authoring-feature-color');
+export const authoringFeatureLineWidth = requireElement<HTMLInputElement>('#authoring-feature-line-width');
+export const authoringFeatureFill = requireElement<HTMLInputElement>('#authoring-feature-fill');
+export const authoringFeatureScale = requireElement<HTMLInputElement>('#authoring-feature-scale');
+export const authoringFeatureRotation = requireElement<HTMLInputElement>('#authoring-feature-rotation');
+export const authoringFeatureOpacity = requireElement<HTMLInputElement>('#authoring-feature-opacity');
+export const authoringFeatureAliases = requireElement<HTMLInputElement>('#authoring-feature-aliases');
+export const authoringFeatureNotes = requireElement<HTMLTextAreaElement>('#authoring-feature-notes');
+export const authoringStartFeature = requireElement<HTMLButtonElement>('#authoring-start-feature');
+export const authoringFinishFeature = requireElement<HTMLButtonElement>('#authoring-finish-feature');
+export const authoringCancelFeature = requireElement<HTMLButtonElement>('#authoring-cancel-feature');
+export const authoringFeatureList = requireElement<HTMLElement>('#authoring-feature-list');
+export const authoringTerrainOperation = requireElement<HTMLSelectElement>('#authoring-terrain-operation');
+export const authoringTerrainSize = requireElement<HTMLInputElement>('#authoring-terrain-size');
+export const authoringTerrainStrength = requireElement<HTMLInputElement>('#authoring-terrain-strength');
+export const authoringTerrainType = requireElement<HTMLSelectElement>('#authoring-terrain-type');
+export const authoringClearTerrain = requireElement<HTMLButtonElement>('#authoring-clear-terrain');
+export const authoringLockTerrain = requireElement<HTMLButtonElement>('#authoring-lock-terrain');
+export const authoringShowAll = requireElement<HTMLButtonElement>('#authoring-show-all');
+export const authoringResetSelected = requireElement<HTMLButtonElement>('#authoring-reset-selected');
+export const authoringDeleteSelected = requireElement<HTMLButtonElement>('#authoring-delete-selected');
+export const mapTitle = requireElement<HTMLElement>('#map-title');
+export const mapSubtitle = requireElement<HTMLElement>('#map-subtitle');
+export const stats = requireElement<HTMLElement>('#world-stats');
+export const cursorReadout = requireElement<HTMLElement>('#cursor-readout');
+export const anchorForm = requireElement<HTMLFormElement>('#anchor-form');
+export const anchorFormTitle = requireElement<HTMLElement>('#anchor-form-title');
+export const anchorEditKey = requireElement<HTMLInputElement>('#anchor-edit-key');
+export const anchorCancelButton = requireElement<HTMLButtonElement>('#anchor-cancel-button');
+export const anchorSubmitButton = requireElement<HTMLButtonElement>('#anchor-submit-button');
+export const anchorName = requireElement<HTMLInputElement>('#anchor-name');
+export const anchorRegion = requireElement<HTMLSelectElement>('#anchor-region');
+export const anchorTerrain = requireElement<HTMLSelectElement>('#anchor-terrain');
+export const anchorTarget = requireElement<HTMLSelectElement>('#anchor-target');
+export const anchorProximity = requireElement<HTMLSelectElement>('#anchor-proximity');
+export const anchorZone = requireElement<HTMLSelectElement>('#anchor-zone');
+export const anchorRadius = requireElement<HTMLSelectElement>('#anchor-radius');
+export const anchorSpacing = requireElement<HTMLSelectElement>('#anchor-spacing');
+export const anchorList = requireElement<HTMLElement>('#anchor-list');
+export const anchorCount = requireElement<HTMLElement>('#anchor-count');
+export const roadNameForm = requireElement<HTMLFormElement>('#road-name-form');
+export const roadNameTarget = requireElement<HTMLSelectElement>('#road-name-target');
+export const roadNameInput = requireElement<HTMLInputElement>('#road-name-input');
+export const roadNameReset = requireElement<HTMLButtonElement>('#road-name-reset');
+export const blockNameForm = requireElement<HTMLFormElement>('#block-name-form');
+export const blockNameTarget = requireElement<HTMLSelectElement>('#block-name-target');
+export const blockNameInput = requireElement<HTMLInputElement>('#block-name-input');
+export const blockNameReset = requireElement<HTMLButtonElement>('#block-name-reset');
+export const roadLabelFontSize = requireElement<HTMLInputElement>('#road-label-font-size');
+export const roadLabelFontOutput = requireElement<HTMLOutputElement>('#road-label-font-output');
+export const roadLabelOpacity = requireElement<HTMLInputElement>('#road-label-opacity');
+export const roadLabelOpacityOutput = requireElement<HTMLOutputElement>('#road-label-opacity-output');
+export const roadLabelDensity = requireElement<HTMLInputElement>('#road-label-density');
+export const roadLabelDensityOutput = requireElement<HTMLOutputElement>('#road-label-density-output');
+export const roadLabelMainZoom = requireElement<HTMLSelectElement>('#road-label-main-zoom');
+export const roadLabelSecondaryZoom = requireElement<HTMLSelectElement>('#road-label-secondary-zoom');
+export const roadLabelLocalZoom = requireElement<HTMLSelectElement>('#road-label-local-zoom');
+export const roadLabelMain = requireElement<HTMLInputElement>('#road-label-main');
+export const roadLabelSecondary = requireElement<HTMLInputElement>('#road-label-secondary');
+export const roadLabelLocal = requireElement<HTMLInputElement>('#road-label-local');
+export const roadLabelRotate = requireElement<HTMLInputElement>('#road-label-rotate');
+export const roadLabelOutline = requireElement<HTMLInputElement>('#road-label-outline');
+export const roadLabelSummary = requireElement<HTMLElement>('#road-label-summary');
+export const blockLabelFontSize = requireElement<HTMLInputElement>('#block-label-font-size');
+export const blockLabelFontOutput = requireElement<HTMLOutputElement>('#block-label-font-output');
+export const blockLabelOpacity = requireElement<HTMLInputElement>('#block-label-opacity');
+export const blockLabelOpacityOutput = requireElement<HTMLOutputElement>('#block-label-opacity-output');
+export const blockLabelDensity = requireElement<HTMLInputElement>('#block-label-density');
+export const blockLabelDensityOutput = requireElement<HTMLOutputElement>('#block-label-density-output');
+export const blockLabelMinZoom = requireElement<HTMLSelectElement>('#block-label-min-zoom');
+export const blockLabelOutline = requireElement<HTMLInputElement>('#block-label-outline');
+export const blockLabelSummary = requireElement<HTMLElement>('#block-label-summary');
+export const labelAvoidCollisions = requireElement<HTMLInputElement>('#label-avoid-collisions');
+export const labelControlsReset = requireElement<HTMLButtonElement>('#label-controls-reset');
+export const storyList = requireElement<HTMLElement>('#story-list');
+export const worldStoryList = requireElement<HTMLElement>('#world-story-list');
+export const removedStoryCount = requireElement<HTMLElement>('#removed-story-count');
+export const restoreRemovedStoryPoints = requireElement<HTMLButtonElement>('#restore-removed-story-points');
+export const storyRuleForm = requireElement<HTMLFormElement>('#story-rule-form');
+export const storyRuleTarget = requireElement<HTMLSelectElement>('#story-rule-target');
+export const storyRuleName = requireElement<HTMLInputElement>('#story-rule-name');
+export const storyPreferredZone = requireElement<HTMLSelectElement>('#story-preferred-zone');
+export const storyInfluenceRadius = requireElement<HTMLInputElement>('#story-influence-radius');
+export const storyAllowedZones = requireElement<HTMLSelectElement>('#story-allowed-zones');
+export const storyDisallowedZones = requireElement<HTMLSelectElement>('#story-disallowed-zones');
+export const storyRuleReset = requireElement<HTMLButtonElement>('#story-rule-reset');
+export const storyRuleWish = requireElement<HTMLTextAreaElement>('#story-rule-wish');
+export const storyRuleManifestation = requireElement<HTMLTextAreaElement>('#story-rule-manifestation');
+export const storyRuleEncounters = requireElement<HTMLTextAreaElement>('#story-rule-encounters');
+export const customStoryForm = requireElement<HTMLFormElement>('#custom-story-form');
+export const customStoryFormTitle = requireElement<HTMLElement>('#custom-story-form-title');
+export const customStoryCancel = requireElement<HTMLButtonElement>('#custom-story-cancel');
+export const customStoryEditId = requireElement<HTMLInputElement>('#custom-story-edit-id');
+export const customStoryName = requireElement<HTMLInputElement>('#custom-story-name');
+export const customStoryType = requireElement<HTMLSelectElement>('#custom-story-type');
+export const customStoryRegion = requireElement<HTMLSelectElement>('#custom-story-region');
+export const customStoryTerrain = requireElement<HTMLSelectElement>('#custom-story-terrain');
+export const customStoryZone = requireElement<HTMLSelectElement>('#custom-story-zone');
+export const customStoryAllowedZones = requireElement<HTMLSelectElement>('#custom-story-allowed-zones');
+export const customStoryDisallowedZones = requireElement<HTMLSelectElement>('#custom-story-disallowed-zones');
+export const customStoryRadius = requireElement<HTMLInputElement>('#custom-story-radius');
+export const customStorySpacing = requireElement<HTMLInputElement>('#custom-story-spacing');
+export const customStoryWish = requireElement<HTMLTextAreaElement>('#custom-story-wish');
+export const customStoryManifestation = requireElement<HTMLTextAreaElement>('#custom-story-manifestation');
+export const customStoryEncounters = requireElement<HTMLTextAreaElement>('#custom-story-encounters');
+export const customStoryList = requireElement<HTMLElement>('#custom-story-list');
+export const customStoryCount = requireElement<HTMLElement>('#custom-story-count');
+export const npcCount = requireElement<HTMLElement>('#npc-count');
+export const npcRosterSize = requireElement<HTMLInputElement>('#npc-roster-size');
+export const npcSearch = requireElement<HTMLInputElement>('#npc-search');
+export const npcGenerateButton = requireElement<HTMLButtonElement>('#npc-generate-button');
+export const npcList = requireElement<HTMLElement>('#npc-list');
+export const npcCreateButton = requireElement<HTMLButtonElement>('#npc-create-button');
+export const npcExportSelected = requireElement<HTMLButtonElement>('#npc-export-selected');
+export const npcExportGroup = requireElement<HTMLButtonElement>('#npc-export-group');
+export const npcImportFile = requireElement<HTMLInputElement>('#npc-import-file');
+export const npcEditorHeading = requireElement<HTMLElement>('#npc-editor-heading');
+export const npcEditName = requireElement<HTMLInputElement>('#npc-edit-name');
+export const npcEditAge = requireElement<HTMLInputElement>('#npc-edit-age');
+export const npcEditStatus = requireElement<HTMLSelectElement>('#npc-edit-status');
+export const npcEditOccupation = requireElement<HTMLInputElement>('#npc-edit-occupation');
+export const npcEditSettlement = requireElement<HTMLSelectElement>('#npc-edit-settlement');
+export const npcEditHome = requireElement<HTMLSelectElement>('#npc-edit-home');
+export const npcEditUnusualHome = requireElement<HTMLInputElement>('#npc-edit-unusual-home');
+export const npcEditWorkplace = requireElement<HTMLSelectElement>('#npc-edit-workplace');
+export const npcEditPublicDescription = requireElement<HTMLTextAreaElement>('#npc-edit-public-description');
+export const npcEditPersonality = requireElement<HTMLTextAreaElement>('#npc-edit-personality');
+export const npcEditWish = requireElement<HTMLTextAreaElement>('#npc-edit-wish');
+export const npcEditFear = requireElement<HTMLTextAreaElement>('#npc-edit-fear');
+export const npcEditSecret = requireElement<HTMLTextAreaElement>('#npc-edit-secret');
+export const npcEditRumor = requireElement<HTMLTextAreaElement>('#npc-edit-rumor');
+export const npcEditTags = requireElement<HTMLInputElement>('#npc-edit-tags');
+export const npcEditNotes = requireElement<HTMLTextAreaElement>('#npc-edit-notes');
+export const npcEditPortrait = requireElement<HTMLInputElement>('#npc-edit-portrait');
+export const npcPortraitPreview = requireElement<HTMLElement>('#npc-portrait-preview');
+export const npcSaveButton = requireElement<HTMLButtonElement>('#npc-save-button');
+export const npcResetButton = requireElement<HTMLButtonElement>('#npc-reset-button');
+export const npcDeleteButton = requireElement<HTMLButtonElement>('#npc-delete-button');
+export const npcScheduleDayTabs = requireElement<HTMLElement>('#npc-schedule-day-tabs');
+export const npcScheduleStart = requireElement<HTMLInputElement>('#npc-schedule-start');
+export const npcScheduleEnd = requireElement<HTMLInputElement>('#npc-schedule-end');
+export const npcScheduleActivity = requireElement<HTMLInputElement>('#npc-schedule-activity');
+export const npcScheduleLocation = requireElement<HTMLSelectElement>('#npc-schedule-location');
+export const npcScheduleTravel = requireElement<HTMLSelectElement>('#npc-schedule-travel');
+export const npcScheduleVisibility = requireElement<HTMLSelectElement>('#npc-schedule-visibility');
+export const npcScheduleAdd = requireElement<HTMLButtonElement>('#npc-schedule-add');
+export const npcScheduleCopyWeekdays = requireElement<HTMLButtonElement>('#npc-schedule-copy-weekdays');
+export const npcScheduleClearDay = requireElement<HTMLButtonElement>('#npc-schedule-clear-day');
+export const npcScheduleList = requireElement<HTMLElement>('#npc-schedule-list');
+export const npcScheduleValidation = requireElement<HTMLElement>('#npc-schedule-validation');
+export const npcRelationshipTarget = requireElement<HTMLSelectElement>('#npc-relationship-target');
+export const npcRelationshipKind = requireElement<HTMLSelectElement>('#npc-relationship-kind');
+export const npcRelationshipHidden = requireElement<HTMLInputElement>('#npc-relationship-hidden');
+export const npcRelationshipLabel = requireElement<HTMLInputElement>('#npc-relationship-label');
+export const npcRelationshipAdd = requireElement<HTMLButtonElement>('#npc-relationship-add');
+export const npcRelationshipList = requireElement<HTMLElement>('#npc-relationship-list');
+export const npcOverrideLocation = requireElement<HTMLSelectElement>('#npc-override-location');
+export const npcOverrideActivity = requireElement<HTMLInputElement>('#npc-override-activity');
+export const npcOverrideDuration = requireElement<HTMLSelectElement>('#npc-override-duration');
+export const npcSceneId = requireElement<HTMLInputElement>('#npc-scene-id');
+export const npcOverrideReason = requireElement<HTMLInputElement>('#npc-override-reason');
+export const npcSceneVisible = requireElement<HTMLInputElement>('#npc-scene-visible');
+export const npcOverrideAdd = requireElement<HTMLButtonElement>('#npc-override-add');
+export const npcScenePlace = requireElement<HTMLButtonElement>('#npc-scene-place');
+export const npcPlacementClear = requireElement<HTMLButtonElement>('#npc-placement-clear');
+export const npcPlacementList = requireElement<HTMLElement>('#npc-placement-list');
+export const locationSource = requireElement<HTMLSelectElement>('#location-source');
+export const locationName = requireElement<HTMLInputElement>('#location-name');
+export const locationType = requireElement<HTMLInputElement>('#location-type');
+export const locationOwner = requireElement<HTMLSelectElement>('#location-owner');
+export const locationVisibility = requireElement<HTMLSelectElement>('#location-visibility');
+export const locationStatus = requireElement<HTMLSelectElement>('#location-status');
+export const locationTags = requireElement<HTMLInputElement>('#location-tags');
+export const locationDescription = requireElement<HTMLTextAreaElement>('#location-description');
+export const locationPlayerDescription = requireElement<HTMLTextAreaElement>('#location-player-description');
+export const locationNotes = requireElement<HTMLTextAreaElement>('#location-notes');
+export const locationSave = requireElement<HTMLButtonElement>('#location-save');
+export const locationDelete = requireElement<HTMLButtonElement>('#location-delete');
+export const locationHoursDay = requireElement<HTMLSelectElement>('#location-hours-day');
+export const locationHoursOpen = requireElement<HTMLInputElement>('#location-hours-open');
+export const locationHoursClose = requireElement<HTMLInputElement>('#location-hours-close');
+export const locationHoursClosed = requireElement<HTMLInputElement>('#location-hours-closed');
+export const locationHoursSave = requireElement<HTMLButtonElement>('#location-hours-save');
+export const locationHoursList = requireElement<HTMLElement>('#location-hours-list');
+export const locationList = requireElement<HTMLElement>('#location-list');
+export const npcViewToggleButton = requireElement<HTMLButtonElement>('#npc-view-toggle-button');
+export const realtimeClock = requireElement<HTMLElement>('#realtime-clock');
+export const realtimeClockTime = requireElement<HTMLElement>('#realtime-clock-time');
+export const realtimeClockDate = requireElement<HTMLElement>('#realtime-clock-date');
+export const realtimeClockPeriod = requireElement<HTMLElement>('#realtime-clock-period');
+export const realtimeClockMode = requireElement<HTMLElement>('#realtime-clock-mode');
+export const simulationClockMode = requireElement<HTMLSelectElement>('#simulation-clock-mode');
+export const simulationSpeed = requireElement<HTMLSelectElement>('#simulation-speed');
+export const simulationDatetime = requireElement<HTMLInputElement>('#simulation-datetime');
+export const simulationApplyTime = requireElement<HTMLButtonElement>('#simulation-apply-time');
+export const simulationAdvance15 = requireElement<HTMLButtonElement>('#simulation-advance-15');
+export const simulationAdvanceHour = requireElement<HTMLButtonElement>('#simulation-advance-hour');
+export const simulationAdvanceDay = requireElement<HTMLButtonElement>('#simulation-advance-day');
+export const simulationWeather = requireElement<HTMLSelectElement>('#simulation-weather');
+export const simulationNowSummary = requireElement<HTMLElement>('#simulation-now-summary');
+export const simulationTimezoneSummary = requireElement<HTMLElement>('#simulation-timezone-summary');
+export const simulationPeriodSummary = requireElement<HTMLElement>('#simulation-period-summary');
+export const simulationWeatherSummary = requireElement<HTMLElement>('#simulation-weather-summary');
+export const simulationTrafficSummary = requireElement<HTMLElement>('#simulation-traffic-summary');
+export const simulationInfrastructureSummary = requireElement<HTMLElement>('#simulation-infrastructure-summary');
+export const simulationVenueSummary = requireElement<HTMLElement>('#simulation-venue-summary');
+export const simulationNpcSummary = requireElement<HTMLElement>('#simulation-npc-summary');
+export const simulationSupernaturalSummary = requireElement<HTMLElement>('#simulation-supernatural-summary');
+export const simulationEventLog = requireElement<HTMLElement>('#simulation-event-log');
+export const simulationEventFilter = requireElement<HTMLSelectElement>('#simulation-event-filter');
+export const simulationEventClear = requireElement<HTMLButtonElement>('#simulation-event-clear');
+export const simulationLiveBadge = requireElement<HTMLElement>('#simulation-live-badge');
+export const simulationInfrastructureKind = requireElement<HTMLSelectElement>('#simulation-infrastructure-kind');
+export const simulationInfrastructureTarget = requireElement<HTMLSelectElement>('#simulation-infrastructure-target');
+export const simulationInfrastructureStatus = requireElement<HTMLSelectElement>('#simulation-infrastructure-status');
+export const simulationInfrastructureApply = requireElement<HTMLButtonElement>('#simulation-infrastructure-apply');
+export const simulationInfrastructureClear = requireElement<HTMLButtonElement>('#simulation-infrastructure-clear');
+export const viewportShell = requireElement<HTMLElement>('.viewport-shell');
+export const toolbarEditButton = requireElement<HTMLButtonElement>('#toolbar-edit-button');
+export const undoButton = requireElement<HTMLButtonElement>('#undo-button');
+export const redoButton = requireElement<HTMLButtonElement>('#redo-button');
+export const editModeButton = requireElement<HTMLButtonElement>('#edit-mode-button');
+export const resetObjectPositionsButton = requireElement<HTMLButtonElement>('#reset-object-positions');
+export const assetForm = requireElement<HTMLFormElement>('#asset-form');
+export const assetFiles = requireElement<HTMLInputElement>('#asset-files');
+export const assetTargetCategory = requireElement<HTMLSelectElement>('#asset-target-category');
+export const assetTargetType = requireElement<HTMLSelectElement>('#asset-target-type');
+export const assetList = requireElement<HTMLElement>('#asset-list');
+export const assetCount = requireElement<HTMLElement>('#asset-count');
+export const placedImageList = requireElement<HTMLElement>('#placed-image-list');
+export const zoneEditModeButton = requireElement<HTMLButtonElement>('#zone-edit-mode-button');
+export const zoneToolSelect = requireElement<HTMLSelectElement>('#zone-tool');
+export const zonePaintType = requireElement<HTMLSelectElement>('#zone-paint-type');
+export const zoneBrushSize = requireElement<HTMLInputElement>('#zone-brush-size');
+export const zoneBrushOutput = requireElement<HTMLOutputElement>('#zone-brush-output');
+export const zoneDisplayMode = requireElement<HTMLSelectElement>('#zone-display-mode');
+export const zoneLockNew = requireElement<HTMLInputElement>('#zone-lock-new');
+export const zoneResetAll = requireElement<HTMLButtonElement>('#zone-reset-all');
+export const zoneOverrideCount = requireElement<HTMLElement>('#zone-override-count');
+export const zoneEditorStatus = requireElement<HTMLElement>('#zone-editor-status');
+export const workspaceEditorButton = requireElement<HTMLButtonElement>('#workspace-editor-button');
+export const workspaceDmButton = requireElement<HTMLButtonElement>('#workspace-dm-button');
+export const editorWorkspace = requireElement<HTMLElement>('#editor-workspace');
+export const dmWorkspace = requireElement<HTMLElement>('#dm-workspace');
+export const workspaceKicker = requireElement<HTMLElement>('#workspace-kicker');
+export const workspaceTitle = requireElement<HTMLElement>('#workspace-title');
+export const workspaceDescription = requireElement<HTMLElement>('#workspace-description');
+export const mapWorkspaceBadge = requireElement<HTMLElement>('#map-workspace-badge');
+export const dmViewPreset = requireElement<HTMLSelectElement>('#dm-view-preset');
+export const dmStorySearch = requireElement<HTMLInputElement>('#dm-story-search');
+export const dmRandomEncounterButton = requireElement<HTMLButtonElement>('#dm-random-encounter-button');
+export const dmRandomEncounterResult = requireElement<HTMLElement>('#dm-random-encounter-result');
+export const dmStoryTotal = requireElement<HTMLElement>('#dm-story-total');
+export const dmCustomTotal = requireElement<HTMLElement>('#dm-custom-total');
+export const dmSessionLog = requireElement<HTMLElement>('#dm-session-log');
+export const dmClearLog = requireElement<HTMLButtonElement>('#dm-clear-log');
+export const bridgeCount = requireElement<HTMLElement>('#bridge-count');
+export const bridgeSummary = requireElement<HTMLElement>('#bridge-summary');
+export const bridgeList = requireElement<HTMLElement>('#bridge-list');
+export const bridgeForm = requireElement<HTMLFormElement>('#bridge-form');
+export const bridgeName = requireElement<HTMLInputElement>('#bridge-name');
+export const bridgeFromIsland = requireElement<HTMLSelectElement>('#bridge-from-island');
+export const bridgeToIsland = requireElement<HTMLSelectElement>('#bridge-to-island');
+export const bridgeType = requireElement<HTMLSelectElement>('#bridge-type');
+export const bridgeRoadClass = requireElement<HTMLSelectElement>('#bridge-road-class');
+export const bridgeWidth = requireElement<HTMLInputElement>('#bridge-width');
+export const bridgeClearance = requireElement<HTMLInputElement>('#bridge-clearance');
+export const bridgeResetAll = requireElement<HTMLButtonElement>('#bridge-reset-all');
+export const portCount = requireElement<HTMLElement>('#port-count');
+export const portSummary = requireElement<HTMLElement>('#port-summary');
+export const portList = requireElement<HTMLElement>('#port-list');
+export const portForm = requireElement<HTMLFormElement>('#port-form');
+export const portName = requireElement<HTMLInputElement>('#port-name');
+export const portIsland = requireElement<HTMLSelectElement>('#port-island');
+export const portType = requireElement<HTMLSelectElement>('#port-type');
+export const portCapacity = requireElement<HTMLInputElement>('#port-capacity');
+export const portResetAll = requireElement<HTMLButtonElement>('#port-reset-all');
+export const travelFromLocation = requireElement<HTMLSelectElement>('#travel-from-location');
+export const travelToLocation = requireElement<HTMLSelectElement>('#travel-to-location');
+export const travelMode = requireElement<HTMLSelectElement>('#travel-mode');
+export const travelTraffic = requireElement<HTMLSelectElement>('#travel-traffic');
+export const travelCalculate = requireElement<HTMLButtonElement>('#travel-calculate');
+export const travelReverse = requireElement<HTMLButtonElement>('#travel-reverse');
+export const travelClear = requireElement<HTMLButtonElement>('#travel-clear');
+export const travelPickFrom = requireElement<HTMLButtonElement>('#travel-pick-from');
+export const travelPickTo = requireElement<HTMLButtonElement>('#travel-pick-to');
+export const travelAlternatives = requireElement<HTMLElement>('#travel-alternatives');
+export const travelResult = requireElement<HTMLElement>('#travel-result');
+export const toggleLeftPanelButton = requireElement<HTMLButtonElement>('#toggle-left-panel-button');
+export const toggleStudioDockButton = requireElement<HTMLButtonElement>('#toggle-studio-dock-button');
+export const closeStudioDockButton = requireElement<HTMLButtonElement>('#close-studio-dock-button');
+export const studioTabInspector = requireElement<HTMLButtonElement>('#studio-tab-inspector');
+export const studioTabLayers = requireElement<HTMLButtonElement>('#studio-tab-layers');
+export const studioTabProject = requireElement<HTMLButtonElement>('#studio-tab-project');
+export const studioInspectorPanel = requireElement<HTMLElement>('#studio-inspector-panel');
+export const studioLayersPanel = requireElement<HTMLElement>('#studio-layers-panel');
+export const studioProjectPanel = requireElement<HTMLElement>('#studio-project-panel');
+export const inspectorContent = requireElement<HTMLElement>('#inspector-content');
+export const focusSelectionButton = requireElement<HTMLButtonElement>('#focus-selection-button');
+export const studioLayerList = requireElement<HTMLElement>('#studio-layer-list');
+export const layerSearchInput = requireElement<HTMLInputElement>('#layer-search-input');
+export const layersAllButton = requireElement<HTMLButtonElement>('#layers-all-button');
+export const layersNoneButton = requireElement<HTMLButtonElement>('#layers-none-button');
+export const studioThemeSelect = requireElement<HTMLSelectElement>('#studio-theme-select');
+export const studioSaveButton = requireElement<HTMLButtonElement>('#studio-save-button');
+export const studioOpenButton = requireElement<HTMLButtonElement>('#studio-open-button');
+export const studioExportImageButton = requireElement<HTMLButtonElement>('#studio-export-image-button');
+export const restoreSessionButton = requireElement<HTMLButtonElement>('#restore-session-button');
+export const autosaveIndicator = requireElement<HTMLElement>('#autosave-indicator');
+export const sessionRecoveryCopy = requireElement<HTMLElement>('#session-recovery-copy');
+export const recentProjectList = requireElement<HTMLElement>('#recent-project-list');
+export const clearRecentProjectsButton = requireElement<HTMLButtonElement>('#clear-recent-projects-button');
+export const minimapPanel = requireElement<HTMLElement>('#minimap-panel');
+export const minimapCanvas = requireElement<HTMLCanvasElement>('#minimap-canvas');
+export const minimapCollapseButton = requireElement<HTMLButtonElement>('#minimap-collapse-button');
+export const statusSeed = requireElement<HTMLElement>('#status-seed');
+export const statusLayout = requireElement<HTMLElement>('#status-layout');
+export const statusZoom = requireElement<HTMLElement>('#status-zoom');
+export const statusSelection = requireElement<HTMLElement>('#status-selection');
+export const statusGeneration = requireElement<HTMLElement>('#status-generation');
+export const toastStack = requireElement<HTMLElement>('#toast-stack');
+
+export const layerElements: Readonly<Record<RenderLayer, HTMLInputElement>> = {
+  [RenderLayer.Terrain]: requireElement<HTMLInputElement>('#terrain-layer'),
+  [RenderLayer.Elevation]: requireElement<HTMLInputElement>('#elevation-layer'),
+  [RenderLayer.Moisture]: requireElement<HTMLInputElement>('#moisture-layer'),
+  [RenderLayer.Temperature]: requireElement<HTMLInputElement>('#temperature-layer'),
+  [RenderLayer.Accessibility]: requireElement<HTMLInputElement>('#accessibility-layer'),
+  [RenderLayer.LandValue]: requireElement<HTMLInputElement>('#land-value-layer'),
+  [RenderLayer.Zones]: requireElement<HTMLInputElement>('#zone-layer'),
+  [RenderLayer.Floodplains]: requireElement<HTMLInputElement>('#floodplain-layer'),
+  [RenderLayer.Rivers]: requireElement<HTMLInputElement>('#river-layer'),
+  [RenderLayer.Islands]: requireElement<HTMLInputElement>('#island-layer'),
+  [RenderLayer.IslandLabels]: requireElement<HTMLInputElement>('#island-label-layer'),
+  [RenderLayer.Settlements]: requireElement<HTMLInputElement>('#settlement-layer'),
+  [RenderLayer.Blocks]: requireElement<HTMLInputElement>('#block-layer'),
+  [RenderLayer.BlockLabels]: requireElement<HTMLInputElement>('#block-label-layer'),
+  [RenderLayer.Roads]: requireElement<HTMLInputElement>('#road-layer'),
+  [RenderLayer.Bridges]: requireElement<HTMLInputElement>('#bridge-layer'),
+  [RenderLayer.BridgeLabels]: requireElement<HTMLInputElement>('#bridge-label-layer'),
+  [RenderLayer.Ports]: requireElement<HTMLInputElement>('#port-layer'),
+  [RenderLayer.PortLabels]: requireElement<HTMLInputElement>('#port-label-layer'),
+  [RenderLayer.RoadLabels]: requireElement<HTMLInputElement>('#road-label-layer'),
+  [RenderLayer.Buildings]: requireElement<HTMLInputElement>('#building-layer'),
+  [RenderLayer.CustomImages]: requireElement<HTMLInputElement>('#custom-image-layer'),
+  [RenderLayer.Vegetation]: requireElement<HTMLInputElement>('#vegetation-layer'),
+  [RenderLayer.Anchors]: requireElement<HTMLInputElement>('#anchor-layer'),
+  [RenderLayer.Story]: requireElement<HTMLInputElement>('#story-layer'),
+  [RenderLayer.NPCs]: requireElement<HTMLInputElement>('#npc-layer'),
+  [RenderLayer.Authoring]: requireElement<HTMLInputElement>('#authoring-layer'),
+  [RenderLayer.HiddenPayaw]: requireElement<HTMLInputElement>('#hidden-payaw-layer'),
+  [RenderLayer.LiveInfrastructure]: requireElement<HTMLInputElement>('#live-infrastructure-layer'),
+  [RenderLayer.VenueStatus]: requireElement<HTMLInputElement>('#venue-status-layer'),
+  [RenderLayer.SettlementActivity]: requireElement<HTMLInputElement>('#settlement-activity-layer'),
+  [RenderLayer.SupernaturalActivity]: requireElement<HTMLInputElement>('#supernatural-activity-layer'),
+  [RenderLayer.Travel]: requireElement<HTMLInputElement>('#travel-path-layer'),
+  [RenderLayer.Grid]: requireElement<HTMLInputElement>('#grid-layer'),
+};
+
+export const commandPaletteButton = requireElement<HTMLButtonElement>('#command-palette-button');
+export const commandPaletteBackdrop = requireElement<HTMLElement>('#command-palette-backdrop');
+export const commandPaletteInput = requireElement<HTMLInputElement>('#command-palette-input');
+export const commandPaletteResults = requireElement<HTMLElement>('#command-palette-results');
+

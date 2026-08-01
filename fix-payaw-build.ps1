@@ -41,5 +41,5 @@ foreach ($path in $badFiles) {
 Write-Host "Nested project cleanup complete."
 Write-Host "Confirm these files exist:"
 Write-Host "  src\netcode\GmNetcodePanel.ts"
-Write-Host "  src\ui\ms21.css"
+Write-Host "  src\ui\campaign-studio-shell.css"
 Write-Host "Now run: pnpm run build"

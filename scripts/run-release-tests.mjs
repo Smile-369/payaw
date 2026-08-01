@@ -5,10 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const projectPath = dirname(dirname(fileURLToPath(import.meta.url)));
 const suites = [
-  ['Campaign and DM view', 'run-ms20-tests.mjs'],
-  ['GM workspace shell', 'run-ms21-tests.mjs'],
-  ['Player projection', 'run-ms22-tests.mjs'],
-  ['Hosted player boundary', 'run-ms23-tests.mjs'],
+  ['Campaign and DM view', 'run-campaign-management-tests.mjs'],
+  ['GM workspace shell', 'run-campaign-studio-shell-tests.mjs'],
+  ['Player projection', 'run-player-projection-privacy-tests.mjs'],
+  ['Hosted player boundary', 'run-hosted-player-synchronization-tests.mjs'],
   ['Character privacy', 'run-character-social-tests.mjs'],
   ['Editor persistence', 'run-editor-state-tests.mjs'],
 ];

@@ -22,8 +22,8 @@ if (requestedView === 'player') {
   }
 } else {
   await import('./styles.css');
-  await import('./ui/ms21.css');
-  const { installMilestone21Shell } = await import('./ui/Milestone21Shell');
-  installMilestone21Shell();
+  await import('./ui/campaign-studio-shell.css');
+  const { installCampaignStudioShell } = await import('./ui/CampaignStudioShell');
+  installCampaignStudioShell();
   await import('./main');
 }
