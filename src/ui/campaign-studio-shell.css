@@ -1048,10 +1048,12 @@ body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-templa
   color: #fff;
   background: linear-gradient(90deg, #143b7c, #3976b4) !important;
 }
-.netcode-dice-head > div { display: grid; gap: 2px; }
+.netcode-dice-head > div { order: 1; display: grid; gap: 2px; }
 .netcode-dice-head strong { font-size: 22px; }
 .netcode-dice-head small { color: rgba(255, 255, 255, 0.82); }
 .netcode-dice-head button { min-width: 36px; min-height: 32px; font-size: 18px; }
+#netcode-dice-clear { order: 2; margin-left: auto; font-size: 11px; }
+#netcode-dice-close { order: 3; }
 .netcode-dice-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;

@@ -92,6 +92,7 @@ export class GmNetcodePanel {
   private readonly commandsElement = element<HTMLElement>('#netcode-commands');
   private readonly openDiceTrayButton = element<HTMLButtonElement>('#netcode-open-dice-tray');
   private readonly diceDialog = element<HTMLElement>('#netcode-dice-dialog');
+  private readonly diceClearButton = element<HTMLButtonElement>('#netcode-dice-clear');
   private readonly diceCloseButton = element<HTMLButtonElement>('#netcode-dice-close');
   private readonly diceForm = element<HTMLFormElement>('#netcode-dice-form');
   private readonly diceNotation = element<HTMLInputElement>('#netcode-dice-notation');
@@ -151,6 +152,7 @@ export class GmNetcodePanel {
     this.createPlayerLoginButton.addEventListener('click', () => void this.createPlayerLogin());
     this.copyPlayerLoginButton.addEventListener('click', () => void this.copyPlayerLogin());
     this.openDiceTrayButton.addEventListener('click', () => this.openDiceTray());
+    this.diceClearButton.addEventListener('click', () => void this.clearHostedHistory('dice', true));
     this.diceCloseButton.addEventListener('click', () => this.closeDiceTray());
     this.diceDialog.addEventListener('click', (event) => {
       if (event.target === this.diceDialog) this.closeDiceTray();
@@ -168,6 +170,7 @@ export class GmNetcodePanel {
     document.addEventListener('payaw:campaign-state-changed', () => this.schedulePublish());
     document.addEventListener('payaw:player-state-changed', () => this.schedulePublish());
     document.addEventListener('payaw:project-state-changed', () => this.schedulePublish());
+    document.addEventListener('payaw:campaign-message-history-cleared', () => void this.clearHostedHistory('messages', false));
     this.populatePlayers();
     this.renderDiceTray();
     if (!this.config.enabled) {
@@ -231,6 +234,7 @@ export class GmNetcodePanel {
     for (const control of [
       this.email, this.password, this.signIn, this.createAccount, this.signOut, this.recentCampaigns, this.campaignIdInput, this.loadCampaignButton, this.createRoomButton, this.publishAllButton,
       this.portalPlayer, this.createPlayerLoginButton, this.copyPlayerLoginButton, this.openDiceTrayButton, this.diceRollButton,
+      this.diceClearButton,
     ]) control.disabled = !enabled;
   }
 
@@ -254,6 +258,7 @@ export class GmNetcodePanel {
         this.createPlayerLoginButton.disabled = true;
         this.openDiceTrayButton.disabled = true;
         this.diceRollButton.disabled = true;
+        this.diceClearButton.disabled = true;
         return;
       }
       this.userId = session.user.id;
@@ -278,6 +283,7 @@ export class GmNetcodePanel {
       if (room === null) {
         this.openDiceTrayButton.disabled = true;
         this.diceRollButton.disabled = true;
+        this.diceClearButton.disabled = true;
         this.setStatus('SIGNED IN', 'Create a private room. Future local changes will synchronize automatically.');
         return;
       }
@@ -710,6 +716,19 @@ export class GmNetcodePanel {
       },
       onConnection: (state, detail) => this.setStatus(state === 'online' ? 'ROOM LIVE' : state.toLocaleUpperCase(), detail),
       onEvent: (event) => {
+        if (event.event_type === 'history.dice.clear') {
+          this.diceEvents = [event, ...this.diceEvents.filter((item) => item.event_type !== 'command.dice.roll')].slice(0, 100);
+          this.commands = this.commands.filter((command) => command.kind !== 'dice.roll');
+          this.diceRolls = [];
+          this.renderDiceTray();
+          this.renderCommands();
+          return;
+        }
+        if (event.event_type === 'history.messages.clear') {
+          this.commands = this.commands.filter((command) => command.kind !== 'message.send');
+          this.renderCommands();
+          return;
+        }
         if (event.event_type !== 'command.dice.roll') return;
         this.diceEvents = [event, ...this.diceEvents.filter((item) => item.id !== event.id)].slice(0, 100);
         this.ingestDiceRoll(event.safe_payload.diceRoll, true);
@@ -781,6 +800,12 @@ export class GmNetcodePanel {
 
 
   private rebuildDiceRolls(): void {
+    const clearedAt = this.diceEvents
+      .filter((event) => event.event_type === 'history.dice.clear')
+      .reduce<number | null>((latest, event) => {
+        const timestamp = Date.parse(event.occurred_at);
+        return Number.isFinite(timestamp) && (latest === null || timestamp > latest) ? timestamp : latest;
+      }, null);
     const candidates: unknown[] = [];
     for (const event of this.diceEvents) candidates.push(event.safe_payload.diceRoll);
     for (const command of this.commands) {
@@ -796,6 +821,7 @@ export class GmNetcodePanel {
       if (roll !== null && !unique.has(roll.id)) unique.set(roll.id, roll);
     }
     this.diceRolls = [...unique.values()]
+      .filter((roll) => clearedAt === null || Date.parse(roll.rolledAt) > clearedAt)
       .sort((a, b) => Date.parse(b.rolledAt) - Date.parse(a.rolledAt))
       .slice(0, 100);
     this.renderDiceTray();
@@ -815,6 +841,7 @@ export class GmNetcodePanel {
   private renderDiceTray(): void {
     this.diceHistory.replaceChildren();
     const latest = this.diceRolls[0];
+    this.diceClearButton.disabled = this.roomId === null || latest === undefined;
     if (latest === undefined) {
       const empty = document.createElement('span');
       empty.textContent = 'No party rolls yet.';
@@ -892,6 +919,35 @@ export class GmNetcodePanel {
       this.fail(error);
     } finally {
       this.diceRollButton.disabled = this.roomId === null;
+    }
+  }
+
+  private async clearHostedHistory(history: 'messages' | 'dice', confirmAction: boolean): Promise<void> {
+    if (this.gateway === null || this.roomId === null) {
+      if (confirmAction) this.fail(new Error('Create or load the campaign room first.'));
+      return;
+    }
+    const label = history === 'dice' ? 'shared dice rolls' : 'campaign messages';
+    if (confirmAction && !window.confirm(`Clear all ${label} for the GM and every player? This cannot be undone.`)) return;
+    if (history === 'dice') this.diceClearButton.disabled = true;
+    this.setStatus('CLEARING HISTORY', `Removing ${label} from the hosted room.`);
+    try {
+      await this.gateway.clearCampaignHistory(this.roomId, history);
+      if (history === 'dice') {
+        this.commands = this.commands.filter((command) => command.kind !== 'dice.roll');
+        this.diceEvents = this.diceEvents.filter((event) => event.event_type !== 'command.dice.roll');
+        this.diceRolls = [];
+        this.renderDiceTray();
+      } else {
+        this.commands = this.commands.filter((command) => command.kind !== 'message.send');
+      }
+      this.renderCommands();
+      this.setStatus('ROOM LIVE', `${this.roomSummary()} · ${label} cleared`);
+      this.options.notify(`${history === 'dice' ? 'Dice roll' : 'Message'} history cleared for the campaign.`, 'success');
+    } catch (error) {
+      this.fail(error);
+    } finally {
+      if (history === 'dice') this.diceClearButton.disabled = this.roomId === null || this.diceRolls.length === 0;
     }
   }
 

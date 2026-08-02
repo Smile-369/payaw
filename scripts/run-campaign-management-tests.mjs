@@ -13,6 +13,7 @@ const html = readFileSync(join(projectPath, 'index.html'), 'utf8');
 const main = readFileSync(join(projectPath, 'src', 'EditorApplication.ts'), 'utf8');
 const campaignSystem = readFileSync(join(projectPath, 'src', 'campaign', 'CampaignSystem.ts'), 'utf8');
 const campaignStudio = readFileSync(join(projectPath, 'src', 'campaign', 'CampaignStudio.ts'), 'utf8');
+const projectSerialization = readFileSync(join(projectPath, 'src', 'project', 'ProjectSerialization.ts'), 'utf8');
 const dependencyLock = readFileSync(join(projectPath, 'pnpm-lock.yaml'), 'utf8');
 const worldSource = readFileSync(join(projectPath, 'src', 'engine', 'world', 'World.ts'), 'utf8');
 
@@ -23,6 +24,7 @@ for (const id of [
   'campaign-information-list', 'campaign-message-list', 'campaign-session-list', 'campaign-checkpoint-list',
   'campaign-search', 'campaign-reference-health', 'campaign-checklist-list', 'campaign-export', 'campaign-import-file',
   'campaign-asset-list', 'campaign-register-asset', 'campaign-timezone', 'campaign-message-schedule',
+  'campaign-clear-messages',
 ]) assert(html.includes(`id="${id}"`), `Milestone 20 UI element missing: ${id}`);
 
 for (const feature of [
@@ -30,13 +32,14 @@ for (const feature of [
   'previewCampaignTimeAdvance', 'triggerTimelineEvent', 'revealCampaignEntity', 'createCheckpoint',
   'searchCampaign', 'campaignBacklinks', 'validateCampaignReferences', 'normalizeCampaignState',
   'createAsset', 'setCampaignTimezone', 'setCampaignNoteCompleted', 'createCampaignExport',
+  'clearCampaignMessages',
 ]) assert(campaignSystem.includes(feature), `Campaign domain feature missing: ${feature}`);
 
 for (const feature of ['Scene Director', 'refreshExternalReferences', 'onActiveSceneChange', 'onTimeChange', 'onWeatherChange']) {
   assert(campaignStudio.includes(feature) || html.includes(feature), `Campaign Studio integration missing: ${feature}`);
 }
 
-assert(main.includes('campaign: campaignState'), 'Project export/autosave does not include the campaign container.');
+assert(projectSerialization.includes('campaign: state.campaign'), 'Project export/autosave does not include the campaign container.');
 assert(main.includes('pendingImportedCampaign'), 'Project import does not restore campaign state.');
 assert(main.includes('syncCampaignScenePlacement'), 'Active scenes do not stage NPCs without overwriting schedules.');
 assert(main.includes("weather === 'auto' ? null"), 'Campaign automatic weather is not synchronized safely.');

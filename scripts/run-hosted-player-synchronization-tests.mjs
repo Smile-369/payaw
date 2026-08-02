@@ -20,10 +20,11 @@ const networkBootstrap = read('src', 'netcode', 'NetworkPlayerBootstrap.ts');
 const session = read('src', 'netcode', 'PlayerNetworkSession.ts');
 const diceBanner = read('src', 'netcode', 'DiceRollBanner.ts');
 const gmPanel = read('src', 'netcode', 'GmNetcodePanel.ts');
-const migration = read('supabase', 'migrations', '202607230001_milestone_23_netcode.sql');
+const migration = read('supabase', 'migrations', '202607230001_hosted_campaign_netcode.sql');
 const atomicMigration = read('supabase', 'migrations', '202607230003_atomic_campaign_publish.sql');
 const portalMigration = read('supabase', 'migrations', '202607230006_player_portal_login.sql');
 const optimizationMigration = read('supabase', 'migrations', '202607260010_netcode_write_reduction.sql');
+const historyCleanupMigration = read('supabase', 'migrations', '202608020001_clear_campaign_history.sql');
 const edgeFunction = read('supabase', 'functions', 'campaign-command', 'index.ts');
 const envExample = read('.env.example');
 
@@ -35,6 +36,7 @@ for (const id of [
   'netcode-create-room', 'netcode-publish-all', 'netcode-portal-player',
   'netcode-create-player-login', 'netcode-copy-player-login', 'netcode-player-portal-url',
   'netcode-player-login-id', 'netcode-player-login-password', 'netcode-roster', 'netcode-commands',
+  'netcode-dice-clear',
 ]) assert(html.includes(`id="${id}"`), `Hosted-room control missing: ${id}`);
 for (const removedId of ['netcode-invite-player', 'netcode-create-invite', 'netcode-invite-link']) {
   assert(!html.includes(`id="${removedId}"`), `Legacy one-time invitation control remains: ${removedId}`);
@@ -96,6 +98,10 @@ for (const token of [
 assert(gateway.includes('publish_campaign_snapshot_optimized'), 'Gateway still uses the write-heavy snapshot RPC.');
 assert(gateway.includes("missingRpc(optimized.error, 'publish_campaign_snapshot_optimized')") && gateway.includes("this.client.rpc('publish_campaign_snapshot', parameters)"), 'Schema-cache compatibility fallback for snapshot publishing is missing.');
 assert(gateway.includes('prune_campaign_netcode_history'), 'Transport-history retention cleanup is not connected.');
+assert(gateway.includes('clear_campaign_room_history'), 'GM history cleanup is not connected.');
+for (const token of ['clear_campaign_room_history', 'history.messages.clear', 'history.dice.clear', 'GM_ROLE_REQUIRED']) {
+  assert(historyCleanupMigration.includes(token), `History cleanup migration is missing: ${token}`);
+}
 assert(!gateway.includes("{ event: '*', schema: 'public', table: 'campaign_commands'"), 'Command retention deletes still fan out through GM Realtime.');
 assert(edgeFunction.includes('record_campaign_dice_roll'), 'Dice rolls still fan out through player projection updates.');
 assert(edgeFunction.includes('finalize_campaign_projection_command'), 'Shared projection commands still use one PostgREST update per player.');

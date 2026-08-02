@@ -4,6 +4,7 @@ import {
   addMessageDraft,
   advanceCampaignTime,
   campaignBacklinks,
+  clearCampaignMessages,
   completeActiveScene,
   createAsset,
   createCampaign,
@@ -304,6 +305,7 @@ export class CampaignStudio {
     required<HTMLButtonElement>('#campaign-save-information').addEventListener('click', () => this.saveInformation());
     required<HTMLButtonElement>('#campaign-create-thread').addEventListener('click', () => this.createThread());
     required<HTMLButtonElement>('#campaign-save-message').addEventListener('click', () => this.saveMessage());
+    required<HTMLButtonElement>('#campaign-clear-messages').addEventListener('click', () => this.clearMessages());
     this.externalAsset.addEventListener('change', () => this.populateExternalAsset());
     required<HTMLButtonElement>('#campaign-register-asset').addEventListener('click', () => this.registerAsset());
     this.search.addEventListener('input', () => this.renderSearch());
@@ -533,6 +535,16 @@ export class CampaignStudio {
       if (draft !== undefined) { this.apply(sendCampaignMessage(this.stateValue, thread.id, draft.id), `Message sent in ${thread.name}.`); return; }
     }
     this.setFeedback('No draft message is ready to send.', 'warning');
+  }
+
+  private clearMessages(): void {
+    const messageCount = this.stateValue.messageThreads.reduce((total, thread) => total + thread.messages.length, 0);
+    const countLabel = messageCount === 0 ? 'all hosted campaign messages' : `all ${messageCount} campaign messages`;
+    if (!window.confirm(`Clear ${countLabel}? Thread names and settings will remain, but the message contents cannot be restored.`)) return;
+    const next = clearCampaignMessages(this.stateValue);
+    if (next === this.stateValue) this.setFeedback('Hosted message cleanup requested.');
+    else this.apply(next, 'Message history cleared.');
+    document.dispatchEvent(new CustomEvent('payaw:campaign-message-history-cleared'));
   }
 
   private toggleEncounter(): void {

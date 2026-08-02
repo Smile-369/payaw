@@ -71,6 +71,11 @@ function main(): void {
     },
   });
   assert(sharedMessage.messages[0]?.messages.some((message) => message.id === 'message:party'), 'Realtime party message was not merged.');
+  const clearedMessages = mergeSharedProjectionEvent(sharedMessage, 'history.messages.clear', { clearedAt: '2026-07-23T00:01:00.000Z' });
+  assert(clearedMessages.messages.every((thread) => thread.messages.length === 0), 'Realtime message-history cleanup was not applied.');
+  const projectionWithDice = parsePlayerProjection({ ...clearedMessages, diceRolls: hosted.diceRolls });
+  const clearedDice = mergeSharedProjectionEvent(projectionWithDice, 'history.dice.clear', { clearedAt: '2026-07-23T00:01:00.000Z' });
+  assert(clearedDice.diceRolls.length === 0, 'Realtime dice-history cleanup was not applied.');
   const deduplicated = mergeSharedProjectionEvent(sharedMessage, 'command.message.send', {
     threadId: 'thread:one',
     message: sharedMessage.messages[0]?.messages[0],
@@ -109,6 +114,7 @@ function main(): void {
     projectionMerge: true, staleKnowledgeRemoved: true, playerOwnedDataPreserved: true, eventBackedDice: true,
     monotonicRevision: true, offlineQueueAllowlist: true, configurablePlayerCount: true,
     denyByDefault: true, publicTownMapBaseline: true, realtimeCollaborationDelta: true,
+    realtimeHistoryCleanup: true,
   }, null, 2));
 }
 

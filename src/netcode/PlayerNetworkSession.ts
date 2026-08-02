@@ -215,13 +215,23 @@ export class PlayerNetworkSession {
   private async loadDiceHistory(): Promise<void> {
     try {
       const events = await this.gateway.diceEvents(this.campaignId, 30);
+      const clearedAt = events
+        .filter((event) => event.event_type === 'history.dice.clear')
+        .reduce<number | null>((latest, event) => {
+          const timestamp = Date.parse(event.occurred_at);
+          return Number.isFinite(timestamp) && (latest === null || timestamp > latest) ? timestamp : latest;
+        }, null);
       const rolls = events.flatMap((event) => {
+        if (event.event_type !== 'command.dice.roll') return [];
         const roll = parseSharedDiceRoll(event.safe_payload.diceRoll);
-        return roll === null ? [] : [roll];
+        return roll === null || (clearedAt !== null && Date.parse(roll.rolledAt) <= clearedAt) ? [] : [roll];
       });
-      if (rolls.length === 0) return;
+      if (rolls.length === 0 && clearedAt === null) return;
       const unique = new Map<string, SharedDiceRoll>();
-      for (const roll of [...rolls, ...this.projectionValue.diceRolls]) {
+      const retained = clearedAt === null
+        ? this.projectionValue.diceRolls
+        : this.projectionValue.diceRolls.filter((roll) => Date.parse(roll.rolledAt) > clearedAt);
+      for (const roll of [...rolls, ...retained]) {
         const parsed = parseSharedDiceRoll(roll);
         if (parsed !== null && !unique.has(parsed.id)) unique.set(parsed.id, parsed);
       }

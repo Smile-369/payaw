@@ -251,10 +251,18 @@ export class SupabaseGateway {
   public async diceEvents(campaignId: string, limit = 30): Promise<readonly CampaignEventRecord[]> {
     const { data, error } = await this.client.from('campaign_events')
       .select('sequence,id,campaign_id,audience,audience_user_id,event_type,revision,safe_payload,occurred_at')
-      .eq('campaign_id', campaignId).eq('event_type', 'command.dice.roll')
+      .eq('campaign_id', campaignId).in('event_type', ['command.dice.roll', 'history.dice.clear'])
       .order('sequence', { ascending: false }).limit(Math.max(1, Math.min(100, Math.round(limit))));
     if (error !== null) throw failure(error, 'Could not load the shared dice history.');
     return (data ?? []) as CampaignEventRecord[];
+  }
+
+  public async clearCampaignHistory(campaignId: string, history: 'messages' | 'dice'): Promise<void> {
+    const { error } = await this.client.rpc('clear_campaign_room_history', {
+      p_campaign_id: campaignId,
+      p_history: history,
+    });
+    if (error !== null) throw failure(error, `Could not clear the hosted ${history} history. Apply the latest Supabase migration first.`);
   }
 
   public async publishCampaignSnapshot(

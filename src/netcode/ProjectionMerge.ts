@@ -26,6 +26,20 @@ export function mergeSharedProjectionEvent(
   const payload = record(payloadValue);
   if (payload === null) return currentValue;
 
+  if (eventType === 'history.dice.clear') {
+    if (current.diceRolls.length === 0) return currentValue;
+    return parsePlayerProjection({ ...current, diceRolls: [], generatedAt: new Date().toISOString() });
+  }
+
+  if (eventType === 'history.messages.clear') {
+    if (current.messages.every((thread) => thread.messages.length === 0)) return currentValue;
+    return parsePlayerProjection({
+      ...current,
+      messages: current.messages.map((thread) => ({ ...thread, messages: [] })),
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
   if (eventType === 'command.map.ping') {
     const ping = record(payload.ping);
     if (ping === null || typeof ping.id !== 'string') return currentValue;

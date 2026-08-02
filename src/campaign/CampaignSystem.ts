@@ -700,6 +700,25 @@ export function sendCampaignMessage(state: CampaignState, threadId: string, mess
   });
 }
 
+export function clearCampaignMessages(state: CampaignState, actor = 'GM', timestamp: string | Date | number = new Date()): CampaignState {
+  const messageCount = state.messageThreads.reduce((total, thread) => total + thread.messages.length, 0);
+  if (messageCount === 0) return state;
+  const now = nowIso(timestamp);
+  return bump(
+    state,
+    actor,
+    'messages',
+    'clear-message-history',
+    `Cleared ${messageCount} message${messageCount === 1 ? '' : 's'} while retaining the campaign threads.`,
+    null,
+    now,
+    false,
+    {
+      messageThreads: state.messageThreads.map((thread) => ({ ...thread, messages: [], updatedAt: now })),
+    },
+  );
+}
+
 export function addCampaignNote(
   state: CampaignState,
   title: string,

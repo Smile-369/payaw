@@ -6,6 +6,7 @@ import {
   advanceCampaignTime,
   campaignBacklinks,
   campaignExportManifest,
+  clearCampaignMessages,
   createAsset,
   createCampaign,
   createCampaignExport,
@@ -211,6 +212,10 @@ function main(): void {
   assert(manifest.entityCounts.scenes === 2, 'Campaign export manifest scene count is wrong.');
   const exported = createCampaignExport(normalized, '2026-07-24T15:00:00.000Z');
   assert(exported.format === 'payaw-campaign', 'Standalone campaign export format is missing.');
+  const clearedMessages = clearCampaignMessages(normalized, 'GM', '2026-07-24T15:05:00.000Z');
+  assert(clearedMessages.messageThreads.length === normalized.messageThreads.length, 'Clearing messages removed the reusable thread shells.');
+  assert(clearedMessages.messageThreads.every((item) => item.messages.length === 0), 'Campaign message history was not cleared.');
+  assert(clearedMessages.activityLog[0]?.action === 'clear-message-history', 'Message cleanup was not recorded in campaign history.');
 
   console.log(JSON.stringify({
     schemaVersion: normalized.schemaVersion,
@@ -225,6 +230,7 @@ function main(): void {
     activityRecords: normalized.activityLog.length,
     eventIdempotency: true,
     referenceHealth: issues.length,
+    messageHistoryCleanup: true,
   }, null, 2));
 }
 
