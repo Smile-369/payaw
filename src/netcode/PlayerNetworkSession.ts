@@ -6,6 +6,7 @@ import { parseSharedDiceRoll, type SharedDiceRoll } from './DiceRollBanner';
 import { mergeSharedProjectionEvent } from './ProjectionMerge';
 
 const QUEUE_LIMIT = 100;
+const RECONCILE_INTERVAL_MS = 15_000;
 
 function commandId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(16).padStart(12, '0')}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`;
@@ -24,6 +25,9 @@ export class PlayerNetworkSession {
   private readonly diceRollListeners = new Set<(roll: SharedDiceRoll) => void>();
   private unsubscribeRealtime: (() => void) | null = null;
   private retryTimer: number | null = null;
+  private reconcileTimer: number | null = null;
+  private reconcilePromise: Promise<void> | null = null;
+  private flushPromise: Promise<void> | null = null;
   private diceHistoryPromise: Promise<void> | null = null;
   private queue: QueuedPlayerCommand[];
   private readonly queueKey: string;
@@ -96,8 +100,16 @@ export class PlayerNetworkSession {
     this.setConnection('connecting', 'Joining the private campaign channel…');
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
+    window.addEventListener('pageshow', this.handlePageShow);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    this.reconcileTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && this.queue.length === 0) {
+        void this.reconcileProjection().catch(() => undefined);
+      }
+    }, RECONCILE_INTERVAL_MS);
     try {
       await this.connectRealtime();
+      await this.reconcileAndFlush();
       await this.hydrateDiceHistory();
     } catch {
       this.setConnection('offline', 'Offline cache opened. Live updates will resume when the connection returns.');
@@ -107,8 +119,12 @@ export class PlayerNetworkSession {
   public stop(): void {
     this.unsubscribeRealtime?.(); this.unsubscribeRealtime = null;
     if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    if (this.reconcileTimer !== null) window.clearInterval(this.reconcileTimer);
+    this.reconcileTimer = null;
     window.removeEventListener('online', this.handleOnline);
     window.removeEventListener('offline', this.handleOffline);
+    window.removeEventListener('pageshow', this.handlePageShow);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
   }
 
   public async submit(command: PlayerCommand): Promise<PlayerProjection> {
@@ -148,12 +164,18 @@ export class PlayerNetworkSession {
     this.setConnection('reconnecting', 'Network returned; reconnecting safely…');
     void this.connectRealtime().then(async () => {
       await this.hydrateDiceHistory();
-      await this.flushQueue();
+      await this.reconcileAndFlush();
     }).catch(() => {
       this.setConnection('offline', 'Could not reconnect yet. Your cached view remains available.');
     });
   };
   private readonly handleOffline = (): void => this.setConnection('offline', 'Offline. Safe notes and character edits can still be queued.');
+  private readonly handlePageShow = (): void => {
+    if (navigator.onLine) void this.reconcileAndFlush();
+  };
+  private readonly handleVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible' && navigator.onLine) void this.reconcileAndFlush();
+  };
 
   private async connectRealtime(): Promise<void> {
     this.unsubscribeRealtime?.();
@@ -163,7 +185,7 @@ export class PlayerNetworkSession {
         this.setConnection(state, detail);
         if (state === 'online') {
           void this.hydrateDiceHistory();
-          void this.flushQueue();
+          void this.reconcileAndFlush();
         }
       },
       onEvent: (event) => {
@@ -179,6 +201,35 @@ export class PlayerNetworkSession {
         this.emitProjection();
       },
     });
+  }
+
+  private async reconcileAndFlush(): Promise<void> {
+    try {
+      if (this.queue.length > 0) await this.flushQueue();
+      if (this.queue.length === 0) await this.reconcileProjection();
+    } catch {
+      if (!navigator.onLine) this.setConnection('offline', 'Offline cache opened. Live updates will resume when the connection returns.');
+    }
+  }
+
+  /**
+   * Realtime is the fast path, but mobile browsers can suspend a channel or
+   * miss a row update while waking. Periodically replace the local view with
+   * the assigned authoritative slot, then replay any durable queued commands.
+   */
+  private async reconcileProjection(): Promise<void> {
+    if (!navigator.onLine) return;
+    if (this.reconcilePromise !== null) return this.reconcilePromise;
+    const operation = this.gateway.assignedSlot(this.campaignId, this.userId).then((slot) => {
+      if (slot.source_player_id !== this.presence.sourcePlayerId) throw new Error('PLAYER_PORTAL_SLOT_CHANGED');
+      this.acceptSnapshot(slot.projection);
+    });
+    this.reconcilePromise = operation;
+    try {
+      await operation;
+    } finally {
+      if (this.reconcilePromise === operation) this.reconcilePromise = null;
+    }
   }
 
   private acceptSnapshot(value: PlayerProjection): void {
@@ -264,6 +315,17 @@ export class PlayerNetworkSession {
   }
 
   private async flushQueue(): Promise<void> {
+    if (this.flushPromise !== null) return this.flushPromise;
+    const operation = this.drainQueue();
+    this.flushPromise = operation;
+    try {
+      await operation;
+    } finally {
+      if (this.flushPromise === operation) this.flushPromise = null;
+    }
+  }
+
+  private async drainQueue(): Promise<void> {
     if (!navigator.onLine || this.queue.length === 0) { this.updatePending(); return; }
     while (this.queue.length > 0 && navigator.onLine) {
       const next = this.queue[0];

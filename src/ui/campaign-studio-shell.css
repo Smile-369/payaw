@@ -1119,3 +1119,237 @@ body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-templa
   .netcode-dice-form { grid-template-columns: 1fr; }
   .netcode-dice-form button { width: 100%; }
 }
+
+/* Phone layout: map-first GM workspace with tools in a dismissible bottom sheet. */
+@media (max-width: 759px) {
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .ms21-shell {
+    width: 100%;
+    height: 100dvh;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    grid-template-rows: auto minmax(0, 1fr);
+    border: 0;
+    box-shadow: none;
+  }
+
+  .ms21-shell > .ms21-topbar {
+    display: grid;
+    grid-template-rows: 27px 46px;
+  }
+
+  .ms21-titlebar { min-width: 0; }
+  .ms21-brand { overflow: hidden; }
+  .ms21-brand > div { min-width: 0; }
+  .ms21-brand strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ms21-brand small,
+  .ms21-window-buttons,
+  .ms21-menubar,
+  .ms21-global-search { display: none; }
+
+  .ms21-commandbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px;
+    min-height: 46px;
+    padding: 4px;
+    overflow: hidden;
+  }
+
+  #ms21-workspace-slot .workspace-switcher {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
+    width: 100%;
+  }
+  #ms21-workspace-slot .workspace-tab {
+    width: auto;
+    min-width: 0;
+    min-height: 38px;
+    height: 38px;
+    padding: 3px 6px;
+  }
+  #ms21-workspace-slot .workspace-tab small { display: none; }
+
+  .ms21-top-actions { gap: 3px; }
+  .ms21-top-actions button {
+    min-width: 52px;
+    min-height: 38px;
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+  .ms21-top-actions #undo-button,
+  .ms21-top-actions #redo-button,
+  .ms21-top-actions #toggle-studio-dock-button { display: none; }
+
+  .ms21-shell > .ms21-body {
+    display: block;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #31566f;
+  }
+  .ms21-shell > .ms21-footer,
+  .ms21-narrow-screen { display: none !important; }
+
+  .ms21-center {
+    position: absolute;
+    inset: 0 0 calc(62px + env(safe-area-inset-bottom));
+    min-width: 0;
+    min-height: 0;
+    border-width: 1px;
+  }
+  .ms21-center .viewport-shell,
+  .ms21-center #world-canvas {
+    width: 100%;
+    height: 100%;
+  }
+  .ms21-center .map-toolbar {
+    top: 5px;
+    right: 5px;
+    left: 5px;
+    width: auto;
+    min-height: 42px;
+    gap: 4px;
+    padding: 4px;
+    overflow: hidden;
+  }
+  .ms21-center .map-toolbar > div:nth-child(2),
+  .ms21-center .map-toolbar #toggle-left-panel-button,
+  .ms21-center .map-toolbar #undo-button,
+  .ms21-center .map-toolbar #redo-button,
+  .ms21-center .map-toolbar #toolbar-edit-button,
+  .ms21-center .map-toolbar [data-open-authoring],
+  .ms21-center .map-toolbar #command-palette-button,
+  .ms21-center .map-toolbar #toggle-studio-dock-button,
+  .ms21-center .map-toolbar .realtime-clock { display: none !important; }
+  .ms21-center .map-toolbar .toolbar-actions {
+    min-width: 0;
+    flex: 1;
+    justify-content: flex-end;
+    overflow: hidden;
+  }
+  .ms21-center .map-toolbar .toolbar-actions button {
+    min-width: 0;
+    min-height: 34px;
+    padding: 4px 7px;
+  }
+  .ms21-center .cursor-readout,
+  .ms21-center .studio-statusbar,
+  .ms21-center .minimap-panel { display: none !important; }
+
+  .ms21-nav-rail {
+    z-index: 70;
+    display: flex;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: calc(62px + env(safe-area-inset-bottom));
+    min-height: 0;
+    gap: 3px;
+    padding: 3px 4px env(safe-area-inset-bottom);
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-width: 2px 0 0;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .ms21-nav-rail::-webkit-scrollbar { display: none; }
+  .ms21-rail-button {
+    flex: 0 0 64px;
+    width: 64px;
+    min-height: 54px;
+    height: 54px;
+    margin: 0;
+    padding: 3px 2px;
+    scroll-snap-align: start;
+  }
+  .ms21-rail-button > span { font-size: 17px; }
+  .ms21-rail-button small { font-size: 8px; }
+
+  .ms21-tool-drawer,
+  body[data-left-panel="closed"] .ms21-tool-drawer:not(.collapsed) {
+    z-index: 65;
+    display: grid;
+    position: absolute;
+    right: 0;
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    left: 0;
+    width: 100% !important;
+    height: min(72dvh, 620px);
+    grid-template-rows: 44px minmax(0, 1fr);
+    overflow: hidden;
+    border: 2px outset #fff;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, .38);
+  }
+  .ms21-tool-drawer.collapsed,
+  body[data-left-panel="closed"] .ms21-tool-drawer.collapsed {
+    display: none;
+    width: 0 !important;
+    height: 0;
+    border: 0;
+  }
+  body[data-left-panel="closed"] .ms21-tool-drawer:not(.collapsed) > .ms21-drawer-header { display: flex; }
+  body[data-left-panel="closed"] .ms21-tool-drawer:not(.collapsed) > #control-panel { display: block; }
+  .ms21-drawer-header { min-height: 44px; padding: 4px 7px; }
+  .ms21-drawer-header button {
+    width: 40px;
+    min-width: 40px;
+    min-height: 36px;
+    font-size: 18px;
+  }
+  #control-panel {
+    padding: 7px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  #control-panel button,
+  #control-panel select,
+  #control-panel input:not([type="checkbox"]):not([type="radio"]),
+  #control-panel .file-button {
+    min-height: 42px;
+  }
+  #control-panel .button-row > button { flex-basis: 132px; }
+  #control-panel .schedule-day-tabs button { min-height: 38px; }
+
+  .ms21-right-dock { display: none; }
+  body[data-studio-dock="open"] .ms21-right-dock {
+    z-index: 80;
+    display: block;
+    position: absolute;
+    inset: 0 0 calc(62px + env(safe-area-inset-bottom));
+    width: 100%;
+    height: auto;
+    overflow: hidden;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, .4);
+  }
+  body[data-studio-dock="closed"] .ms21-right-dock { display: none; }
+  .ms21-right-dock .studio-dock-header { min-height: 44px; }
+  .ms21-right-dock .studio-dock-header button,
+  .ms21-right-dock .studio-dock-tabs button { min-height: 40px; }
+
+  .command-palette {
+    width: calc(100vw - 12px);
+    max-height: calc(100dvh - 24px);
+  }
+  .netcode-dice-dialog { padding: 6px; }
+  .netcode-dice-panel {
+    width: 100%;
+    max-height: calc(100dvh - 12px);
+  }
+}

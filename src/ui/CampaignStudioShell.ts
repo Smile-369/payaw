@@ -319,16 +319,7 @@ export function installCampaignStudioShell(): void {
       <p>Keep a recent project export as your portable backup. Player credentials and hosted-room controls are under CAMPAIGN → Players.</p>
     </div>`;
 
-  const narrowScreen = document.createElement('main');
-  narrowScreen.className = 'ms21-narrow-screen';
-  narrowScreen.innerHTML = `
-    <section>
-      <span class="ms21-app-icon" aria-hidden="true">P</span>
-      <h1>Open PAYAW Campaign Studio on a wider screen</h1>
-      <p>The GM workspace is designed for a desktop or tablet at least 760 pixels wide. The Player Portal remains available on phones.</p>
-    </section>`;
-
-  shell.append(topbar, body, footer, helpDialog, narrowScreen);
+  shell.append(topbar, body, footer, helpDialog);
   app.replaceWith(shell);
 
   requireElement<HTMLElement>('#ms21-workspace-slot').append(workspaceSwitcher);
@@ -505,4 +496,5 @@ export function installCampaignStudioShell(): void {
 
   const initialWorkspace: Workspace = localStorage.getItem('payaw.workspace.v1') === 'dm' ? 'dm' : 'editor';
   applyPanel(initialWorkspace, activePanels[initialWorkspace]);
+  if (window.matchMedia('(max-width: 759px)').matches) drawer.classList.add('collapsed');
 }

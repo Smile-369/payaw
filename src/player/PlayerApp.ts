@@ -613,6 +613,22 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
   let pointerTravel = 0;
   let lastPointerX = 0;
   let lastPointerY = 0;
+  const touchPoints = new Map<number, { readonly x: number; readonly y: number }>();
+  let pinchingMap = false;
+  let pinchDistance = 0;
+  let pinchMidpoint = { x: 0, y: 0 };
+  let ignoreNextMapClick = false;
+  const touchGeometry = (): { readonly distance: number; readonly x: number; readonly y: number } | null => {
+    const points = [...touchPoints.values()];
+    const first = points[0];
+    const second = points[1];
+    if (first === undefined || second === undefined) return null;
+    return {
+      distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+      x: (first.x + second.x) / 2,
+      y: (first.y + second.y) / 2,
+    };
+  };
   const renderCurrentMap = (): void => {
     const viewport = playerMapViewports.get(canvas);
     if (viewport === undefined) return;
@@ -664,6 +680,20 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
   });
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
+    if (event.pointerType === 'touch') {
+      touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touchPoints.size === 2) {
+        const geometry = touchGeometry();
+        pinchingMap = true;
+        draggingMap = false;
+        pointerTravel = 6;
+        ignoreNextMapClick = true;
+        pinchDistance = geometry?.distance ?? 1;
+        pinchMidpoint = geometry === null ? { x: event.clientX, y: event.clientY } : { x: geometry.x, y: geometry.y };
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
+    }
     draggingMap = true;
     pointerTravel = 0;
     lastPointerX = event.clientX;
@@ -671,6 +701,25 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch' && touchPoints.has(event.pointerId)) {
+      touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pinchingMap) {
+        const geometry = touchGeometry();
+        const viewport = playerMapViewports.get(canvas);
+        if (geometry === null || viewport === undefined) return;
+        const rect = canvas.getBoundingClientRect();
+        viewport.camera.pan(geometry.x - pinchMidpoint.x, geometry.y - pinchMidpoint.y);
+        viewport.camera.zoomAt(
+          geometry.x - rect.left,
+          geometry.y - rect.top,
+          geometry.distance / pinchDistance,
+        );
+        pinchDistance = geometry.distance;
+        pinchMidpoint = { x: geometry.x, y: geometry.y };
+        renderPlayerMapViewport(canvas);
+        return;
+      }
+    }
     if (!draggingMap) return;
     const deltaX = event.clientX - lastPointerX;
     const deltaY = event.clientY - lastPointerY;
@@ -683,6 +732,14 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
     renderPlayerMapViewport(canvas);
   });
   const endMapDrag = (event: PointerEvent): void => {
+    if (event.pointerType === 'touch') {
+      touchPoints.delete(event.pointerId);
+      if (pinchingMap) {
+        if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+        if (touchPoints.size === 0) pinchingMap = false;
+        return;
+      }
+    }
     draggingMap = false;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   };
@@ -715,6 +772,10 @@ function renderMap(projection: PlayerProjection, onCommand: PlayerCommandHandler
   });
   canvas.addEventListener('dblclick', () => fitPlayerMapViewport(canvas));
   canvas.addEventListener('click', (event) => {
+    if (ignoreNextMapClick) {
+      ignoreNextMapClick = false;
+      return;
+    }
     if (pointerTravel > 5) return;
     const rect = canvas.getBoundingClientRect();
     const base = projection.map.base;

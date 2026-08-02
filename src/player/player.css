@@ -2045,3 +2045,144 @@ textarea {
     max-height: calc(100vh - 12px);
   }
 }
+
+/* Phone polish: compact chrome, full-height map, safe-area navigation, and touch-sized controls. */
+@media (max-width: 640px) {
+  html,
+  body,
+  #app { height: 100dvh; }
+
+  body.player-view-body {
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .player-shell {
+    height: 100dvh;
+    grid-template-rows: 50px minmax(0, 1fr) calc(62px + env(safe-area-inset-bottom));
+  }
+  .player-header {
+    min-width: 0;
+    gap: 4px;
+    padding: 4px 5px;
+  }
+  .player-brand {
+    min-width: 0;
+    padding: 2px 4px;
+    overflow: hidden;
+  }
+  .player-brand-mark {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    font-size: 17px;
+  }
+  .player-brand-copy strong {
+    max-width: 42vw;
+    font-size: 10px;
+  }
+  .player-header-actions { min-width: 0; gap: 3px; }
+  .player-header-account,
+  .player-header-sign-out {
+    min-width: 0;
+    min-height: 36px;
+    padding: 3px 6px;
+    font-size: 9px;
+  }
+
+  .player-main {
+    height: 100%;
+    min-height: 0;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .player-layout {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .player-content { padding: 6px 5px 12px; }
+  .player-page-header {
+    gap: 4px;
+    margin-bottom: 6px;
+    padding: 5px 6px;
+  }
+  .player-page-header h1 { font-size: 20px; }
+  .player-page-header > span { font-size: 10px; }
+  .player-grid { gap: 6px; }
+  .player-card { padding: 9px; }
+  .player-card-head { margin-bottom: 8px; }
+  .player-scene-hero { padding: 16px 12px; }
+  .player-scene-hero h2 { font-size: 29px; }
+
+  .player-map-toolbar {
+    display: grid;
+    gap: 6px;
+    padding: 6px;
+  }
+  .player-map-toolbar-controls {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    width: 100%;
+  }
+  .player-map-toolbar-controls > select:first-child,
+  .player-map-toolbar-controls > .player-map-layer-menu { grid-column: span 2; }
+  .player-map-toolbar-controls > input {
+    grid-column: 1 / span 3;
+    width: 100%;
+  }
+  .player-map-toolbar-controls > button:last-child { grid-column: 4; }
+  .player-map-toolbar-controls select,
+  .player-map-toolbar-controls input,
+  .player-map-toolbar-controls button,
+  .player-map-layer-menu > summary {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+  }
+  .player-map-layer-list {
+    position: fixed;
+    top: 102px;
+    right: 6px;
+    left: 6px;
+    width: auto;
+    max-height: calc(100dvh - 184px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .player-map-layer-list label { min-height: 38px; }
+  .player-map-stage {
+    height: clamp(360px, calc(100dvh - 250px), 620px);
+    min-height: 360px;
+    aspect-ratio: auto;
+  }
+  .player-map-status { bottom: 6px; left: 6px; max-width: calc(100% - 12px); }
+  .player-map-legend { gap: 6px 10px; }
+
+  .player-nav {
+    height: calc(62px + env(safe-area-inset-bottom));
+    padding: 3px 4px env(safe-area-inset-bottom);
+  }
+  .player-nav button {
+    min-height: 54px;
+    height: 54px;
+  }
+
+  .player-utility-dialog {
+    place-items: end stretch;
+    padding: 0;
+  }
+  .player-utility-panel {
+    width: 100%;
+    max-height: calc(100dvh - 8px);
+    padding: 7px;
+  }
+  .player-utility-panel-head button { min-width: 42px; min-height: 40px; }
+  .player-mobile-menu-grid button { min-height: 58px; }
+  .player-form button { min-height: 42px; }
+  .player-list-item-actions { flex-wrap: wrap; }
+  .player-message { max-width: 94%; }
+  .player-message-thread-card > .player-thread { max-height: calc(100dvh - 330px); }
+}
