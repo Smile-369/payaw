@@ -18,6 +18,7 @@ import type {
   PresenceRecord,
 } from './NetcodeTypes';
 import { parseSharedDiceRoll, showDiceRollBanner, type SharedDiceRoll } from './DiceRollBanner';
+import { formatDiceResults, formatDiceSummary } from './DiceRollPresentation';
 
 export interface GmNetcodePanelOptions {
   readonly getContext: () => Omit<PlayerProjectionContext, 'playerView' | 'viewerId'>;
@@ -827,18 +828,18 @@ export class GmNetcodePanel {
     }
 
     const latestTitle = document.createElement('strong');
-    latestTitle.textContent = `${latest.rollerUsername} rolled ${latest.total}`;
+    latestTitle.textContent = formatDiceResults(latest);
     const latestDetail = document.createElement('small');
-    latestDetail.textContent = `${latest.notation} · ${latest.values.join(' + ')}${latest.modifier === 0 ? '' : ` ${latest.modifier > 0 ? '+' : '-'} ${Math.abs(latest.modifier)}`}`;
+    latestDetail.textContent = formatDiceSummary(latest);
     this.diceResult.replaceChildren(latestTitle, latestDetail);
 
     for (const roll of this.diceRolls.slice(0, 30)) {
       const row = document.createElement('article');
       const copy = document.createElement('span');
       const title = document.createElement('strong');
-      title.textContent = `${roll.rollerUsername} rolled ${roll.total}`;
+      title.textContent = formatDiceResults(roll);
       const detail = document.createElement('small');
-      detail.textContent = `${roll.notation} · [${roll.values.join(', ')}]${roll.modifier === 0 ? '' : ` ${roll.modifier > 0 ? '+' : ''}${roll.modifier}`} · ${new Date(roll.rolledAt).toLocaleTimeString()}`;
+      detail.textContent = formatDiceSummary(roll, true);
       copy.append(title, detail);
       const badge = document.createElement('small');
       badge.className = 'player-card-badge';

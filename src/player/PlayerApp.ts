@@ -13,6 +13,7 @@ import {
 } from './PlayerProjection';
 import type { ConnectionSnapshot } from '../netcode/NetcodeTypes';
 import { parseSharedDiceRoll, showDiceRollBanner, type SharedDiceRoll } from '../netcode/DiceRollBanner';
+import { formatDiceResults, formatDiceSummary } from '../netcode/DiceRollPresentation';
 import { GenerationWorkerClient } from '../browser/GenerationWorkerClient';
 import { EMPTY_RENDER_CUSTOMIZATION } from '../customization/Customization';
 import { GenerationPipeline } from '../engine/generation/GenerationPipeline';
@@ -1701,14 +1702,14 @@ function createDiceDialog(getProjection: () => PlayerProjection, onCommand: Play
     for (const item of projection.diceRolls.slice(0, 12)) {
       const row = create('div', 'player-list-item');
       const copy = create('div');
-      appendText(copy, 'strong', `${item.rollerUsername} rolled ${item.total}`);
-      appendText(copy, 'p', `${item.notation} · [${item.values.join(', ')}]${item.modifier === 0 ? '' : ` ${item.modifier > 0 ? '+' : ''}${item.modifier}`} · ${new Date(item.rolledAt).toLocaleTimeString()}`);
+      appendText(copy, 'strong', formatDiceResults(item));
+      appendText(copy, 'p', formatDiceSummary(item, true));
       row.append(copy, create('span', 'player-card-badge', 'PARTY')); history.append(row);
     }
     const latest = projection.diceRolls[0];
     if (latest !== undefined) result.replaceChildren(
-      create('strong', '', `${latest.rollerUsername} rolled ${latest.total}`),
-      create('small', '', `${latest.notation} · ${latest.values.join(' + ')}${latest.modifier === 0 ? '' : ` ${latest.modifier > 0 ? '+' : ''} ${latest.modifier}`}`),
+      create('strong', '', formatDiceResults(latest)),
+      create('small', '', formatDiceSummary(latest)),
     );
   };
   form.addEventListener('submit', (event) => { event.preventDefault(); onCommand({ kind: 'dice.roll', notation: notation.value, visibility: 'party' }); });
