@@ -52,6 +52,8 @@ export function serializePortableProject(state: ProjectSerializationState): Reco
     blockNames: state.blockNames,
     labelDisplay: state.labelDisplay,
     customStoryPoints: state.customStoryPoints,
+    // Keep authored NPCs and generated-NPC edits, but not the generated roster cache.
+    npcLocationAuthoring: state.npcLocationAuthoring,
     campaign: state.campaign,
     playerView: state.playerView,
     simulation: state.simulation,

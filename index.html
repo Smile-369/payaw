@@ -688,7 +688,8 @@
 <button id="npc-export-group" type="button">Export NPC group</button>
 <label class="file-button">Import NPC JSON<input accept=".json,application/json" hidden id="npc-import-file" type="file"/></label>
 </div>
-<p class="helper-text npc-json-help">Group export uses the current search results, or the entire roster when no search is active. NPC JSON is separate from World JSON.</p>
+<label class="check-row"><input checked id="npc-json-include-schedules" type="checkbox"/><span>Include weekly schedules in NPC exports</span></label>
+<p class="helper-text npc-json-help">Import accepts a PAYAW bundle, one NPC object, or an array of NPCs. Weekly schedules are optional. Group export uses the current search results, or the entire roster when no search is active.</p>
 <div class="npc-list" id="npc-list"></div>
 
 <section class="authoring-section npc-editor-section">
@@ -795,7 +796,7 @@
 <div class="project-json-panel" id="project-json-dropzone">
 <div>
 <strong>Project JSON</strong>
-<p class="helper-text">Export a compact reproducible project recipe, or import a PAYAW project/world JSON. Generated world caches and NPC records are excluded; move NPCs separately from the NPC Generator.</p>
+<p class="helper-text">Export a compact reproducible project recipe, or import a PAYAW project/world JSON. Authored NPCs and NPC edits are saved; only the reproducible generated roster cache is excluded. NPC JSON remains available for moving NPCs between worlds.</p>
 </div>
 <div class="button-row">
 <button id="export-button" type="button">Export Compact World JSON</button>

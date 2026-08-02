@@ -26,7 +26,7 @@ interface NpcJsonDependencies {
 export class NpcJsonController {
   public constructor(private readonly dependencies: NpcJsonDependencies) {}
 
-  public download(npcs: readonly NPC[], name: string): void {
+  public download(npcs: readonly NPC[], name: string, includeWeeklySchedule = true): void {
     const { session } = this.dependencies;
     if (npcs.length === 0) {
       this.dependencies.setStatus('No NPCs are available for export.', 'warning');
@@ -39,6 +39,7 @@ export class NpcJsonController {
         { seed: session.world.seed, generationVersion: session.world.metadata.generationVersion },
         name,
         (key) => this.allowNonResidentialHome(key),
+        includeWeeklySchedule,
       ),
       (settlementId) => session.world.settlements.find((settlement) => settlement.id === settlementId)?.name ?? '',
     );
@@ -118,7 +119,7 @@ export class NpcJsonController {
       ? undefined
       : scheduleLocationFromRef(session.world, session.authoringLayer, `building:${homeBuildingId}`, 'Imported NPC home');
     const fallbackTileIndex = home?.tileIndex ?? settlement?.tileIndex ?? 0;
-    return record.weeklySchedule.map((entry) => {
+    return (record.weeklySchedule ?? []).map((entry) => {
       const resolved = sameWorld
         ? scheduleLocationFromRef(session.world, session.authoringLayer, entry.location.ref, entry.location.label)
         : undefined;

@@ -179,6 +179,7 @@ export const npcList = requireElement<HTMLElement>('#npc-list');
 export const npcCreateButton = requireElement<HTMLButtonElement>('#npc-create-button');
 export const npcExportSelected = requireElement<HTMLButtonElement>('#npc-export-selected');
 export const npcExportGroup = requireElement<HTMLButtonElement>('#npc-export-group');
+export const npcJsonIncludeSchedules = requireElement<HTMLInputElement>('#npc-json-include-schedules');
 export const npcImportFile = requireElement<HTMLInputElement>('#npc-import-file');
 export const npcEditorHeading = requireElement<HTMLElement>('#npc-editor-heading');
 export const npcEditName = requireElement<HTMLInputElement>('#npc-edit-name');
@@ -427,4 +428,3 @@ export const commandPaletteButton = requireElement<HTMLButtonElement>('#command-
 export const commandPaletteBackdrop = requireElement<HTMLElement>('#command-palette-backdrop');
 export const commandPaletteInput = requireElement<HTMLInputElement>('#command-palette-input');
 export const commandPaletteResults = requireElement<HTMLElement>('#command-palette-results');
-

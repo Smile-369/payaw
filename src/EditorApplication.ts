@@ -528,7 +528,7 @@ const npcController = new NpcController({
   renderList: () => renderNPCList(),
   toggleView: () => toggleNpcView(),
   filteredNpcs: () => filteredNpcs(),
-  downloadJson: (npcs, name) => npcJsonController.download(npcs, name),
+  downloadJson: (npcs, name, includeWeeklySchedule) => npcJsonController.download(npcs, name, includeWeeklySchedule),
   importJson: (file) => npcJsonController.importFile(file),
   renderSelectors: (npc) => npcEditorView.renderSelectors(npc),
   campaignLocations: () => npcEditorView.campaignLocations(),
@@ -1765,7 +1765,7 @@ function commandDefinitions(): CommandDefinition[] {
   return [
     { id: 'generate', label: 'Generate world', description: 'Regenerate using the current profile', shortcut: 'G', run: () => { void generateResponsive(session.customAnchors, session.builtInOverrides, true, true, true); } },
     { id: 'random-seed', label: 'Generate random world', description: 'Create a new random seed and keep active authoring', run: () => { seedInput.value = createCryptoSeed(); void generateResponsive(session.customAnchors, session.builtInOverrides, true, true, true); } },
-    { id: 'save-json', label: 'Save compact World JSON', description: 'Export the reproducible world recipe without generated caches or NPC records', shortcut: 'Ctrl+S', run: downloadWorld },
+    { id: 'save-json', label: 'Save compact World JSON', description: 'Export the reproducible world recipe and NPC edits without generated caches', shortcut: 'Ctrl+S', run: downloadWorld },
     { id: 'open-json', label: 'Open project JSON', description: 'Import a PAYAW project or override file', shortcut: 'Ctrl+O', run: () => projectImportFile.click() },
     { id: 'export-png', label: 'Export map PNG', description: 'Render the visible layer configuration', run: () => { void exportVisibleMapImage(); } },
     { id: 'fit', label: 'Fit entire world', description: 'Fit the regional map into the viewport', shortcut: 'F', run: fitCamera },

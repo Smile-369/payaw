@@ -27,7 +27,7 @@ export interface NpcControllerDependencies {
   readonly renderList: () => void;
   readonly toggleView: () => void;
   readonly filteredNpcs: () => readonly NPC[];
-  readonly downloadJson: (npcs: readonly NPC[], name: string) => void;
+  readonly downloadJson: (npcs: readonly NPC[], name: string, includeWeeklySchedule: boolean) => void;
   readonly importJson: (file: File) => Promise<void>;
   readonly renderSelectors: (npc: NPC | undefined) => void;
   readonly campaignLocations: () => readonly CampaignLocationOption[];
@@ -248,13 +248,14 @@ export class NpcController {
         this.dependencies.setStatus('Select an NPC before exporting it.', 'warning');
         return;
       }
-      this.dependencies.downloadJson([npc], npc.name);
+      this.dependencies.downloadJson([npc], npc.name, elements.npcJsonIncludeSchedules.checked);
     });
     elements.npcExportGroup.addEventListener('click', () => {
       const query = elements.npcSearch.value.trim();
       this.dependencies.downloadJson(
         this.dependencies.filteredNpcs(),
         query.length > 0 ? `${query} NPCs` : `${session.world.seed} NPC roster`,
+        elements.npcJsonIncludeSchedules.checked,
       );
     });
     elements.npcImportFile.addEventListener('change', () => {

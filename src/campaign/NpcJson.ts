@@ -36,7 +36,7 @@ export interface PortableNpcRecord {
   readonly homeBuildingId: number | null;
   readonly allowNonResidentialHome: boolean;
   readonly workplaceBuildingId: number | null;
-  readonly weeklySchedule: readonly NPCScheduleEntry[];
+  readonly weeklySchedule?: readonly NPCScheduleEntry[];
   readonly relationships: readonly PortableNpcRelationship[];
   readonly portraitDataUrl: string | null;
   readonly publicDescription: string;
@@ -112,7 +112,9 @@ function normalizePortableNpc(value: unknown): PortableNpcRecord | undefined {
     homeBuildingId: nullableInteger(item.homeBuildingId),
     allowNonResidentialHome: item.allowNonResidentialHome === true,
     workplaceBuildingId: nullableInteger(item.workplaceBuildingId),
-    weeklySchedule: normalizeScheduleEntries(item.weeklySchedule),
+    ...(Array.isArray(item.weeklySchedule)
+      ? { weeklySchedule: normalizeScheduleEntries(item.weeklySchedule) }
+      : {}),
     relationships: normalizePortableRelationships(item.relationships),
     portraitDataUrl: typeof item.portraitDataUrl === 'string' && item.portraitDataUrl.startsWith('data:image/')
       ? item.portraitDataUrl
@@ -129,6 +131,7 @@ export function createNpcJsonBundle(
   sourceWorld: NpcJsonBundle['sourceWorld'],
   name: string,
   allowNonResidentialHomeForKey: (key: string) => boolean = () => false,
+  includeWeeklySchedule = true,
 ): NpcJsonBundle {
   const keyById = new Map(allNpcs.map((npc) => [npc.id, npc.key]));
   const records = npcs.slice(0, MAX_IMPORTED_NPCS).map((npc): PortableNpcRecord => ({
@@ -147,7 +150,7 @@ export function createNpcJsonBundle(
     homeBuildingId: npc.homeBuildingId,
     allowNonResidentialHome: allowNonResidentialHomeForKey(npc.key),
     workplaceBuildingId: npc.workplaceBuildingId,
-    weeklySchedule: npc.weeklySchedule,
+    ...(includeWeeklySchedule ? { weeklySchedule: npc.weeklySchedule } : {}),
     relationships: npc.relationships.flatMap((relationship) => {
       const npcKey = keyById.get(relationship.npcId);
       if (npcKey === undefined) return [];
@@ -186,16 +189,26 @@ export function withSettlementNames(
 }
 
 export function parseNpcJsonBundle(value: unknown): NpcJsonBundle {
-  if (typeof value !== 'object' || value === null) throw new Error('The selected file is not an NPC JSON object.');
-  const root = value as Record<string, unknown>;
-  if (root.format !== NPC_JSON_FORMAT) throw new Error('Unsupported NPC JSON. Select a PAYAW NPC or NPC group export.');
-  const version = Number(root.version);
-  if (!Number.isInteger(version) || version < 1 || version > NPC_JSON_VERSION) {
-    throw new Error(`Unsupported NPC JSON version. This editor supports version ${NPC_JSON_VERSION}.`);
+  if ((typeof value !== 'object' || value === null) && !Array.isArray(value)) {
+    throw new Error('The selected file is not an NPC JSON object or array.');
   }
-  const npcs = Array.isArray(root.npcs)
-    ? root.npcs.flatMap((candidate) => normalizePortableNpc(candidate) ?? []).slice(0, MAX_IMPORTED_NPCS)
-    : [];
+  const root = Array.isArray(value) ? {} : value as Record<string, unknown>;
+  const isPayawBundle = root.format === NPC_JSON_FORMAT;
+  if (root.format !== undefined && !isPayawBundle) {
+    throw new Error('Unsupported NPC JSON. Select a PAYAW NPC export or a JSON NPC record.');
+  }
+  if (isPayawBundle) {
+    const version = Number(root.version);
+    if (!Number.isInteger(version) || version < 1 || version > NPC_JSON_VERSION) {
+      throw new Error(`Unsupported NPC JSON version. This editor supports version ${NPC_JSON_VERSION}.`);
+    }
+  }
+  const candidates = Array.isArray(value)
+    ? value
+    : Array.isArray(root.npcs)
+      ? root.npcs
+      : [root];
+  const npcs = candidates.flatMap((candidate) => normalizePortableNpc(candidate) ?? []).slice(0, MAX_IMPORTED_NPCS);
   if (npcs.length === 0) throw new Error('The NPC JSON does not contain any valid NPC records.');
   const source = typeof root.sourceWorld === 'object' && root.sourceWorld !== null
     ? root.sourceWorld as Record<string, unknown>
@@ -204,7 +217,9 @@ export function parseNpcJsonBundle(value: unknown): NpcJsonBundle {
     format: NPC_JSON_FORMAT,
     version: NPC_JSON_VERSION,
     kind: npcs.length === 1 ? 'npc' : 'group',
-    name: boundedText(root.name, 200) || (npcs.length === 1 ? npcs[0]?.name ?? 'NPC' : 'NPC group'),
+    name: isPayawBundle
+      ? boundedText(root.name, 200) || (npcs.length === 1 ? npcs[0]?.name ?? 'NPC' : 'NPC group')
+      : npcs.length === 1 ? npcs[0]?.name ?? 'NPC' : 'NPC group',
     exportedAt: typeof root.exportedAt === 'string' ? root.exportedAt : '',
     sourceWorld: {
       seed: boundedText(source.seed, 240),
