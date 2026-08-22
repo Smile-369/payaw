@@ -1120,6 +1120,89 @@ body[data-left-panel="closed"][data-studio-dock="open"] .ms21-body { grid-templa
   .netcode-dice-form button { width: 100%; }
 }
 
+/* GM-only hosted player profile viewer. */
+.netcode-profile-dialog {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  display: none;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.42) !important;
+}
+.netcode-profile-dialog[data-open="true"] { display: grid !important; }
+.netcode-profile-panel {
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  color: #111;
+  border: 2px solid #173f7b;
+  background: #c0c0c0 !important;
+  box-shadow: 0 0 0 1px #fff, 0 18px 60px rgba(0, 0, 0, 0.48);
+}
+.netcode-profile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  color: #fff;
+  background: linear-gradient(90deg, #143b7c, #3976b4) !important;
+}
+.netcode-profile-head > div { display: grid; gap: 2px; }
+.netcode-profile-head strong { font-size: 20px; }
+.netcode-profile-head small { color: rgba(255, 255, 255, 0.82); }
+.netcode-profile-head button { min-width: 38px; min-height: 34px; font-size: 18px; }
+.netcode-profile-body {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
+  padding: 10px;
+  background: #d4d0c8 !important;
+}
+.netcode-profile-hero {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid #777;
+  background: #fff;
+}
+.netcode-profile-portrait {
+  width: 112px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #777;
+  background: #e9e9e9;
+  font-size: 32px;
+  font-weight: 700;
+}
+.netcode-profile-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.netcode-profile-summary { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.netcode-profile-summary h2 { margin: 0; color: #143b7c; }
+.netcode-profile-summary p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.netcode-profile-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.netcode-profile-group { min-width: 0; padding: 9px; border: 1px solid #777; background: #fff; }
+.netcode-profile-group h3 { margin: 0 0 8px; color: #143b7c; font-size: 14px; }
+.netcode-profile-group dl { display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr); gap: 5px 9px; margin: 0; }
+.netcode-profile-group dt { color: #555; font-weight: 700; }
+.netcode-profile-group dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.netcode-profile-list { display: grid; gap: 6px; margin: 0; padding-left: 18px; }
+
+@media (max-width: 620px) {
+  .netcode-profile-dialog { padding: 6px; }
+  .netcode-profile-panel { width: 100%; max-height: calc(100dvh - 12px); }
+  .netcode-profile-hero { grid-template-columns: 74px minmax(0, 1fr); }
+  .netcode-profile-portrait { width: 74px; }
+  .netcode-profile-groups { grid-template-columns: 1fr; }
+}
+
 /* Phone layout: map-first GM workspace with tools in a dismissible bottom sheet. */
 @media (max-width: 759px) {
   html,

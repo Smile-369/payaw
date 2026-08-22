@@ -52,6 +52,21 @@ function failure(error: SupabaseErrorLike | null, fallback: string): Error {
   return new Error(parts.join(' | '), { cause: error });
 }
 
+async function edgeFunctionFailure(error: SupabaseErrorLike, fallback: string): Promise<Error> {
+  const context = (error as SupabaseErrorLike & { readonly context?: unknown }).context;
+  if (context instanceof Response) {
+    try {
+      const body: unknown = await context.clone().json();
+      if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string') {
+        return new Error(body.error, { cause: error });
+      }
+    } catch {
+      // Fall through to the structured Supabase error below.
+    }
+  }
+  return failure(error, fallback);
+}
+
 function uuid(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(16).padStart(12, '0')}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`;
 }
@@ -464,7 +479,7 @@ export class SupabaseGateway {
     const { data, error } = await this.client.functions.invoke('campaign-command', { body: {
       campaignId, idempotencyKey, kind: command.kind, payload: command, expectedRevision, offlineSafe,
     } });
-    if (error !== null) throw failure(error, 'The campaign command could not be processed.');
+    if (error !== null) throw await edgeFunctionFailure(error, 'The campaign command could not be processed.');
     if (data?.error !== undefined) throw new Error(String(data.error));
     const projection = data?.projection === undefined || data?.projection === null
       ? null
@@ -481,7 +496,7 @@ export class SupabaseGateway {
       expectedRevision: 0,
       offlineSafe: true,
     } });
-    if (error !== null) throw failure(error, 'The GM dice roll could not be processed.');
+    if (error !== null) throw await edgeFunctionFailure(error, 'The GM dice roll could not be processed.');
     if (data?.error !== undefined) throw new Error(String(data.error));
     return data?.diceRoll;
   }

@@ -23,6 +23,11 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+function waitForRevisionRetry(attempt: number): Promise<void> {
+  const delay = Math.min(800, 40 * 2 ** attempt) + Math.floor(Math.random() * 40);
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
+
 function record(value: unknown): JsonRecord {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('INVALID_PAYLOAD');
   return value as JsonRecord;
@@ -393,7 +398,8 @@ Deno.serve(async (request) => {
       || body.kind === 'character.sheet.update';
     const gmOnly = body.kind === 'message.send' && body.payload.privateToGm === true;
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const finalizeAttempts = 5;
+    for (let attempt = 0; attempt < finalizeAttempts; attempt += 1) {
       const slotQuery = service.from('campaign_player_slots')
         .select('source_player_id,assigned_user_id,revision,projection')
         .eq('campaign_id', body.campaignId);
@@ -437,10 +443,17 @@ Deno.serve(async (request) => {
         p_event_payload: eventDelta ?? {},
       });
       if (finalizeError !== null) {
+        if (finalizeError.code === '40001' && attempt < finalizeAttempts - 1) {
+          await waitForRevisionRetry(attempt);
+          continue;
+        }
         return json(finalizeError.code === '40001' ? 409 : finalizeError.code === '42501' ? 403 : 400, { error: finalizeError.message });
       }
       const result = record(finalized);
-      if (result.error === 'REVISION_CONFLICT' && attempt === 0) continue;
+      if (result.error === 'REVISION_CONFLICT' && attempt < finalizeAttempts - 1) {
+        await waitForRevisionRetry(attempt);
+        continue;
+      }
       if (typeof result.error === 'string') return json(result.error === 'REVISION_CONFLICT' ? 409 : 400, { error: result.error });
       return json(200, { command: result.command, projection: result.projection });
     }

@@ -16,6 +16,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isRevisionConflict(value: unknown): boolean {
+  const message = value instanceof Error ? value.message : String(value);
+  return message.includes('STALE_REVISION') || message.includes('REVISION_CONFLICT');
+}
+
 export class PlayerNetworkSession {
   public readonly mode = 'network' as const;
   private projectionValue: PlayerProjection;
@@ -151,6 +156,14 @@ export class PlayerNetworkSession {
       if (roll !== null) this.acceptDiceRoll(roll, true);
       return this.projectionValue;
     } catch (error) {
+      if (!offlineSafe && navigator.onLine && isRevisionConflict(error)) {
+        await this.reconcileProjection();
+        const result = await this.gateway.submitCommand(this.campaignId, submittedCommand, this.projectionValue.revision, false, queued.idempotencyKey);
+        if (result.projection !== null) this.acceptSnapshot(result.projection);
+        const roll = parseSharedDiceRoll(result.diceRoll);
+        if (roll !== null) this.acceptDiceRoll(roll, true);
+        return this.projectionValue;
+      }
       if (!offlineSafe) throw error;
       this.enqueue(queued);
       this.projectionValue = applyPlayerCommand(this.projectionValue, submittedCommand);

@@ -1,6 +1,7 @@
 import { createPlayerProjection, type PlayerProjectionContext } from '../player/ProjectionService';
 import { parsePlayerProjection } from '../player/PlayerProjection';
 import type { PlayerViewState } from '../player/PlayerViewState';
+import { readStoredCharacterSheet } from '../player/CharacterSheetImport';
 import { mergePlayerOwnedProjection } from './ProjectionMerge';
 import { readNetcodeConfig } from './NetcodeConfig';
 import {
@@ -44,6 +45,11 @@ function option(value: string, label: string): HTMLOptionElement {
 
 function cleanError(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
+}
+
+function waitForRevisionRetry(attempt: number): Promise<void> {
+  const delay = Math.min(1_000, 75 * 2 ** attempt) + Math.floor(Math.random() * 50);
+  return new Promise((resolve) => window.setTimeout(resolve, delay));
 }
 
 function isSchemaCacheError(value: unknown): boolean {
@@ -90,6 +96,10 @@ export class GmNetcodePanel {
   private readonly playerLoginPassword = element<HTMLInputElement>('#netcode-player-login-password');
   private readonly rosterElement = element<HTMLElement>('#netcode-roster');
   private readonly commandsElement = element<HTMLElement>('#netcode-commands');
+  private readonly profileDialog = element<HTMLElement>('#netcode-profile-dialog');
+  private readonly profileTitle = element<HTMLElement>('#netcode-profile-title');
+  private readonly profileBody = element<HTMLElement>('#netcode-profile-body');
+  private readonly profileClose = element<HTMLButtonElement>('#netcode-profile-close');
   private readonly openDiceTrayButton = element<HTMLButtonElement>('#netcode-open-dice-tray');
   private readonly diceDialog = element<HTMLElement>('#netcode-dice-dialog');
   private readonly diceClearButton = element<HTMLButtonElement>('#netcode-dice-clear');
@@ -123,12 +133,14 @@ export class GmNetcodePanel {
   private portalApiReady = true;
   private portalApiError: unknown = null;
   private readonly announcedCommandIds = new Set<string>();
+  private activeProfileSourcePlayerId: string | null = null;
 
   public constructor(private readonly options: GmNetcodePanelOptions) {
     // The tray is authored inside the Players workspace for maintainability, but it
     // must live directly under <body> at runtime. Leaving it inside the drawer traps
     // it in that drawer's stacking context, allowing the map and dock to paint above it.
     if (this.diceDialog.parentElement !== document.body) document.body.append(this.diceDialog);
+    if (this.profileDialog.parentElement !== document.body) document.body.append(this.profileDialog);
 
     this.signIn.addEventListener('click', () => void this.signInWithPassword());
     this.createAccount.addEventListener('click', () => void this.createPasswordAccount());
@@ -154,6 +166,13 @@ export class GmNetcodePanel {
     this.openDiceTrayButton.addEventListener('click', () => this.openDiceTray());
     this.diceClearButton.addEventListener('click', () => void this.clearHostedHistory('dice', true));
     this.diceCloseButton.addEventListener('click', () => this.closeDiceTray());
+    this.profileClose.addEventListener('click', () => this.closePlayerProfile());
+    this.profileDialog.addEventListener('click', (event) => {
+      if (event.target === this.profileDialog) this.closePlayerProfile();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.profileDialog.dataset.open === 'true') this.closePlayerProfile();
+    });
     this.diceDialog.addEventListener('click', (event) => {
       if (event.target === this.diceDialog) this.closeDiceTray();
     });
@@ -485,7 +504,8 @@ export class GmNetcodePanel {
     const context = await this.playerSafeContext();
     const authority = this.options.getAuthorityDocument();
     let existing = [...this.slots];
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const publishAttempts = 5;
+    for (let attempt = 0; attempt < publishAttempts; attempt += 1) {
       const slots: AtomicPlayerSlot[] = state.players.filter((candidate) => candidate.active).map((player) => {
         const generated = createPlayerProjection({ ...context, playerView: state, viewerId: player.id });
         const hosted = existing.find((slot) => slot.source_player_id === player.id);
@@ -507,7 +527,8 @@ export class GmNetcodePanel {
         );
         return { result, slots };
       } catch (error) {
-        if (attempt === 1 || !cleanError(error).includes('SNAPSHOT_CONFLICT')) throw error;
+        if (attempt === publishAttempts - 1 || !cleanError(error).includes('SNAPSHOT_CONFLICT')) throw error;
+        await waitForRevisionRetry(attempt);
         existing = [...await this.gateway.slots(this.roomId)];
       }
     }
@@ -708,6 +729,10 @@ export class GmNetcodePanel {
         this.slots = [slot, ...this.slots.filter((item) => item.source_player_id !== slot.source_player_id)];
         this.ingestDiceRoll(slot.projection.diceRolls[0], true);
         this.renderRoster();
+        if (this.activeProfileSourcePlayerId === slot.source_player_id) {
+          const player = this.options.getState().players.find((candidate) => candidate.id === slot.source_player_id);
+          this.openPlayerProfile(slot, player?.displayName ?? slot.display_name);
+        }
       },
       onPresence: (records) => {
         this.presence = [...records];
@@ -760,6 +785,13 @@ export class GmNetcodePanel {
       const badge = document.createElement('small');
       badge.textContent = portalLogin === undefined ? 'NO LOGIN' : member === undefined ? 'READY' : online.has(member.user_id) ? 'LIVE' : 'JOINED';
       actions.append(badge);
+      if (slot !== undefined) {
+        const viewProfile = document.createElement('button');
+        viewProfile.type = 'button';
+        viewProfile.textContent = 'View profile';
+        viewProfile.addEventListener('click', () => this.openPlayerProfile(slot, player.displayName));
+        actions.append(viewProfile);
+      }
       if (portalLogin !== undefined) {
         const reset = document.createElement('button');
         reset.type = 'button';
@@ -786,6 +818,134 @@ export class GmNetcodePanel {
       row.append(copy, actions);
       this.rosterElement.append(row);
     }
+  }
+
+  private profileGroup(title: string, entries: readonly (readonly [string, string])[]): HTMLElement {
+    const section = document.createElement('section');
+    section.className = 'netcode-profile-group';
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    const list = document.createElement('dl');
+    for (const [label, rawValue] of entries) {
+      const term = document.createElement('dt');
+      const value = document.createElement('dd');
+      term.textContent = label;
+      value.textContent = rawValue.trim() || '—';
+      list.append(term, value);
+    }
+    section.append(heading, list);
+    return section;
+  }
+
+  private profileListGroup(title: string, entries: readonly string[]): HTMLElement | null {
+    const values = entries.map((entry) => entry.trim()).filter(Boolean);
+    if (values.length === 0) return null;
+    const section = document.createElement('section');
+    section.className = 'netcode-profile-group';
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    const list = document.createElement('ul');
+    list.className = 'netcode-profile-list';
+    for (const entry of values) {
+      const item = document.createElement('li');
+      item.textContent = entry;
+      list.append(item);
+    }
+    section.append(heading, list);
+    return section;
+  }
+
+  private openPlayerProfile(slot: PlayerSlotRecord, playerLabel: string): void {
+    this.activeProfileSourcePlayerId = slot.source_player_id;
+    const character = slot.projection.character;
+    this.profileTitle.textContent = `${playerLabel} · hosted profile`;
+    this.profileBody.replaceChildren();
+    this.profileDialog.dataset.open = 'true';
+    if (character === undefined) {
+      this.profileBody.append(this.profileGroup('Character assignment', [['Status', 'No character is assigned to this hosted player slot.']]));
+      return;
+    }
+
+    const stored = readStoredCharacterSheet(character.privateNotes);
+    const sheet = stored.sheet;
+    const displayName = sheet?.characterName || character.name;
+    const hero = document.createElement('section');
+    hero.className = 'netcode-profile-hero';
+    const portrait = document.createElement('div');
+    portrait.className = 'netcode-profile-portrait';
+    portrait.textContent = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase() ?? '').join('') || '?';
+    if (character.portraitUri !== null) {
+      const image = document.createElement('img');
+      image.alt = `${displayName} portrait`;
+      const uri = character.portraitUri;
+      const resolved = uri.startsWith('payaw-player-asset:') && this.gateway !== null
+        ? this.gateway.resolveCharacterImage(uri)
+        : Promise.resolve(uri);
+      void resolved.then((source) => {
+        if (this.activeProfileSourcePlayerId !== slot.source_player_id) return;
+        image.src = source;
+        portrait.replaceChildren(image);
+      }).catch(() => undefined);
+    }
+    const summary = document.createElement('div');
+    summary.className = 'netcode-profile-summary';
+    const name = document.createElement('h2');
+    name.textContent = displayName;
+    const owner = document.createElement('strong');
+    owner.textContent = playerLabel;
+    const background = document.createElement('p');
+    background.textContent = sheet?.background || character.background || 'No background entered.';
+    summary.append(name, owner, background);
+    hero.append(portrait, summary);
+
+    const groups = document.createElement('div');
+    groups.className = 'netcode-profile-groups';
+    const importedAt = sheet === null || !Number.isFinite(Date.parse(sheet.importedAt))
+      ? sheet?.importedAt ?? ''
+      : new Date(sheet.importedAt).toLocaleString();
+    groups.append(
+      this.profileGroup('Identity', [
+        ['Player', sheet?.player || playerLabel],
+        ['Character', displayName],
+        ['Pronouns', character.pronouns],
+        ['Handle', sheet?.handle ?? ''],
+        ['Age / year', sheet?.ageYear ?? ''],
+        ['Source sheet', sheet === null ? 'No workbook stored' : `${sheet.sourceFile} · ${sheet.worksheet}`],
+        ['Imported', importedAt],
+      ]),
+      this.profileGroup('Campaign details', [
+        ['Connection', sheet?.connectionToGroup ?? ''],
+        ['School / work', sheet?.schoolWork ?? ''],
+        ['Home area', sheet?.homeArea ?? ''],
+        ['Starting item', sheet?.startingItem ?? ''],
+        ['Current situation', sheet?.currentSituation ?? ''],
+        ['MALAS', [sheet?.malasCurrent, sheet?.malasState].filter(Boolean).join(' · ')],
+      ]),
+      this.profileGroup('Stats', Object.entries(sheet?.stats ?? character.stats)),
+      this.profileGroup('GM-only details', [
+        ['Warning / taboo', sheet?.warning ?? ''],
+        ['Consequence', sheet?.warningConsequence ?? ''],
+        ['Private wish', sheet?.privateWish ?? ''],
+        ['Risk', sheet?.risk ?? ''],
+        ['Useful contact', sheet?.usefulContact ?? ''],
+        ['Worried person', sheet?.worriedPerson ?? ''],
+        ['Avoided place', sheet?.avoidedPlace ?? ''],
+        ['Sheet notes', sheet?.notes ?? ''],
+        ['Private notes', stored.freeformNotes],
+      ]),
+    );
+    for (const group of [
+      this.profileListGroup('Conditions', character.conditions),
+      this.profileListGroup('Inventory', character.inventory),
+      this.profileListGroup('Skills', (sheet?.skills ?? []).map((skill) => [skill.slot, skill.name, skill.roll].filter(Boolean).join(' · '))),
+      this.profileListGroup('Gear', (sheet?.gear ?? []).map((entry) => [entry.item, entry.use, entry.notes].filter(Boolean).join(' · '))),
+    ]) if (group !== null) groups.append(group);
+    this.profileBody.append(hero, groups);
+  }
+
+  private closePlayerProfile(): void {
+    this.activeProfileSourcePlayerId = null;
+    this.profileDialog.dataset.open = 'false';
   }
 
   private async disablePlayerLogin(sourcePlayerId: string, displayName: string): Promise<void> {
