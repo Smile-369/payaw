@@ -3,6 +3,7 @@ import { readNetcodeConfig } from './NetcodeConfig';
 import { PAYAW_VERSION } from '../version';
 
 let singleton: SupabaseClient | null = null;
+const playerClients = new Map<string, SupabaseClient>();
 
 function normalizedPlayerLoginId(loginId: string): string {
   const normalized = loginId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
@@ -29,7 +30,12 @@ function clientOptions(storageKey: string, detectSessionInUrl: boolean) {
       storage: localStorage,
       storageKey,
     },
-    realtime: { params: { eventsPerSecond: 10 } },
+    realtime: {
+      params: { eventsPerSecond: 10 },
+      worker: typeof Worker !== 'undefined',
+      workerUrl: new URL(`${import.meta.env.BASE_URL}realtime-heartbeat.js`, location.href).href,
+      reconnectAfterMs: (attempt: number) => Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5)) * (0.75 + Math.random() * 0.5),
+    },
     global: { headers: { 'X-Client-Info': `payaw/${PAYAW_VERSION}` } },
   } as const;
 }
@@ -53,11 +59,16 @@ export function createPlayerSupabaseClient(campaignId: string, loginId: string):
   if (!config.enabled) throw new Error('PAYAW netcode is not configured. Add the public Supabase URL and publishable key.');
   const normalizedCampaign = normalizedCampaignId(campaignId);
   const normalizedLogin = normalizedPlayerLoginId(loginId);
-  return createClient(
+  const key = `payaw-player-auth-${normalizedCampaign}-${normalizedLogin.toLowerCase()}`;
+  const existing = playerClients.get(key);
+  if (existing !== undefined) return existing;
+  const client = createClient(
     config.supabaseUrl,
     config.publishableKey,
-    clientOptions(`payaw-player-auth-${normalizedCampaign}-${normalizedLogin.toLowerCase()}`, false),
+    clientOptions(key, false),
   );
+  playerClients.set(key, client);
+  return client;
 }
 
 export function normalizePlayerLoginId(loginId: string): string {
@@ -70,4 +81,5 @@ export function normalizeCampaignId(campaignId: string): string {
 
 export function resetSupabaseClientForTests(): void {
   singleton = null;
+  playerClients.clear();
 }

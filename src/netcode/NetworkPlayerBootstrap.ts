@@ -241,6 +241,7 @@ function renderPortalLogin(
       writePortalSession(normalizedUsername, normalizedCampaignId);
       await openRoom(app, normalizedCampaignId, session.user.id, gateway, normalizedUsername);
     } catch (error) {
+      if (!shell.isConnected) app.replaceChildren(shell);
       status.textContent = errorMessage(error);
       submit.disabled = false;
     }
@@ -354,21 +355,72 @@ export async function installNetworkedPlayerApp(): Promise<void> {
     return;
   }
 
+  await restorePortalSession(app, stored);
+}
+
+/** A connection failure is not a sign-out: keep retrying the saved identity. */
+async function restorePortalSession(app: HTMLElement, stored: StoredPortalSession): Promise<void> {
   const gateway = new SupabaseGateway(createPlayerSupabaseClient(stored.campaignId, stored.username));
-  try {
-    const session = await gateway.session();
-    if (session === null) {
-      renderPortalLogin(app, stored.campaignId, stored.username, 'Enter your password to continue.');
-      return;
+  const shell = create('main', 'player-join-shell');
+  const card = create('section', 'player-join-card');
+  const status = create('p', 'player-join-status', 'Restoring your saved player session…');
+  const retry = create('button', 'player-primary', 'Retry now');
+  const change = create('button', 'player-secondary', 'Use another account');
+  card.append(create('h1', '', `Welcome back, ${stored.username}`), status, retry, change);
+  shell.append(card);
+  let timer: number | null = null;
+  let active = true;
+  let running = false;
+  let attempts = 0;
+  const clearTimer = () => { if (timer !== null) window.clearTimeout(timer); timer = null; };
+  const dispose = () => {
+    active = false;
+    clearTimer();
+    window.removeEventListener('online', wake);
+    document.removeEventListener('visibilitychange', wake);
+  };
+  const attempt = async () => {
+    if (!active || running) return;
+    clearTimer();
+    running = true;
+    retry.disabled = true;
+    change.disabled = true;
+    app.replaceChildren(shell);
+    try {
+      const session = await gateway.session();
+      if (session === null) {
+        dispose();
+        renderPortalLogin(app, stored.campaignId, stored.username, 'Your saved login has expired or was signed out. Enter your password to continue.');
+        return;
+      }
+      await openRoom(app, stored.campaignId, session.user.id, gateway, stored.username);
+      dispose();
+    } catch (error) {
+      if (error instanceof Error && error.message === 'PLAYER_PORTAL_ACCESS_REVOKED') {
+        dispose();
+        try { await gateway.signOut(); } catch { /* Preserve the actual access error. */ }
+        clearPortalSession();
+        renderPortalLogin(app, stored.campaignId, stored.username, errorMessage(error));
+        return;
+      }
+      app.replaceChildren(shell);
+      status.textContent = `Your login is saved. Waiting to reconnect automatically. ${errorMessage(error)}`;
+      const delay = Math.min(30_000, 2_000 * 2 ** Math.min(attempts++, 4)) * (0.75 + Math.random() * 0.5);
+      timer = window.setTimeout(() => { timer = null; void attempt(); }, delay);
+    } finally {
+      running = false;
+      retry.disabled = false;
+      change.disabled = false;
     }
-    await openRoom(app, stored.campaignId, session.user.id, gateway, stored.username);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'PLAYER_PORTAL_ACCESS_REVOKED') {
-      try { await gateway.signOut(); } catch { /* Preserve the actual access error even if remote sign-out fails. */ }
-      clearPortalSession();
-      renderPortalLogin(app, stored.campaignId, stored.username, errorMessage(error));
-      return;
-    }
-    renderPortalLogin(app, stored.campaignId, stored.username, errorMessage(error));
-  }
+  };
+  const wake = () => { if (navigator.onLine && document.visibilityState === 'visible') void attempt(); };
+  retry.addEventListener('click', () => void attempt());
+  change.addEventListener('click', () => {
+    dispose();
+    clearPortalSession();
+    renderPortalLogin(app, stored.campaignId, stored.username);
+  });
+  window.addEventListener('online', wake);
+  document.addEventListener('visibilitychange', wake);
+  await attempt();
 }

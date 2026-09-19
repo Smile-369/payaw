@@ -53,6 +53,11 @@ assert(gateway.includes("config: { private: true"), 'Realtime channel is not pri
 assert(supabaseClient.includes('createPlayerSupabaseClient') && supabaseClient.includes('payaw-player-auth-'), 'Persistent player auth namespaces are missing.');
 assert(supabaseClient.includes("clientOptions('payaw-gm-auth'"), 'GM authentication is not isolated from player sessions.');
 assert(networkBootstrap.includes('PLAYER_PORTAL_SESSION_KEY') && networkBootstrap.includes('readStoredPortalSession'), 'Player portal session is not persisted across portal visits.');
+assert(networkBootstrap.includes('restorePortalSession') && networkBootstrap.includes('Your login is saved.'), 'Startup connection errors no longer preserve the saved-login recovery screen.');
+assert(supabaseClient.includes('playerClients.get(key)') && supabaseClient.includes('playerClients.set(key, client)'), 'Player auth clients are duplicated on login retries.');
+assert(supabaseClient.includes('workerUrl:') && existsSync(join(projectPath, 'public', 'realtime-heartbeat.js')), 'Same-origin background heartbeat worker is missing.');
+assert(gateway.includes("signOut({ scope: 'local' })"), 'Browser sign-out revokes other device sessions.');
+assert(playerApp.includes("addEventListener('pagehide'") && playerApp.includes('if (event.persisted) return;'), 'Back/forward navigation destroys a retained player session.');
 assert(networkBootstrap.includes('displayName: projection.viewer.displayName'), 'Player presence still exposes the opaque portal login ID instead of the projected display name.');
 assert(diceBanner.includes('right: 14px') && diceBanner.includes('bottom: 14px') && !diceBanner.includes('inset: 0;'), 'Shared dice notification regressed into a full-screen overlay.');
 assert(diceBanner.includes('payaw-party-dice-titlebar') && diceBanner.includes('MAX_QUEUED_ROLLS'), 'Compact dice toast styling or queue bounding is missing.');
@@ -115,6 +120,8 @@ if (existsSync(localCompilerPath)) execFileSync(process.execPath, [localCompiler
 else execFileSync('tsc', ['-p', 'tsconfig.test.json'], { cwd: projectPath, stdio: 'inherit' });
 writeFileSync(join(outputPath, 'package.json'), '{"type":"commonjs"}\n');
 const behavior = JSON.parse(execFileSync(process.execPath, [join(outputPath, 'tests', 'HostedPlayerSynchronizationTest.js')], { cwd: projectPath, encoding: 'utf8' }));
+const sessionBehavior = JSON.parse(execFileSync(process.execPath, [join(outputPath, 'tests', 'PlayerNetworkSessionTest.js')], { cwd: projectPath, encoding: 'utf8' }));
+const realtimeRecovery = JSON.parse(execFileSync(process.execPath, [join(outputPath, 'tests', 'RealtimeRecoveryTest.js')], { cwd: projectPath, encoding: 'utf8' }));
 const result = {
   release: packageJson.version,
   hostedAuthority: true,
@@ -133,6 +140,8 @@ const result = {
   atomicCommandFinalization: true,
   netcodeHistoryRetention: true,
   behavior,
+  sessionBehavior,
+  realtimeRecovery,
 };
 const output = `${JSON.stringify(result, null, 2)}\n`;
 process.stdout.write(output);

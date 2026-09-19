@@ -1529,6 +1529,13 @@ function renderFullCharacterEditor(
       }));
     } catch (error) {
       save.disabled = false; status.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (save.isConnected) {
+        save.disabled = false;
+        if (status.textContent === 'Saving one synchronized character update…') {
+          status.textContent = 'The sheet was not saved. Correct the reported error and try again.';
+        }
+      }
     }
   });
   editor.append(form); return editor;
@@ -1596,6 +1603,13 @@ function renderOwnCharacterProfile(
     const file = fileInput.files?.[0]; if (file === undefined) return; importButton.disabled = true; importStatus.textContent = 'Reading character sheet…';
     try { const imported = await parsePayawCharacterWorkbook(file); await onCommand(characterSheetUpdateCommand(character, imported, stored.freeformNotes, { name: imported.characterName, background: imported.background, stats: imported.stats, inventory: imported.gear.map((entry) => entry.item) })); }
     catch (error) { importButton.disabled = false; importStatus.textContent = error instanceof Error ? error.message : String(error); }
+    finally {
+      fileInput.value = '';
+      importButton.disabled = !canEdit;
+      if (importButton.isConnected && importStatus.textContent === 'Reading character sheet…') {
+        importStatus.textContent = 'The sheet was not saved. Correct the reported error and try again.';
+      }
+    }
   });
   importBox.append(create('p', '', 'The workbook is parsed in your browser. Hidden fields stay out of party profiles.'), importButton, fileInput, importStatus);
   if (sheet !== null) { const remove = create('button', 'player-secondary', 'Remove imported sheet data'); remove.type = 'button'; remove.addEventListener('click', () => { void onCommand(characterSheetUpdateCommand(character, null, stored.freeformNotes)); }); importBox.append(remove); }
@@ -1986,6 +2000,10 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
   mobileMoreButton.append(create('span', '', '•••'), create('span', '', 'More'), create('small', '', ''));
   nav.append(mobileMoreButton);
   const main = create('main', 'player-main');
+  const commandErrorNotice = create('p', 'player-command-error');
+  commandErrorNotice.setAttribute('role', 'alert');
+  commandErrorNotice.hidden = true;
+  main.append(commandErrorNotice);
   const content = create('div', 'player-content'); main.append(content);
   layout.append(nav, main);
   const footer = create('footer', 'player-footer');
@@ -2109,14 +2127,19 @@ export function installPlayerApp(options: PlayerAppOptions = {}): void {
         : snapshot.state;
       connectionBadge.dataset.status = snapshot.state;
       connectionBadge.title = snapshot.detail;
+      commandErrorNotice.textContent = snapshot.lastCommandError ?? '';
+      commandErrorNotice.hidden = snapshot.lastCommandError === undefined;
     });
     const removeDiceRollListener = options.session.onDiceRoll((roll) => showDiceRollBanner(roll));
-    window.addEventListener('beforeunload', () => {
+    window.addEventListener('pagehide', (event) => {
+      // Back/forward-cache pages resume with the same app and listeners.
+      // beforeunload can also fire when the user cancels navigation.
+      if (event.persisted) return;
       removeProjectionListener();
       removeConnectionListener();
       removeDiceRollListener();
       options.session?.stop();
-    }, { once: true });
+    });
   }
   render();
 }

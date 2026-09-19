@@ -183,6 +183,7 @@ textarea { line-height: 1.55; resize: vertical; }
 .player-utility-buttons button { display: block; min-height: 38px; padding: 6px; text-align: center; font-size: 11px; }
 
 .player-main { min-width: 0; min-height: 0; overflow: auto; scroll-behavior: smooth; }
+.player-command-error { margin: 8px; padding: 10px; border: 1px solid #9a5020; background: #fff2ce; color: #612b10; overflow-wrap: anywhere; }
 .player-content { width: min(1180px, 100%); margin: 0 auto; padding: clamp(18px, 3vw, 34px); }
 
 .player-page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }

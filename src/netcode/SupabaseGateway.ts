@@ -6,6 +6,8 @@ import type {
   PlayerPortalLoginRecord, PlayerPortalResolution, PlayerSlotRecord, PresenceRecord,
 } from './NetcodeTypes';
 import { getSupabaseClient } from './SupabaseClient';
+import { commandRequestError, validateCommandPayload } from './CommandValidation';
+import { maintainRealtimeSubscription } from './RealtimeRecovery';
 
 interface SupabaseErrorLike {
   readonly message?: unknown;
@@ -58,11 +60,12 @@ async function edgeFunctionFailure(error: SupabaseErrorLike, fallback: string): 
     try {
       const body: unknown = await context.clone().json();
       if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string') {
-        return new Error(body.error, { cause: error });
+        return commandRequestError(body.error, context.status);
       }
     } catch {
       // Fall through to the structured Supabase error below.
     }
+    return commandRequestError(textField(error.message) ?? fallback, context.status);
   }
   return failure(error, fallback);
 }
@@ -174,7 +177,7 @@ export class SupabaseGateway {
   }
 
   public async signOut(): Promise<void> {
-    const { error } = await this.client.auth.signOut();
+    const { error } = await this.client.auth.signOut({ scope: 'local' });
     if (error !== null) throw failure(error, 'Could not sign out.');
   }
 
@@ -476,11 +479,12 @@ export class SupabaseGateway {
   }
 
   public async submitCommand(campaignId: string, command: PlayerCommand, expectedRevision: number, offlineSafe: boolean, idempotencyKey = uuid()): Promise<CommandSubmissionResult> {
+    validateCommandPayload(command);
     const { data, error } = await this.client.functions.invoke('campaign-command', { body: {
       campaignId, idempotencyKey, kind: command.kind, payload: command, expectedRevision, offlineSafe,
     } });
     if (error !== null) throw await edgeFunctionFailure(error, 'The campaign command could not be processed.');
-    if (data?.error !== undefined) throw new Error(String(data.error));
+    if (data?.error !== undefined) throw commandRequestError(String(data.error));
     const projection = data?.projection === undefined || data?.projection === null
       ? null
       : parsePlayerProjection(data.projection);
@@ -510,43 +514,45 @@ export class SupabaseGateway {
   }
 
   public async subscribePlayer(campaignId: string, userId: string, presence: PresenceRecord, handlers: PlayerSubscriptionHandlers): Promise<() => void> {
-    const session = await this.session();
-    if (session !== null) await this.client.realtime.setAuth(session.access_token);
-    const channel = this.client.channel(`room:${campaignId}:live`, { config: { private: true, presence: { key: userId } } });
-    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_player_slots', filter: `assigned_user_id=eq.${userId}` }, (event) => {
-      try { handlers.onProjection(parsePlayerProjection((event.new as { projection?: unknown }).projection)); } catch { handlers.onConnection('error', 'A network projection failed validation.'); }
+    return maintainRealtimeSubscription({
+      authenticate: () => this.client.realtime.setAuth(),
+      removeChannel: (channel) => this.client.removeChannel(channel),
+      presence,
+      onConnection: handlers.onConnection,
+      createChannel: () => {
+        const channel = this.client.channel(`room:${campaignId}:live`, { config: { private: true, presence: { key: userId } } });
+        channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_player_slots', filter: `assigned_user_id=eq.${userId}` }, (event) => {
+          try { handlers.onProjection(parsePlayerProjection((event.new as { projection?: unknown }).projection)); } catch { handlers.onConnection('error', 'A network projection failed validation.'); }
+        });
+        channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_events', filter: `campaign_id=eq.${campaignId}` }, (event) => {
+          handlers.onEvent?.(event.new as unknown as CampaignEventRecord);
+        });
+        channel.on('presence', { event: 'sync' }, () => handlers.onPresence?.(this.presenceRecords(channel)));
+        return channel;
+      },
     });
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_events', filter: `campaign_id=eq.${campaignId}` }, (event) => {
-      handlers.onEvent?.(event.new as unknown as CampaignEventRecord);
-    });
-    channel.on('presence', { event: 'sync' }, () => handlers.onPresence?.(this.presenceRecords(channel)));
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') { await channel.track(presence); handlers.onConnection('online', 'Live with the campaign room.'); }
-      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') handlers.onConnection('reconnecting', 'Connection interrupted; retrying safely.');
-      else if (status === 'CLOSED') handlers.onConnection('offline', 'Campaign room connection closed.');
-    });
-    return () => { void channel.untrack(); void this.client.removeChannel(channel); };
   }
 
   public async subscribeGm(campaignId: string, userId: string, presence: PresenceRecord, handlers: GmSubscriptionHandlers): Promise<() => void> {
-    const session = await this.session();
-    if (session !== null) await this.client.realtime.setAuth(session.access_token);
-    const channel = this.client.channel(`room:${campaignId}:live`, { config: { private: true, presence: { key: userId } } });
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_commands', filter: `campaign_id=eq.${campaignId}` }, (event) => handlers.onCommand(event.new as unknown as CampaignCommandRecord));
-    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_commands', filter: `campaign_id=eq.${campaignId}` }, (event) => handlers.onCommand(event.new as unknown as CampaignCommandRecord));
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_events', filter: `campaign_id=eq.${campaignId}` }, (event) => {
-      handlers.onEvent?.(event.new as unknown as CampaignEventRecord);
+    return maintainRealtimeSubscription({
+      authenticate: () => this.client.realtime.setAuth(),
+      removeChannel: (channel) => this.client.removeChannel(channel),
+      presence,
+      onConnection: handlers.onConnection,
+      createChannel: () => {
+        const channel = this.client.channel(`room:${campaignId}:live`, { config: { private: true, presence: { key: userId } } });
+        channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_commands', filter: `campaign_id=eq.${campaignId}` }, (event) => handlers.onCommand(event.new as unknown as CampaignCommandRecord));
+        channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_commands', filter: `campaign_id=eq.${campaignId}` }, (event) => handlers.onCommand(event.new as unknown as CampaignCommandRecord));
+        channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campaign_events', filter: `campaign_id=eq.${campaignId}` }, (event) => {
+          handlers.onEvent?.(event.new as unknown as CampaignEventRecord);
+        });
+        channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_player_slots', filter: `campaign_id=eq.${campaignId}` }, (event) => {
+          const value = event.new as unknown as Omit<PlayerSlotRecord, 'projection'> & { projection: unknown };
+          try { handlers.onSlot({ ...value, projection: parsePlayerProjection(value.projection) }); } catch { /* Never show an invalid projection. */ }
+        });
+        channel.on('presence', { event: 'sync' }, () => handlers.onPresence(this.presenceRecords(channel)));
+        return channel;
+      },
     });
-    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_player_slots', filter: `campaign_id=eq.${campaignId}` }, (event) => {
-      const value = event.new as unknown as Omit<PlayerSlotRecord, 'projection'> & { projection: unknown };
-      try { handlers.onSlot({ ...value, projection: parsePlayerProjection(value.projection) }); } catch { /* Never show an invalid projection. */ }
-    });
-    channel.on('presence', { event: 'sync' }, () => handlers.onPresence(this.presenceRecords(channel)));
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') { await channel.track(presence); handlers.onConnection('online', 'Room is live.'); }
-      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') handlers.onConnection('reconnecting', 'Realtime is reconnecting.');
-      else if (status === 'CLOSED') handlers.onConnection('offline', 'Room connection closed.');
-    });
-    return () => { void channel.untrack(); void this.client.removeChannel(channel); };
   }
 }

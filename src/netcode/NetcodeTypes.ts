@@ -120,6 +120,7 @@ export interface QueuedPlayerCommand {
 }
 
 export interface ConnectionSnapshot {
+  readonly lastCommandError?: string;
   readonly state: ConnectionState;
   readonly detail: string;
   readonly lastOnlineAt: string | null;
@@ -133,4 +134,3 @@ export function isOfflineSafeCommand(command: PlayerCommand): boolean {
     || command.kind === 'character.sheet.update'
     || command.kind === 'objective.propose';
 }
-

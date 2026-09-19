@@ -672,23 +672,29 @@ export class GmNetcodePanel {
 
   private async refreshRoom(): Promise<void> {
     if (this.gateway === null || this.roomId === null) return;
-    [this.roster, this.slots, this.commands, this.diceEvents] = await Promise.all([
+    const roomId = this.roomId;
+    const [roster, slots, commands, diceEvents] = await Promise.all([
       this.gateway.roster(this.roomId).then((items) => [...items]),
       this.gateway.slots(this.roomId).then((items) => [...items]),
       this.gateway.commands(this.roomId).then((items) => [...items]),
       this.gateway.diceEvents(this.roomId).then((items) => [...items]),
     ]);
+    if (this.roomId !== roomId) return;
 
     try {
-      this.portalLogins = [...await this.gateway.playerPortalLogins(this.roomId)];
+      const logins = await this.gateway.playerPortalLogins(roomId);
+      if (this.roomId !== roomId) return;
+      this.portalLogins = [...logins];
       this.portalApiReady = true;
       this.portalApiError = null;
     } catch (error) {
+      if (this.roomId !== roomId) return;
       if (!isSchemaCacheError(error)) throw error;
       this.portalLogins = [];
       this.portalApiReady = false;
       this.portalApiError = error;
     }
+    [this.roster, this.slots, this.commands, this.diceEvents] = [roster, slots, commands, diceEvents];
 
     this.publishAllButton.disabled = false;
     this.createPlayerLoginButton.disabled = !this.portalApiReady;
@@ -708,6 +714,9 @@ export class GmNetcodePanel {
 
   private async startRealtime(): Promise<void> {
     if (this.gateway === null || this.roomId === null || this.userId === null || this.unsubscribeRealtime !== null) return;
+    const subscribedRoomId = this.roomId;
+    let interrupted = false;
+    let refreshing = false;
     const ownMembership = this.roster.find((member) => member.user_id === this.userId);
     const presence: PresenceRecord = {
       userId: this.userId,
@@ -739,7 +748,20 @@ export class GmNetcodePanel {
         this.renderRoster();
         this.setStatus('ROOM LIVE', this.roomSummary());
       },
-      onConnection: (state, detail) => this.setStatus(state === 'online' ? 'ROOM LIVE' : state.toLocaleUpperCase(), detail),
+      onConnection: (state, detail) => {
+        if (this.roomId !== subscribedRoomId) return;
+        this.setStatus(state === 'online' ? 'ROOM LIVE' : state.toLocaleUpperCase(), detail);
+        if (state !== 'online') interrupted = true;
+        else if (interrupted && !refreshing) {
+          interrupted = false;
+          refreshing = true;
+          // Realtime does not replay missed row updates after rejoining.
+          void this.refreshRoom().catch((error) => {
+            interrupted = true;
+            if (this.roomId === subscribedRoomId) this.fail(error);
+          }).finally(() => { refreshing = false; });
+        }
+      },
       onEvent: (event) => {
         if (event.event_type === 'history.dice.clear') {
           this.diceEvents = [event, ...this.diceEvents.filter((item) => item.event_type !== 'command.dice.roll')].slice(0, 100);

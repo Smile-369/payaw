@@ -1,7 +1,8 @@
 import { applyPlayerCommand, type PlayerCommand } from '../player/PlayerCommands';
 import { parsePlayerProjection, type PlayerProjection } from '../player/PlayerProjection';
 import { isOfflineSafeCommand, type ConnectionSnapshot, type PresenceRecord, type QueuedPlayerCommand } from './NetcodeTypes';
-import { SupabaseGateway } from './SupabaseGateway';
+import type { PlayerSessionTransport } from './PlayerSessionTransport';
+import { isRetryableCommandError, validateCommandPayload } from './CommandValidation';
 import { parseSharedDiceRoll, type SharedDiceRoll } from './DiceRollBanner';
 import { mergeSharedProjectionEvent } from './ProjectionMerge';
 
@@ -24,11 +25,16 @@ function isRevisionConflict(value: unknown): boolean {
 export class PlayerNetworkSession {
   public readonly mode = 'network' as const;
   private projectionValue: PlayerProjection;
+  private authoritativeRevision: number;
+  private lastCommandError: string | undefined;
   private state: ConnectionSnapshot = { state: 'connecting', detail: 'Connecting to the campaign room…', lastOnlineAt: null, pendingCommands: 0 };
   private readonly projectionListeners = new Set<(projection: PlayerProjection) => void>();
   private readonly connectionListeners = new Set<(state: ConnectionSnapshot) => void>();
   private readonly diceRollListeners = new Set<(roll: SharedDiceRoll) => void>();
   private unsubscribeRealtime: (() => void) | null = null;
+  private connectPromise: Promise<void> | null = null;
+  private lifecycle = 0;
+  private stopped = false;
   private retryTimer: number | null = null;
   private reconcileTimer: number | null = null;
   private reconcilePromise: Promise<void> | null = null;
@@ -43,13 +49,15 @@ export class PlayerNetworkSession {
     private readonly campaignId: string,
     private readonly userId: string,
     initialProjection: PlayerProjection,
-    private readonly gateway: SupabaseGateway,
+    private readonly gateway: PlayerSessionTransport,
     private readonly presence: PresenceRecord,
   ) {
     this.projectionValue = parsePlayerProjection(initialProjection);
     this.queueKey = `payaw:netcode:queue:${campaignId}:${userId}`;
     this.cacheKey = `payaw:netcode:projection:${campaignId}:${userId}`;
     this.queue = this.readQueue();
+    // A cached projection may include optimistic edits from a previous visit.
+    this.authoritativeRevision = this.queue.length > 0 ? -1 : this.projectionValue.revision;
     this.writeCache(this.projectionValue);
     this.state = { ...this.state, pendingCommands: this.queue.length };
   }
@@ -102,6 +110,8 @@ export class PlayerNetworkSession {
   }
 
   public async start(): Promise<void> {
+    if (this.reconcileTimer !== null) return;
+    this.stopped = false;
     this.setConnection('connecting', 'Joining the private campaign channel…');
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
@@ -111,7 +121,7 @@ export class PlayerNetworkSession {
       if (document.visibilityState === 'visible' && this.queue.length === 0) {
         void this.reconcileProjection().catch(() => undefined);
       }
-    }, RECONCILE_INTERVAL_MS);
+    }, RECONCILE_INTERVAL_MS + Math.round(Math.random() * 5_000));
     try {
       await this.connectRealtime();
       await this.reconcileAndFlush();
@@ -122,8 +132,11 @@ export class PlayerNetworkSession {
   }
 
   public stop(): void {
+    this.stopped = true;
+    this.lifecycle++;
     this.unsubscribeRealtime?.(); this.unsubscribeRealtime = null;
     if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     if (this.reconcileTimer !== null) window.clearInterval(this.reconcileTimer);
     this.reconcileTimer = null;
     window.removeEventListener('online', this.handleOnline);
@@ -136,6 +149,7 @@ export class PlayerNetworkSession {
     const submittedCommand: PlayerCommand = command.kind === 'dice.roll'
       ? { ...command, visibility: 'party', rollerUsername: this.presence.displayName }
       : command;
+    validateCommandPayload(submittedCommand);
     const offlineSafe = isOfflineSafeCommand(submittedCommand);
     const online = this.state.state === 'online' && navigator.onLine;
     if (!online && !offlineSafe) throw new Error('This action requires a live connection. PAYAW did not queue it.');
@@ -144,8 +158,9 @@ export class PlayerNetworkSession {
       expectedRevision: this.projectionValue.revision, offlineSafe, queuedAt: new Date().toISOString(), attempts: 0,
     };
     if (!online) {
+      const optimistic = applyPlayerCommand(this.projectionValue, submittedCommand);
       this.enqueue(queued);
-      this.projectionValue = applyPlayerCommand(this.projectionValue, submittedCommand);
+      this.projectionValue = optimistic;
       this.writeCache(this.projectionValue); this.emitProjection();
       return this.projectionValue;
     }
@@ -164,11 +179,13 @@ export class PlayerNetworkSession {
         if (roll !== null) this.acceptDiceRoll(roll, true);
         return this.projectionValue;
       }
-      if (!offlineSafe) throw error;
+      if (!offlineSafe || !isRetryableCommandError(error)) throw error;
+      const optimistic = applyPlayerCommand(this.projectionValue, submittedCommand);
       this.enqueue(queued);
-      this.projectionValue = applyPlayerCommand(this.projectionValue, submittedCommand);
+      this.projectionValue = optimistic;
       this.writeCache(this.projectionValue); this.emitProjection();
       this.setConnection('reconnecting', 'The edit is saved locally and will sync after reconnection.');
+      this.scheduleQueueRetry(0);
       return this.projectionValue;
     }
   }
@@ -191,10 +208,21 @@ export class PlayerNetworkSession {
   };
 
   private async connectRealtime(): Promise<void> {
-    this.unsubscribeRealtime?.();
-    this.unsubscribeRealtime = await this.gateway.subscribePlayer(this.campaignId, this.userId, this.presence, {
-      onProjection: (projection) => this.acceptSnapshot(projection),
+    if (this.stopped || this.unsubscribeRealtime !== null) return;
+    if (this.connectPromise !== null) return this.connectPromise;
+    const operation = this.openRealtime();
+    this.connectPromise = operation;
+    try { await operation; }
+    finally { if (this.connectPromise === operation) this.connectPromise = null; }
+  }
+
+  private async openRealtime(): Promise<void> {
+    const lifecycle = this.lifecycle;
+    const active = () => !this.stopped && lifecycle === this.lifecycle;
+    const unsubscribe = await this.gateway.subscribePlayer(this.campaignId, this.userId, this.presence, {
+      onProjection: (projection) => { if (active()) this.acceptSnapshot(projection); },
       onConnection: (state, detail) => {
+        if (!active()) return;
         this.setConnection(state, detail);
         if (state === 'online') {
           void this.hydrateDiceHistory();
@@ -202,6 +230,7 @@ export class PlayerNetworkSession {
         }
       },
       onEvent: (event) => {
+        if (!active()) return;
         if (event.event_type === 'command.dice.roll') {
           const roll = parseSharedDiceRoll(event.safe_payload.diceRoll);
           if (roll !== null) this.acceptDiceRoll(roll, true);
@@ -214,9 +243,12 @@ export class PlayerNetworkSession {
         this.emitProjection();
       },
     });
+    if (active()) this.unsubscribeRealtime = unsubscribe;
+    else unsubscribe();
   }
 
   private async reconcileAndFlush(): Promise<void> {
+    if (this.stopped) return;
     try {
       if (this.queue.length > 0) await this.flushQueue();
       if (this.queue.length === 0) await this.reconcileProjection();
@@ -258,7 +290,8 @@ export class PlayerNetworkSession {
         .sort((a, b) => Date.parse(b.rolledAt) - Date.parse(a.rolledAt))
         .slice(0, 100),
     });
-    if (projection.revision < this.projectionValue.revision && this.queue.length === 0) return;
+    if (projection.revision < this.authoritativeRevision) return;
+    this.authoritativeRevision = projection.revision;
     const gap = projection.revision > this.projectionValue.revision + 1;
     this.projectionValue = projection;
     this.writeCache(projection); this.emitProjection();
@@ -340,25 +373,51 @@ export class PlayerNetworkSession {
 
   private async drainQueue(): Promise<void> {
     if (!navigator.onLine || this.queue.length === 0) { this.updatePending(); return; }
+    if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    let rejected = false;
     while (this.queue.length > 0 && navigator.onLine) {
       const next = this.queue[0];
       if (next === undefined) break;
       try {
+        validateCommandPayload(next.command);
         const result = await this.gateway.submitCommand(this.campaignId, next.command, next.expectedRevision, true, next.idempotencyKey);
         if (result.projection === null) throw new Error('Queued state command returned no projection.');
         this.queue = this.queue.slice(1); this.writeQueue(); this.acceptSnapshot(result.projection);
-      } catch {
+      } catch (error) {
+        if (!isRetryableCommandError(error)) {
+          // Keep a recovery copy before removing the command from the retry queue.
+          const recoveryKey = `${this.queueKey}:rejected:${next.idempotencyKey}`;
+          const reason = error instanceof Error ? error.message : String(error);
+          localStorage.setItem(recoveryKey, JSON.stringify({ ...next, reason, rejectedAt: new Date().toISOString() }));
+          this.queue = this.queue.filter((item) => item.idempotencyKey !== next.idempotencyKey);
+          this.writeQueue();
+          this.lastCommandError = `An edit was rejected: ${reason}. A recovery copy is saved in this browser.`;
+          this.updatePending();
+          rejected = true;
+          continue;
+        }
         const attempts = next.attempts + 1;
         this.queue = [{ ...next, attempts }, ...this.queue.slice(1)]; this.writeQueue(); this.updatePending();
         const delay = Math.min(30_000, 1_000 * 2 ** Math.min(5, attempts));
         this.setConnection('reconnecting', `Sync paused; retrying in ${Math.round(delay / 1000)} seconds.`);
-        if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
-        this.retryTimer = window.setTimeout(() => void this.flushQueue(), delay);
+        this.scheduleQueueRetry(attempts);
+        if (rejected) await this.reconcileProjection().catch(() => undefined);
         return;
       }
     }
     this.updatePending();
+    if (rejected) await this.reconcileProjection().catch(() => undefined);
     if (this.queue.length === 0) this.setConnection('online', 'All queued changes are synchronized.');
+  }
+
+  private scheduleQueueRetry(attempts: number): void {
+    if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    const delay = Math.min(30_000, 1_000 * 2 ** Math.min(5, attempts));
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = null;
+      void this.reconcileAndFlush();
+    }, delay);
   }
 
   private readQueue(): QueuedPlayerCommand[] {
@@ -375,9 +434,9 @@ export class PlayerNetworkSession {
   private writeQueue(): void { localStorage.setItem(this.queueKey, JSON.stringify(this.queue)); }
   private writeCache(projection: PlayerProjection): void { localStorage.setItem(this.cacheKey, JSON.stringify(projection)); }
   private emitProjection(): void { for (const listener of this.projectionListeners) listener(this.projectionValue); }
-  private updatePending(): void { this.state = { ...this.state, pendingCommands: this.queue.length }; this.emitConnection(); }
+  private updatePending(): void { this.state = { ...this.state, pendingCommands: this.queue.length, ...(this.lastCommandError === undefined ? {} : { lastCommandError: this.lastCommandError }) }; this.emitConnection(); }
   private setConnection(state: ConnectionSnapshot['state'], detail: string): void {
-    this.state = { state, detail, lastOnlineAt: state === 'online' ? new Date().toISOString() : this.state.lastOnlineAt, pendingCommands: this.queue.length };
+    this.state = { state, detail, lastOnlineAt: state === 'online' ? new Date().toISOString() : this.state.lastOnlineAt, pendingCommands: this.queue.length, ...(this.lastCommandError === undefined ? {} : { lastCommandError: this.lastCommandError }) };
     this.emitConnection();
   }
   private emitConnection(): void { for (const listener of this.connectionListeners) listener(this.state); }
